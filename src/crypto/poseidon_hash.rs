@@ -23,3 +23,25 @@ pub fn hash_bigints(inputs: &[BigInt]) -> Result<BigInt, &'static str> {
     let bytes = big_int_ark.to_bytes_be();
     Ok(BigInt::from_bytes_be(num_bigint::Sign::Plus, &bytes))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn poseidon_hashing_2() {
+        let input_strs = vec!["10", "20"];
+        let inputs: Vec<BigInt> = input_strs
+            .iter()
+            .map(|s| BigInt::from_str(s).unwrap())
+            .collect();
+        let result = hash_bigints(&inputs);
+        assert!(result.is_ok(), "Hashing failed");
+        let hash = result.unwrap();
+        assert_eq!(
+            hash.to_string(),
+            "18520321019059006606511285595387750999043784958310087972051959520693448686063"
+        );
+    }
+}

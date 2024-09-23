@@ -332,6 +332,7 @@ version = "0.1.0"
 dependencies = [
  "ark-bn254",
  "ark-ff",
+ "hex",
  "light-poseidon",
  "num-bigint 0.4.6",
  "poseidon-rs",

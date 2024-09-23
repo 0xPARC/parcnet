@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 ark-bn254 = "0.4.0"
 ark-ff = "0.4.2"
+hex = "0.4.3"
 light-poseidon = "0.2.0"
 num-bigint = "0.4.6"
 poseidon-rs = "0.0.10"
