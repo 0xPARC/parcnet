@@ -64,18 +64,14 @@ fn add_bj(p1: &(BigInt, BigInt), p2: &(BigInt, BigInt)) -> (BigInt, BigInt) {
     let (x1, y1) = p1;
     let (x2, y2) = p2;
 
-    let x3 = modulus(&(x1 * y2 + y1 * x2), &*P)
+    let x3 = modulus(&(x1 * y2 + y1 * x2), &P)
         * inv(
-            &modulus(&(BigInt::from(1) + &*BJ_D * x1 * x2 * y1 * y2), &*P),
-            &*P,
+            &modulus(&(BigInt::from(1) + &*BJ_D * x1 * x2 * y1 * y2), &P),
+            &P,
         );
-    let y3 = modulus(&(y1 * y2 - &*BJ_A * x1 * x2), &*P)
-        * inv(
-            &modulus(&((&*P + 1) - &*BJ_D * x1 * x2 * y1 * y2), &*P),
-            &*P,
-        );
-    let out = (modulus(&x3, &*P), modulus(&y3, &*P));
-    return out;
+    let y3 = modulus(&(y1 * y2 - &*BJ_A * x1 * x2), &P)
+        * inv(&modulus(&((&*P + 1) - &*BJ_D * x1 * x2 * y1 * y2), &P), &P);
+    (modulus(&x3, &P), modulus(&y3, &P))
 }
 
 fn multiply_bj(pt: &(BigInt, BigInt), n: &BigInt) -> Option<(BigInt, BigInt)> {
@@ -93,7 +89,7 @@ fn multiply_bj(pt: &(BigInt, BigInt), n: &BigInt) -> Option<(BigInt, BigInt)> {
 fn pack_point(a: &(BigInt, BigInt)) -> Vec<u8> {
     let mut buff = a.1.to_bytes_le().1;
     buff.resize(32, 0);
-    let pm1d2 = (&*P - 1) * inv(&BigInt::from(2), &*P) % &*P;
+    let pm1d2 = (&*P - 1) * inv(&BigInt::from(2), &P) % &*P;
     if a.0 > pm1d2 {
         buff[31] |= 0x80;
     }
