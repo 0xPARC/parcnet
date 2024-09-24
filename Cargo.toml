@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ark-bn254 = "0.4.0"
-ark-ff = "0.4.2"
+ff = { package = "ff_ce", version = "0.11", features = ["derive"] }
 hex = "0.4.3"
-light-poseidon = "0.2.0"
+lazy_static = "1.5.0"
 num-bigint = "0.4.6"
+num-traits = "0.2.19"
 poseidon-rs = "0.0.10"
+rand = "0.8.5"

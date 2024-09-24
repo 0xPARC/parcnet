@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 pub mod crypto;
 use crate::crypto::poseidon_hash;
 use num_bigint::BigInt;
