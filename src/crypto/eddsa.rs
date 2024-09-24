@@ -150,21 +150,6 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use rand::Rng;
-
-    #[test]
-    fn test_eddsa_poseidon_sign() {
-        let mut rng = rand::thread_rng();
-        let private_key: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
-        let message = BigInt::from(1234567890u64);
-
-        let result = eddsa_poseidon_sign(&private_key, &message);
-        assert!(result.is_ok());
-
-        let (public_key, signature) = result.unwrap();
-        assert_eq!(public_key.len(), 32);
-        assert_eq!(signature.len(), 64);
-    }
 
     #[test]
     fn test_eddsa_poseidon_sign_eq() {

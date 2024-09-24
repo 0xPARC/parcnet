@@ -17,7 +17,6 @@ pub fn hash_bigints(inputs: &[BigInt]) -> Result<BigInt, &'static str> {
 
     let input_fr: Vec<Fr> = inputs.iter().map(bigint_to_fr).collect();
     let hash = poseidon.hash(input_fr).map_err(|_| "Hashing failed")?;
-    println!("{:?}", hash.into_repr().to_string());
     return BigInt::from_str_radix(&hash.into_repr().to_string()[2..], 16)
         .map_err(|_| "Recover failed");
 }
