@@ -1,0 +1,16 @@
+[package]
+license = "MIT OR Apache-2.0"
+keywords = ["cryptography", "0xPARC", "ZK", "PARCNET"]
+categories = ["cryptography", "network-programming", "development-tools"]
+description = "A set of tools for building on the PARCNET"
+homepage = "https://0xparc.org"
+repository = "https://github.com/0xparc/parcnet"
+name = "parcnet"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "parcnet"
+path = "src/lib.rs"
+
+[dependencies]
