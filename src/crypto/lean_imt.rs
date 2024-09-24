@@ -1,7 +1,7 @@
 use crate::crypto::poseidon_hash::hash_bigints;
 use num_bigint::BigInt;
 
-pub fn lean_imt(inputs: &[BigInt]) -> Result<BigInt, &'static str> {
+pub fn lean_poseidon_imt(inputs: &[BigInt]) -> Result<BigInt, &'static str> {
     if inputs.is_empty() {
         return Err("At least one input is required");
     }
@@ -38,7 +38,7 @@ mod tests {
             .map(|s| BigInt::from_str(s).unwrap())
             .collect();
 
-        let result = lean_imt(&inputs);
+        let result = lean_poseidon_imt(&inputs);
         assert!(result.is_ok());
         let hash = result.unwrap();
         assert_eq!(
@@ -53,7 +53,7 @@ mod tests {
     #[test]
     fn test_lean_imt_single_input() {
         let inputs = vec![BigInt::from(42)];
-        let result = lean_imt(&inputs);
+        let result = lean_poseidon_imt(&inputs);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), BigInt::from(42));
     }
@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn test_lean_imt_empty_input() {
         let inputs: Vec<BigInt> = vec![];
-        let result = lean_imt(&inputs);
+        let result = lean_poseidon_imt(&inputs);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "At least one input is required");
     }

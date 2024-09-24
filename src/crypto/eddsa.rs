@@ -100,10 +100,16 @@ fn pack_point(a: &(BigInt, BigInt)) -> Vec<u8> {
     buff
 }
 
+#[derive(Debug)]
+pub struct EddsaSignature {
+    pub public_key: Vec<u8>,
+    pub signature: Vec<u8>,
+}
+
 pub fn eddsa_poseidon_sign(
     private_key: &[u8],
     message: &BigInt,
-) -> Result<(Vec<u8>, Vec<u8>), &'static str> {
+) -> Result<EddsaSignature, &'static str> {
     let mut hasher = Blake512::default();
     hasher.write(private_key);
     let mut s_buff = hasher.digest(&[]);
@@ -139,10 +145,10 @@ pub fn eddsa_poseidon_sign(
 
     let s = (r + hms * s) % &*SUB_ORDER;
 
-    Ok((
-        pack_point(&a),
-        [pack_point(&r8), s.to_bytes_le().1].concat(),
-    ))
+    Ok(EddsaSignature {
+        public_key: pack_point(&a),
+        signature: [pack_point(&r8), s.to_bytes_le().1].concat(),
+    })
 }
 
 #[cfg(test)]
@@ -160,7 +166,11 @@ mod tests {
         let result = eddsa_poseidon_sign(&private_key, &message);
         assert!(result.is_ok());
 
-        let (public_key, signature) = result.unwrap();
+        let EddsaSignature {
+            public_key,
+            signature,
+        } = result.unwrap();
+
         assert_eq!(
             hex::encode(public_key),
             "91f1095ac019b50610b5cb56e5db3889177fee8b6422fca3dac04ee1932431a9"

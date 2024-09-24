@@ -2,7 +2,7 @@ use num_bigint::BigInt;
 use num_traits::Num;
 
 use ff::PrimeField;
-use poseidon_rs::{Fr, Poseidon};
+use poseidon_rs::{Fr, FrRepr, Poseidon};
 
 fn bigint_to_fr(input: &BigInt) -> Fr {
     Fr::from_str(&input.to_string()).expect("Can't parse")
@@ -16,6 +16,16 @@ pub fn hash_bigints(inputs: &[BigInt]) -> Result<BigInt, &'static str> {
     let poseidon = Poseidon::new();
 
     let input_fr: Vec<Fr> = inputs.iter().map(bigint_to_fr).collect();
+    let hash = poseidon.hash(input_fr).map_err(|_| "Hashing failed")?;
+    return BigInt::from_str_radix(&hash.into_repr().to_string()[2..], 16)
+        .map_err(|_| "Recover failed");
+}
+
+pub fn hash_int(int: i64) -> Result<BigInt, &'static str> {
+    let uint: u64 = int as u64;
+    let poseidon = Poseidon::new();
+
+    let input_fr: Vec<Fr> = vec![Fr::from_repr(FrRepr::from(uint)).expect("can't parse")];
     let hash = poseidon.hash(input_fr).map_err(|_| "Hashing failed")?;
     return BigInt::from_str_radix(&hash.into_repr().to_string()[2..], 16)
         .map_err(|_| "Recover failed");

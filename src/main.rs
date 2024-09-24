@@ -1,8 +1,5 @@
-#[macro_use]
-extern crate lazy_static;
+use pod::crypto::poseidon_hash;
 
-pub mod crypto;
-use crate::crypto::poseidon_hash;
 use num_bigint::BigInt;
 use std::str::FromStr;
 
@@ -13,7 +10,6 @@ fn main() {
         .iter()
         .map(|s| BigInt::from_str(s).unwrap())
         .collect();
-
     match poseidon_hash::hash_bigints(&inputs) {
         Ok(result) => println!("Hash result: {:?}", result),
         Err(e) => eprintln!("Error: {}", e),
