@@ -1,3 +1,6 @@
+mod chat;
+use chat::Chat;
+
 fn main() {
-    println!("Hello, world!");
+    iced::run("chat", Chat::update, Chat::view).unwrap();
 }
