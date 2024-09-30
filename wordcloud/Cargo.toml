@@ -7,7 +7,7 @@ edition = "2021"
 anyhow = "1.0.89"
 chrono = "0.4.38"
 futures = "0.3.30"
-iced = {version="0.13.1", features=["tokio"]}
+gpui = { git = "https://github.com/zed-industries/zed" }
 iroh-net = "0.25.0"
 pkarr = "2.2.0"
 tokio = "1.40.0"
