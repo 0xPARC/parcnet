@@ -1,5 +1,5 @@
 [package]
-name = "wordcloud"
+name = "chat"
 version = "0.1.0"
 edition = "2021"
 
@@ -13,3 +13,4 @@ pkarr = "2.2.0"
 tokio = "1.40.0"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
+unicode-segmentation = "1.12.0"
