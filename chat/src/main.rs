@@ -16,7 +16,7 @@ async fn main() {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
-            |cx| cx.new_view(|cx| Chat::new(cx)),
+            |cx| cx.new_view(Chat::new),
         );
     });
 }

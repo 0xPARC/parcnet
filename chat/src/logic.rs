@@ -11,9 +11,9 @@ use iroh_net::key::{PublicKey, SecretKey};
 use message::Message;
 use std::{
     str::FromStr,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
 };
-use tokio::sync::watch;
+use tokio::sync::{watch, Mutex};
 use tracing::{info, warn};
 
 pub struct Logic {
@@ -40,7 +40,7 @@ impl Logic {
     pub async fn send_message(&self, message: &str) {
         let messages = self.messages.clone();
         let message_watch_sender = self.message_watch.0.clone();
-        if let Some(sender) = self.message_sender.lock().unwrap().as_mut() {
+        if let Some(sender) = self.message_sender.lock().await.as_ref() {
             let message = Message {
                 timestamp: chrono::Utc::now(),
                 text: message.to_string(),
@@ -73,7 +73,7 @@ impl Logic {
         let secret_key = SecretKey::generate();
         tokio::spawn(async move {
             let (sender, mut receiver) = connect_topic(topic_id, peer_id, secret_key).await;
-            message_sender.lock().unwrap().replace(sender);
+            message_sender.lock().await.replace(sender);
             while let Some(Ok(event)) = receiver.next().await {
                 if let Event::Gossip(GossipEvent::Received(msg)) = event {
                     if let Some(message) = Message::decode(msg.content) {

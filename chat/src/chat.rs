@@ -21,7 +21,7 @@ impl Chat {
         let logic = Logic::new();
         let mut message_watch = logic.get_message_watch();
         cx.spawn(|view, mut cx| async move {
-            while let Ok(_) = message_watch.changed().await {
+            while message_watch.changed().await.is_ok() {
                 let _ = cx.update(|cx| {
                     view.update(cx, |_, cx| {
                         cx.notify();
@@ -32,7 +32,7 @@ impl Chat {
         .detach();
 
         cx.bind_keys([KeyBinding::new("enter", Enter, None)]);
-        let message_input = cx.new_view(|cx| TextInput::new(cx));
+        let message_input = cx.new_view(TextInput::new);
 
         Self {
             logic: Arc::new(logic),
@@ -67,7 +67,7 @@ impl Render for Chat {
             Pixels(20.),
             move |idx, _cx| {
                 let item = messages.get(idx).unwrap().clone();
-                div().child(format!("{}", item.text)).into_any_element()
+                div().child(item.text).into_any_element()
             },
         );
         div()
