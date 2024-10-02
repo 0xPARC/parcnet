@@ -1,4 +1,5 @@
 mod input;
+
 use crate::logic::Logic;
 use gpui::{
     actions, div, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render, Styled,
@@ -6,20 +7,18 @@ use gpui::{
 };
 use gpui::{View, VisualContext};
 use input::TextInput;
+use std::sync::Arc;
 
 actions!(chat, [Enter]);
 
 pub struct Chat {
-    logic: Logic,
+    logic: Arc<Logic>,
     message_input: View<TextInput>,
 }
 
 impl Chat {
     pub fn new(cx: &mut ViewContext<Self>) -> Self {
-        cx.bind_keys([KeyBinding::new("enter", Enter, None)]);
-
         let logic = Logic::new();
-        logic.run_test_task();
         let mut message_watch = logic.get_message_watch();
         cx.spawn(|view, mut cx| async move {
             while let Ok(_) = message_watch.changed().await {
@@ -32,25 +31,34 @@ impl Chat {
         })
         .detach();
 
+        cx.bind_keys([KeyBinding::new("enter", Enter, None)]);
         let message_input = cx.new_view(|cx| TextInput::new(cx));
 
         Self {
-            logic,
+            logic: Arc::new(logic),
             message_input,
         }
     }
 
     fn enter(&mut self, _: &Enter, cx: &mut ViewContext<Self>) {
-        let message = self.message_input.read(cx).get_content();
-        self.logic.send_message(&message);
-        self.message_input.update(cx, |input, _| input.reset());
-        cx.notify();
+        let message_input = self.message_input.clone();
+        let message = message_input.read(cx).get_content().to_string();
+        let logic = self.logic.clone();
+        cx.spawn(|view, mut cx| async move {
+            logic.send_message(&message).await;
+            let _ = cx.update(|cx| {
+                message_input.update(cx, |input, _| input.reset());
+                view.update(cx, |_, cx| {
+                    cx.notify();
+                });
+            });
+        });
     }
 }
 
 impl Render for Chat {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        let message = self.logic.get_latest_message();
+        let messages = self.logic.get_messages();
         div()
             .key_context("Chat")
             .on_action(cx.listener(Self::enter))
