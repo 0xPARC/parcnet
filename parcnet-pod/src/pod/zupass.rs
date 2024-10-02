@@ -1,4 +1,4 @@
-use crate::pod::pod::Pod;
+use crate::pod::pod_impl::Pod;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
