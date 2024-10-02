@@ -2,8 +2,8 @@ mod input;
 
 use crate::logic::Logic;
 use gpui::{
-    actions, div, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render, Styled,
-    ViewContext,
+    actions, div, list, InteractiveElement, IntoElement, KeyBinding, ListAlignment, ListState,
+    ParentElement, Pixels, Render, Styled, ViewContext,
 };
 use gpui::{View, VisualContext};
 use input::TextInput;
@@ -50,25 +50,35 @@ impl Chat {
                 message_input.update(cx, |input, _| input.reset());
                 view.update(cx, |_, cx| {
                     cx.notify();
-                });
+                })
+                .unwrap();
             });
-        });
+        })
+        .detach();
     }
 }
 
 impl Render for Chat {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
         let messages = self.logic.get_messages();
+        let list_state = ListState::new(
+            messages.len(),
+            ListAlignment::Top,
+            Pixels(20.),
+            move |idx, _cx| {
+                let item = messages.get(idx).unwrap().clone();
+                div().child(format!("{}", item.text)).into_any_element()
+            },
+        );
         div()
             .key_context("Chat")
             .on_action(cx.listener(Self::enter))
             .flex()
             .flex_col()
             .justify_between()
-            .h_full()
-            .w_full()
+            .size_full()
             .bg(gpui::white())
-            .child(format!("latest message: {}", &message))
+            .child(list(list_state).w_full().h_full())
             .child(self.message_input.clone())
     }
 }

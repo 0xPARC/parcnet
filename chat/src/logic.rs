@@ -14,7 +14,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 use tokio::sync::watch;
-use tracing::warn;
+use tracing::{info, warn};
 
 pub struct Logic {
     messages: Arc<RwLock<Vec<Message>>>,
@@ -23,7 +23,7 @@ pub struct Logic {
 }
 
 const TOPIC_ID: &str = "nontdllkgf7b77fvdns3bbrer7qlmqqbqt4jwgwaq6vd3anp3euq";
-const PEER_ID: &str = "fhozrkei6mgiqqfcfpq4xzfk6zdcnv2onp77xhoer7wblpcokgeq";
+const PEER_ID: &str = "5mx77a3wae3kg34rkwl5sllw7br52aabukz5e43oae6igtv62cka";
 
 impl Logic {
     pub fn new() -> Self {
@@ -38,14 +38,18 @@ impl Logic {
     }
 
     pub async fn send_message(&self, message: &str) {
+        let messages = self.messages.clone();
+        let message_watch_sender = self.message_watch.0.clone();
         if let Some(sender) = self.message_sender.lock().unwrap().as_mut() {
             let message = Message {
                 timestamp: chrono::Utc::now(),
                 text: message.to_string(),
             };
             let bytes = message.encode();
+            info!("sending message: {}", message.text);
             sender.broadcast(bytes).await.unwrap();
-            self.message_watch.0.send(()).unwrap();
+            messages.write().map(|mut msgs| msgs.push(message)).unwrap();
+            message_watch_sender.send(()).unwrap();
             return;
         }
         warn!("no sender available");
@@ -73,6 +77,7 @@ impl Logic {
             while let Some(Ok(event)) = receiver.next().await {
                 if let Event::Gossip(GossipEvent::Received(msg)) = event {
                     if let Some(message) = Message::decode(msg.content) {
+                        info!("received message: {}", message.text);
                         messages.write().map(|mut msgs| msgs.push(message)).unwrap();
                         message_watch_sender.send(()).unwrap();
                     } else {
