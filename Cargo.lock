@@ -773,6 +773,9 @@ name = "bytes"
 version = "1.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "428d9aa8fbc0670b7b8d6030a7fadd0f86151cae55e4dbbece15f3780a3dfaf3"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "calloop"
@@ -896,6 +899,24 @@ dependencies = [
  "cfg-if",
  "cipher",
  "cpufeatures",
+]
+
+[[package]]
+name = "chat"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "futures",
+ "gpui",
+ "iroh-base",
+ "iroh-gossip",
+ "iroh-net",
+ "pkarr",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "unicode-segmentation",
 ]
 
 [[package]]
@@ -1066,7 +1087,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#9b148f3dcc5e4281bfadd515efd817bcdbf21bc3"
+source = "git+https://github.com/zed-industries/zed#563a1dcbab67b58a6c9cf10fe4dea35d862376d1"
 dependencies = [
  "rustc-hash 1.1.0",
 ]
@@ -1529,18 +1550,18 @@ dependencies = [
 
 [[package]]
 name = "derive_more"
-version = "1.0.0-beta.7"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3249c0372e72f5f93b5c0ca54c0ab76bbf6216b6f718925476fd9bc4ffabb4fe"
+checksum = "4a9b99b9cbbe49445b21764dc0625032a89b145a2642e67603e1c936f5458d05"
 dependencies = [
  "derive_more-impl",
 ]
 
 [[package]]
 name = "derive_more-impl"
-version = "1.0.0-beta.7"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27d919ced7590fc17b5d5a3c63b662e8a7d2324212c4e4dbbed975cafd22d16d"
+checksum = "cb7330aeadfbe296029522e6c40f315320aba36fc43a5b3632f3795348f3bd22"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1551,7 +1572,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#9b148f3dcc5e4281bfadd515efd817bcdbf21bc3"
+source = "git+https://github.com/zed-industries/zed#563a1dcbab67b58a6c9cf10fe4dea35d862376d1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2525,7 +2546,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#9b148f3dcc5e4281bfadd515efd817bcdbf21bc3"
+source = "git+https://github.com/zed-industries/zed#563a1dcbab67b58a6c9cf10fe4dea35d862376d1"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -2610,7 +2631,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#9b148f3dcc5e4281bfadd515efd817bcdbf21bc3"
+source = "git+https://github.com/zed-industries/zed#563a1dcbab67b58a6c9cf10fe4dea35d862376d1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2873,7 +2894,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#9b148f3dcc5e4281bfadd515efd817bcdbf21bc3"
+source = "git+https://github.com/zed-industries/zed#563a1dcbab67b58a6c9cf10fe4dea35d862376d1"
 dependencies = [
  "anyhow",
  "derive_more 0.99.18",
@@ -2915,7 +2936,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.5.7",
+ "socket2 0.4.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -3148,15 +3169,15 @@ checksum = "187674a687eed5fe42285b40c6291f9a01517d415fad1c3cbc6a9f778af7fcd4"
 
 [[package]]
 name = "iroh-base"
-version = "0.25.0"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "545424889bce87e44fd08dac9e6889635630fdbdaaa858a3c5a5f0adbb8d3779"
+checksum = "973c0b3c7851fa2e8e6cf4cb81c9f4cab1373848828fafa43dfe25b123a89ff2"
 dependencies = [
  "aead",
  "anyhow",
  "crypto_box",
  "data-encoding",
- "derive_more 1.0.0-beta.7",
+ "derive_more 1.0.0",
  "ed25519-dalek",
  "getrandom",
  "hex",
@@ -3188,10 +3209,38 @@ dependencies = [
 ]
 
 [[package]]
-name = "iroh-metrics"
-version = "0.25.0"
+name = "iroh-gossip"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fb6ab80f7cccde80be07a643308e1ff925d5be91721ec65ba96b261a0bcb5e5"
+checksum = "b44749f361aca7cddcb357b62ef84cad1023771aee03d427c8922991fc4a9561"
+dependencies = [
+ "anyhow",
+ "async-channel 2.3.1",
+ "bytes",
+ "derive_more 1.0.0",
+ "ed25519-dalek",
+ "futures-concurrency",
+ "futures-lite 2.3.0",
+ "futures-util",
+ "indexmap",
+ "iroh-base",
+ "iroh-blake3",
+ "iroh-metrics",
+ "iroh-net",
+ "postcard",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "serde",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "iroh-metrics"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02edfa7ca1aa89b0b9793d94671e32b79c97d61e9022f082c5eb2b95b64e90c0"
 dependencies = [
  "anyhow",
  "erased_set",
@@ -3210,16 +3259,16 @@ dependencies = [
 
 [[package]]
 name = "iroh-net"
-version = "0.25.0"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a099a60478cb9319153756a9cf2ff41aa03d18403690a91e60f049ad467b057"
+checksum = "329553be056a92eec7802e1c087eed951eec6e60f0f0740491ef16a295be4ca2"
 dependencies = [
  "anyhow",
  "backoff",
  "base64",
  "bytes",
  "der",
- "derive_more 1.0.0-beta.7",
+ "derive_more 1.0.0",
  "duct",
  "futures-buffered",
  "futures-concurrency",
@@ -3270,6 +3319,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-rustls",
+ "tokio-stream",
  "tokio-tungstenite",
  "tokio-tungstenite-wasm",
  "tokio-util",
@@ -3675,7 +3725,7 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#9b148f3dcc5e4281bfadd515efd817bcdbf21bc3"
+source = "git+https://github.com/zed-industries/zed#563a1dcbab67b58a6c9cf10fe4dea35d862376d1"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -5236,7 +5286,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#9b148f3dcc5e4281bfadd515efd817bcdbf21bc3"
+source = "git+https://github.com/zed-industries/zed#563a1dcbab67b58a6c9cf10fe4dea35d862376d1"
 dependencies = [
  "derive_refineable",
 ]
@@ -5751,7 +5801,7 @@ checksum = "d369a96f978623eb3dc28807c4852d6cc617fed53da5d3c400feff1ef34a714a"
 [[package]]
 name = "semantic_version"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#9b148f3dcc5e4281bfadd515efd817bcdbf21bc3"
+source = "git+https://github.com/zed-industries/zed#563a1dcbab67b58a6c9cf10fe4dea35d862376d1"
 dependencies = [
  "anyhow",
  "serde",
@@ -6268,7 +6318,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#9b148f3dcc5e4281bfadd515efd817bcdbf21bc3"
+source = "git+https://github.com/zed-industries/zed#563a1dcbab67b58a6c9cf10fe4dea35d862376d1"
 dependencies = [
  "arrayvec",
  "log",
@@ -6728,6 +6778,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-stream"
+version = "0.1.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f4e6ce100d0eb49a2734f8c0812bcd324cf357d21810932c5df6b96ef2b86f1"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
 name = "tokio-tungstenite"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7106,7 +7167,7 @@ checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#9b148f3dcc5e4281bfadd515efd817bcdbf21bc3"
+source = "git+https://github.com/zed-industries/zed#563a1dcbab67b58a6c9cf10fe4dea35d862376d1"
 dependencies = [
  "anyhow",
  "async-fs 1.6.0",
@@ -7780,21 +7841,6 @@ dependencies = [
  "thiserror",
  "windows 0.58.0",
  "windows-core 0.58.0",
-]
-
-[[package]]
-name = "wordcloud"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "futures",
- "gpui",
- "iroh-net",
- "pkarr",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
