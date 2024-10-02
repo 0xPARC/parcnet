@@ -1,6 +1,6 @@
-use std::ops::Range;
-
+// Adapted from https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs (GPL-3.0)
 use gpui::*;
+use std::ops::Range;
 use unicode_segmentation::*;
 
 actions!(
@@ -33,10 +33,22 @@ pub struct TextInput {
 
 impl TextInput {
     pub fn new(cx: &mut ViewContext<Self>) -> Self {
+        cx.bind_keys([
+            KeyBinding::new("backspace", Backspace, None),
+            KeyBinding::new("delete", Delete, None),
+            KeyBinding::new("left", Left, None),
+            KeyBinding::new("right", Right, None),
+            KeyBinding::new("shift-left", SelectLeft, None),
+            KeyBinding::new("shift-right", SelectRight, None),
+            KeyBinding::new("cmd-a", SelectAll, None),
+            KeyBinding::new("home", Home, None),
+            KeyBinding::new("end", End, None),
+            KeyBinding::new("ctrl-cmd-space", ShowCharacterPalette, None),
+        ]);
         TextInput {
             focus_handle: cx.focus_handle(),
             content: "".into(),
-            placeholder: "Type here...".into(),
+            placeholder: "".into(),
             selected_range: 0..0,
             selection_reversed: false,
             marked_range: None,
@@ -45,6 +57,17 @@ impl TextInput {
             is_selecting: false,
         }
     }
+
+    pub fn reset(&mut self) {
+        self.content = "".into();
+        self.selected_range = 0..0;
+        self.selection_reversed = false;
+        self.marked_range = None;
+        self.last_layout = None;
+        self.last_bounds = None;
+        self.is_selecting = false;
+    }
+
     fn left(&mut self, _: &Left, cx: &mut ViewContext<Self>) {
         if self.selected_range.is_empty() {
             self.move_to(self.previous_boundary(self.cursor_offset()), cx);
@@ -215,16 +238,6 @@ impl TextInput {
             .grapheme_indices(true)
             .find_map(|(idx, _)| (idx > offset).then_some(idx))
             .unwrap_or(self.content.len())
-    }
-
-    fn reset(&mut self) {
-        self.content = "".into();
-        self.selected_range = 0..0;
-        self.selection_reversed = false;
-        self.marked_range = None;
-        self.last_layout = None;
-        self.last_bounds = None;
-        self.is_selecting = false;
     }
 }
 
