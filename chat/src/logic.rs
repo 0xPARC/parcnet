@@ -4,19 +4,21 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use bytes::Bytes;
 use futures::StreamExt;
-use iroh_base::{base32, key::SecretKey};
+use iroh_base::key::SecretKey;
 use iroh_gossip::{
     net::{Event, Gossip, GossipEvent, GossipReceiver, GossipSender},
     proto::TopicId,
 };
 use iroh_net::{discovery::Discovery, key::PublicKey, relay::RelayMode, Endpoint, NodeAddr};
-use tokio::sync::watch;
+use tokio::sync::{watch, Mutex};
 use tracing::warn;
 
 pub struct Logic {
     latest_message: Arc<RwLock<String>>,
     message_watch: (watch::Sender<()>, watch::Receiver<()>),
+    message_sender: Arc<Mutex<Option<GossipSender>>>,
 }
 
 const GOSSIP_ALPN: &[u8] = b"/iroh-gossip/0";
@@ -30,8 +32,8 @@ async fn endpoint_loop(endpoint: Endpoint, gossip: Gossip) {
             Ok(conn) => conn,
             Err(err) => {
                 warn!("incoming connection failed: {err:#}");
-                // we can carry on in these cases:
-                // this can be caused by retransmitted datagrams
+                // We can carry on in these cases:
+                // This can be caused by retransmitted datagrams
                 continue;
             }
         };
@@ -77,7 +79,6 @@ async fn connect_topic(topic_id: TopicId, peer: NodeAddr) -> (GossipSender, Goss
     );
 
     let addr = endpoint.node_addr().await.unwrap();
-    // We're connecting when we don't need to
 
     let gossip = Gossip::from_endpoint(endpoint.clone(), Default::default(), &addr.info);
     tokio::spawn(endpoint_loop(endpoint.clone(), gossip.clone()));
@@ -89,39 +90,42 @@ async fn connect_topic(topic_id: TopicId, peer: NodeAddr) -> (GossipSender, Goss
 impl Logic {
     pub fn new() -> Self {
         let message_watch = watch::channel(());
-        // start a task which connects
         let logic = Self {
             latest_message: Arc::new(RwLock::new("".to_string())),
             message_watch,
+            message_sender: Arc::new(Mutex::new(None)),
         };
-        // // start a task which connects to topic
-        // tokio::spawn(async move {
-        //     let topic_id = TopicId::from_str(TOPIC_ID).unwrap();
-        //     let peer = NodeAddr::new(PublicKey::from_str(PEER_ID).unwrap());
-        //     Self::connect_topic(topic_id, peer).await;
-        // });
         logic
     }
 
     pub fn run_test_task(&self) {
         let message_watch_sender = self.message_watch.0.clone();
         let latest_message = self.latest_message.clone();
+        let message_sender = self.message_sender.clone();
         tokio::spawn(async move {
             let topic_id = TopicId::from_str(TOPIC_ID).unwrap();
             let peer = NodeAddr::new(PublicKey::from_str(PEER_ID).unwrap());
             let (sender, mut receiver) = connect_topic(topic_id, peer).await;
+            message_sender.lock().await.replace(sender);
             while let Some(Ok(event)) = receiver.next().await {
                 if let Event::Gossip(GossipEvent::Received(msg)) = event {
                     let decoded = String::from_utf8(msg.content.to_vec()).unwrap();
                     *latest_message.write().unwrap() = decoded.clone();
-                    message_watch_sender.send(());
+                    message_watch_sender.send(()).unwrap();
                 }
             }
         });
     }
 
     pub fn send_message(&self, message: &str) {
-        println!("Message sent: {}", message);
+        let message_sender = self.message_sender.clone();
+        let encoded_message = Bytes::from(String::from(message).into_bytes());
+        tokio::spawn(async move {
+            let message_sender = message_sender.lock().await;
+            if let Some(sender) = &*message_sender {
+                sender.broadcast(encoded_message.clone()).await.unwrap();
+            }
+        });
     }
 
     pub fn get_latest_message(&self) -> String {

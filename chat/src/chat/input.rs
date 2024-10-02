@@ -1,5 +1,12 @@
 // Adapted from https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs (GPL-3.0)
-use gpui::*;
+use gpui::{
+    actions, div, fill, hsla, point, px, relative, rgba, size, white, AppContext, Bounds,
+    CursorStyle, Element, ElementId, ElementInputHandler, FocusHandle, FocusableView,
+    GlobalElementId, InteractiveElement, IntoElement, KeyBinding, LayoutId, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, ParentElement, Pixels, Point, Render,
+    ShapedLine, SharedString, Styled, TextRun, UTF16Selection, UnderlineStyle, View, ViewContext,
+    ViewInputHandler, WindowContext,
+};
 use std::ops::Range;
 use unicode_segmentation::*;
 
@@ -66,6 +73,10 @@ impl TextInput {
         self.last_layout = None;
         self.last_bounds = None;
         self.is_selecting = false;
+    }
+
+    pub fn get_content(&self) -> &str {
+        &self.content
     }
 
     fn left(&mut self, _: &Left, cx: &mut ViewContext<Self>) {
@@ -371,7 +382,7 @@ impl Element for TextElement {
         _id: Option<&GlobalElementId>,
         cx: &mut WindowContext,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        let mut style = Style::default();
+        let mut style = gpui::Style::default();
         style.size.width = relative(1.).into();
         style.size.height = cx.line_height().into();
         (cx.request_layout(style, []), ())
