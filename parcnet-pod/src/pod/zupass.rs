@@ -45,7 +45,7 @@ impl Pod {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pod::pod::{create_pod, PodValue};
+    use crate::pod::pod_impl::{create_pod, PodValue};
 
     #[test]
     fn test_make_zupass_url_two_value_failing_zupass_verification() {

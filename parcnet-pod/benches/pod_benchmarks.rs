@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use num_bigint::BigInt;
-use parcnet_pod::pod::pod::{create_pod, PodValue};
+use parcnet_pod::pod::pod_impl::{create_pod, PodValue};
 
 fn benchmark_create_pod(c: &mut Criterion) {
     let private_key = vec![0u8; 32];
