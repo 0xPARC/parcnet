@@ -1,4 +1,4 @@
-use crate::crypto::blake512::blake512::{Blake512, BLOCK_SIZE};
+use crate::crypto::blake512::blake512_impl::{Blake512, BLOCK_SIZE};
 
 const CST0: u64 = 0x243F6A8885A308D3;
 const CST1: u64 = 0x13198A2E03707344;
@@ -73,646 +73,646 @@ impl Blake512 {
             v0 = v0.wrapping_add(m[0] ^ CST1);
             v0 = v0.wrapping_add(v4);
             v12 ^= v0;
-            v12 = (v12 << (64 - 32)) | (v12 >> 32);
+            v12 = v12.rotate_right(32);
             v8 = v8.wrapping_add(v12);
             v4 ^= v8;
-            v4 = (v4 << (64 - 25)) | (v4 >> 25);
+            v4 = v4.rotate_right(25);
 
             v1 = v1.wrapping_add(m[2] ^ CST3);
             v1 = v1.wrapping_add(v5);
             v13 ^= v1;
-            v13 = (v13 << (64 - 32)) | (v13 >> 32);
+            v13 = v13.rotate_right(32);
             v9 = v9.wrapping_add(v13);
             v5 ^= v9;
-            v5 = (v5 << (64 - 25)) | (v5 >> 25);
+            v5 = v5.rotate_right(25);
 
             v2 = v2.wrapping_add(m[4] ^ CST5);
             v2 = v2.wrapping_add(v6);
             v14 ^= v2;
-            v14 = (v14 << (64 - 32)) | (v14 >> 32);
+            v14 = v14.rotate_right(32);
             v10 = v10.wrapping_add(v14);
             v6 ^= v10;
-            v6 = (v6 << (64 - 25)) | (v6 >> 25);
+            v6 = v6.rotate_right(25);
 
             v3 = v3.wrapping_add(m[6] ^ CST7);
             v3 = v3.wrapping_add(v7);
             v15 ^= v3;
-            v15 = (v15 << (64 - 32)) | (v15 >> 32);
+            v15 = v15.rotate_right(32);
             v11 = v11.wrapping_add(v15);
             v7 ^= v11;
-            v7 = (v7 << (64 - 25)) | (v7 >> 25);
+            v7 = v7.rotate_right(25);
 
             v2 = v2.wrapping_add(m[5] ^ CST4);
             v2 = v2.wrapping_add(v6);
             v14 ^= v2;
-            v14 = (v14 << (64 - 16)) | (v14 >> 16);
+            v14 = v14.rotate_right(16);
             v10 = v10.wrapping_add(v14);
             v6 ^= v10;
-            v6 = (v6 << (64 - 11)) | (v6 >> 11);
+            v6 = v6.rotate_right(11);
 
             v3 = v3.wrapping_add(m[7] ^ CST6);
             v3 = v3.wrapping_add(v7);
             v15 ^= v3;
-            v15 = (v15 << (64 - 16)) | (v15 >> 16);
+            v15 = v15.rotate_right(16);
             v11 = v11.wrapping_add(v15);
             v7 ^= v11;
-            v7 = (v7 << (64 - 11)) | (v7 >> 11);
+            v7 = v7.rotate_right(11);
 
             v1 = v1.wrapping_add(m[3] ^ CST2);
             v1 = v1.wrapping_add(v5);
             v13 ^= v1;
-            v13 = (v13 << (64 - 16)) | (v13 >> 16);
+            v13 = v13.rotate_right(16);
             v9 = v9.wrapping_add(v13);
             v5 ^= v9;
-            v5 = (v5 << (64 - 11)) | (v5 >> 11);
+            v5 = v5.rotate_right(11);
 
             v0 = v0.wrapping_add(m[1] ^ CST0);
             v0 = v0.wrapping_add(v4);
             v12 ^= v0;
-            v12 = (v12 << (64 - 16)) | (v12 >> 16);
+            v12 = v12.rotate_right(16);
             v8 = v8.wrapping_add(v12);
             v4 ^= v8;
-            v4 = (v4 << (64 - 11)) | (v4 >> 11);
+            v4 = v4.rotate_right(11);
 
             v0 = v0.wrapping_add(m[8] ^ CST9);
             v0 = v0.wrapping_add(v5);
             v15 ^= v0;
-            v15 = (v15 << (64 - 32)) | (v15 >> 32);
+            v15 = v15.rotate_right(32);
             v10 = v10.wrapping_add(v15);
             v5 ^= v10;
-            v5 = (v5 << (64 - 25)) | (v5 >> 25);
+            v5 = v5.rotate_right(25);
 
             v1 = v1.wrapping_add(m[10] ^ CST11);
             v1 = v1.wrapping_add(v6);
             v12 ^= v1;
-            v12 = (v12 << (64 - 32)) | (v12 >> 32);
+            v12 = v12.rotate_right(32);
             v11 = v11.wrapping_add(v12);
             v6 ^= v11;
-            v6 = (v6 << (64 - 25)) | (v6 >> 25);
+            v6 = v6.rotate_right(25);
 
             v2 = v2.wrapping_add(m[12] ^ CST13);
             v2 = v2.wrapping_add(v7);
             v13 ^= v2;
-            v13 = (v13 << (64 - 32)) | (v13 >> 32);
+            v13 = v13.rotate_right(32);
             v8 = v8.wrapping_add(v13);
             v7 ^= v8;
-            v7 = (v7 << (64 - 25)) | (v7 >> 25);
+            v7 = v7.rotate_right(25);
 
             v3 = v3.wrapping_add(m[14] ^ CST15);
             v3 = v3.wrapping_add(v4);
             v14 ^= v3;
-            v14 = (v14 << (64 - 32)) | (v14 >> 32);
+            v14 = v14.rotate_right(32);
             v9 = v9.wrapping_add(v14);
             v4 ^= v9;
-            v4 = (v4 << (64 - 25)) | (v4 >> 25);
+            v4 = v4.rotate_right(25);
 
             v2 = v2.wrapping_add(m[13] ^ CST12);
             v2 = v2.wrapping_add(v7);
             v13 ^= v2;
-            v13 = (v13 << (64 - 16)) | (v13 >> 16);
+            v13 = v13.rotate_right(16);
             v8 = v8.wrapping_add(v13);
             v7 ^= v8;
-            v7 = (v7 << (64 - 11)) | (v7 >> 11);
+            v7 = v7.rotate_right(11);
 
             v3 = v3.wrapping_add(m[15] ^ CST14);
             v3 = v3.wrapping_add(v4);
             v14 ^= v3;
-            v14 = (v14 << (64 - 16)) | (v14 >> 16);
+            v14 = v14.rotate_right(16);
             v9 = v9.wrapping_add(v14);
             v4 ^= v9;
-            v4 = (v4 << (64 - 11)) | (v4 >> 11);
+            v4 = v4.rotate_right(11);
 
             v1 = v1.wrapping_add(m[11] ^ CST10);
             v1 = v1.wrapping_add(v6);
             v12 ^= v1;
-            v12 = (v12 << (64 - 16)) | (v12 >> 16);
+            v12 = v12.rotate_right(16);
             v11 = v11.wrapping_add(v12);
             v6 ^= v11;
-            v6 = (v6 << (64 - 11)) | (v6 >> 11);
+            v6 = v6.rotate_right(11);
 
             v0 = v0.wrapping_add(m[9] ^ CST8);
             v0 = v0.wrapping_add(v5);
             v15 ^= v0;
-            v15 = (v15 << (64 - 16)) | (v15 >> 16);
+            v15 = v15.rotate_right(16);
             v10 = v10.wrapping_add(v15);
             v5 ^= v10;
-            v5 = (v5 << (64 - 11)) | (v5 >> 11);
+            v5 = v5.rotate_right(11);
 
             // Round 2.
             v0 = v0.wrapping_add(m[14] ^ CST10);
             v0 = v0.wrapping_add(v4);
             v12 ^= v0;
-            v12 = (v12 << (64 - 32)) | (v12 >> 32);
+            v12 = v12.rotate_right(32);
             v8 = v8.wrapping_add(v12);
             v4 ^= v8;
-            v4 = (v4 << (64 - 25)) | (v4 >> 25);
+            v4 = v4.rotate_right(25);
 
             v1 = v1.wrapping_add(m[4] ^ CST8);
             v1 = v1.wrapping_add(v5);
             v13 ^= v1;
-            v13 = (v13 << (64 - 32)) | (v13 >> 32);
+            v13 = v13.rotate_right(32);
             v9 = v9.wrapping_add(v13);
             v5 ^= v9;
-            v5 = (v5 << (64 - 25)) | (v5 >> 25);
+            v5 = v5.rotate_right(25);
 
             v2 = v2.wrapping_add(m[9] ^ CST15);
             v2 = v2.wrapping_add(v6);
             v14 ^= v2;
-            v14 = (v14 << (64 - 32)) | (v14 >> 32);
+            v14 = v14.rotate_right(32);
             v10 = v10.wrapping_add(v14);
             v6 ^= v10;
-            v6 = (v6 << (64 - 25)) | (v6 >> 25);
+            v6 = v6.rotate_right(25);
 
             v3 = v3.wrapping_add(m[13] ^ CST6);
             v3 = v3.wrapping_add(v7);
             v15 ^= v3;
-            v15 = (v15 << (64 - 32)) | (v15 >> 32);
+            v15 = v15.rotate_right(32);
             v11 = v11.wrapping_add(v15);
             v7 ^= v11;
-            v7 = (v7 << (64 - 25)) | (v7 >> 25);
+            v7 = v7.rotate_right(25);
 
             v2 = v2.wrapping_add(m[15] ^ CST9);
             v2 = v2.wrapping_add(v6);
             v14 ^= v2;
-            v14 = (v14 << (64 - 16)) | (v14 >> 16);
+            v14 = v14.rotate_right(16);
             v10 = v10.wrapping_add(v14);
             v6 ^= v10;
-            v6 = (v6 << (64 - 11)) | (v6 >> 11);
+            v6 = v6.rotate_right(11);
 
             v3 = v3.wrapping_add(m[6] ^ CST13);
             v3 = v3.wrapping_add(v7);
             v15 ^= v3;
-            v15 = (v15 << (64 - 16)) | (v15 >> 16);
+            v15 = v15.rotate_right(16);
             v11 = v11.wrapping_add(v15);
             v7 ^= v11;
-            v7 = (v7 << (64 - 11)) | (v7 >> 11);
+            v7 = v7.rotate_right(11);
 
             v1 = v1.wrapping_add(m[8] ^ CST4);
             v1 = v1.wrapping_add(v5);
             v13 ^= v1;
-            v13 = (v13 << (64 - 16)) | (v13 >> 16);
+            v13 = v13.rotate_right(16);
             v9 = v9.wrapping_add(v13);
             v5 ^= v9;
-            v5 = (v5 << (64 - 11)) | (v5 >> 11);
+            v5 = v5.rotate_right(11);
 
             v0 = v0.wrapping_add(m[10] ^ CST14);
             v0 = v0.wrapping_add(v4);
             v12 ^= v0;
-            v12 = (v12 << (64 - 16)) | (v12 >> 16);
+            v12 = v12.rotate_right(16);
             v8 = v8.wrapping_add(v12);
             v4 ^= v8;
-            v4 = (v4 << (64 - 11)) | (v4 >> 11);
+            v4 = v4.rotate_right(11);
 
             v0 = v0.wrapping_add(m[1] ^ CST12);
             v0 = v0.wrapping_add(v5);
             v15 ^= v0;
-            v15 = (v15 << (64 - 32)) | (v15 >> 32);
+            v15 = v15.rotate_right(32);
             v10 = v10.wrapping_add(v15);
             v5 ^= v10;
-            v5 = (v5 << (64 - 25)) | (v5 >> 25);
+            v5 = v5.rotate_right(25);
 
             v1 = v1.wrapping_add(m[0] ^ CST2);
             v1 = v1.wrapping_add(v6);
             v12 ^= v1;
-            v12 = (v12 << (64 - 32)) | (v12 >> 32);
+            v12 = v12.rotate_right(32);
             v11 = v11.wrapping_add(v12);
             v6 ^= v11;
-            v6 = (v6 << (64 - 25)) | (v6 >> 25);
+            v6 = v6.rotate_right(25);
 
             v2 = v2.wrapping_add(m[11] ^ CST7);
             v2 = v2.wrapping_add(v7);
             v13 ^= v2;
-            v13 = (v13 << (64 - 32)) | (v13 >> 32);
+            v13 = v13.rotate_right(32);
             v8 = v8.wrapping_add(v13);
             v7 ^= v8;
-            v7 = (v7 << (64 - 25)) | (v7 >> 25);
+            v7 = v7.rotate_right(25);
 
             v3 = v3.wrapping_add(m[5] ^ CST3);
             v3 = v3.wrapping_add(v4);
             v14 ^= v3;
-            v14 = (v14 << (64 - 32)) | (v14 >> 32);
+            v14 = v14.rotate_right(32);
             v9 = v9.wrapping_add(v14);
             v4 ^= v9;
-            v4 = (v4 << (64 - 25)) | (v4 >> 25);
+            v4 = v4.rotate_right(25);
 
             v2 = v2.wrapping_add(m[7] ^ CST11);
             v2 = v2.wrapping_add(v7);
             v13 ^= v2;
-            v13 = (v13 << (64 - 16)) | (v13 >> 16);
+            v13 = v13.rotate_right(16);
             v8 = v8.wrapping_add(v13);
             v7 ^= v8;
-            v7 = (v7 << (64 - 11)) | (v7 >> 11);
+            v7 = v7.rotate_right(11);
 
             v3 = v3.wrapping_add(m[3] ^ CST5);
             v3 = v3.wrapping_add(v4);
             v14 ^= v3;
-            v14 = (v14 << (64 - 16)) | (v14 >> 16);
+            v14 = v14.rotate_right(16);
             v9 = v9.wrapping_add(v14);
             v4 ^= v9;
-            v4 = (v4 << (64 - 11)) | (v4 >> 11);
+            v4 = v4.rotate_right(11);
 
             v1 = v1.wrapping_add(m[2] ^ CST0);
             v1 = v1.wrapping_add(v6);
             v12 ^= v1;
-            v12 = (v12 << (64 - 16)) | (v12 >> 16);
+            v12 = v12.rotate_right(16);
             v11 = v11.wrapping_add(v12);
             v6 ^= v11;
-            v6 = (v6 << (64 - 11)) | (v6 >> 11);
+            v6 = v6.rotate_right(11);
 
             v0 = v0.wrapping_add(m[12] ^ CST1);
             v0 = v0.wrapping_add(v5);
             v15 ^= v0;
-            v15 = (v15 << (64 - 16)) | (v15 >> 16);
+            v15 = v15.rotate_right(16);
             v10 = v10.wrapping_add(v15);
             v5 ^= v10;
-            v5 = (v5 << (64 - 11)) | (v5 >> 11);
+            v5 = v5.rotate_right(11);
 
             // Round 3.
             v0 = v0.wrapping_add(m[11] ^ CST8);
             v0 = v0.wrapping_add(v4);
             v12 ^= v0;
-            v12 = (v12 << (64 - 32)) | (v12 >> 32);
+            v12 = v12.rotate_right(32);
             v8 = v8.wrapping_add(v12);
             v4 ^= v8;
-            v4 = (v4 << (64 - 25)) | (v4 >> 25);
+            v4 = v4.rotate_right(25);
 
             v1 = v1.wrapping_add(m[12] ^ CST0);
             v1 = v1.wrapping_add(v5);
             v13 ^= v1;
-            v13 = (v13 << (64 - 32)) | (v13 >> 32);
+            v13 = v13.rotate_right(32);
             v9 = v9.wrapping_add(v13);
             v5 ^= v9;
-            v5 = (v5 << (64 - 25)) | (v5 >> 25);
+            v5 = v5.rotate_right(25);
 
             v2 = v2.wrapping_add(m[5] ^ CST2);
             v2 = v2.wrapping_add(v6);
             v14 ^= v2;
-            v14 = (v14 << (64 - 32)) | (v14 >> 32);
+            v14 = v14.rotate_right(32);
             v10 = v10.wrapping_add(v14);
             v6 ^= v10;
-            v6 = (v6 << (64 - 25)) | (v6 >> 25);
+            v6 = v6.rotate_right(25);
 
             v3 = v3.wrapping_add(m[15] ^ CST13);
             v3 = v3.wrapping_add(v7);
             v15 ^= v3;
-            v15 = (v15 << (64 - 32)) | (v15 >> 32);
+            v15 = v15.rotate_right(32);
             v11 = v11.wrapping_add(v15);
             v7 ^= v11;
-            v7 = (v7 << (64 - 25)) | (v7 >> 25);
+            v7 = v7.rotate_right(25);
 
             v2 = v2.wrapping_add(m[2] ^ CST5);
             v2 = v2.wrapping_add(v6);
             v14 ^= v2;
-            v14 = (v14 << (64 - 16)) | (v14 >> 16);
+            v14 = v14.rotate_right(16);
             v10 = v10.wrapping_add(v14);
             v6 ^= v10;
-            v6 = (v6 << (64 - 11)) | (v6 >> 11);
+            v6 = v6.rotate_right(11);
 
             v3 = v3.wrapping_add(m[13] ^ CST15);
             v3 = v3.wrapping_add(v7);
             v15 ^= v3;
-            v15 = (v15 << (64 - 16)) | (v15 >> 16);
+            v15 = v15.rotate_right(16);
             v11 = v11.wrapping_add(v15);
             v7 ^= v11;
-            v7 = (v7 << (64 - 11)) | (v7 >> 11);
+            v7 = v7.rotate_right(11);
 
             v1 = v1.wrapping_add(m[0] ^ CST12);
             v1 = v1.wrapping_add(v5);
             v13 ^= v1;
-            v13 = (v13 << (64 - 16)) | (v13 >> 16);
+            v13 = v13.rotate_right(16);
             v9 = v9.wrapping_add(v13);
             v5 ^= v9;
-            v5 = (v5 << (64 - 11)) | (v5 >> 11);
+            v5 = v5.rotate_right(11);
 
             v0 = v0.wrapping_add(m[8] ^ CST11);
             v0 = v0.wrapping_add(v4);
             v12 ^= v0;
-            v12 = (v12 << (64 - 16)) | (v12 >> 16);
+            v12 = v12.rotate_right(16);
             v8 = v8.wrapping_add(v12);
             v4 ^= v8;
-            v4 = (v4 << (64 - 11)) | (v4 >> 11);
+            v4 = v4.rotate_right(11);
 
             v0 = v0.wrapping_add(m[10] ^ CST14);
             v0 = v0.wrapping_add(v5);
             v15 ^= v0;
-            v15 = (v15 << (64 - 32)) | (v15 >> 32);
+            v15 = v15.rotate_right(32);
             v10 = v10.wrapping_add(v15);
             v5 ^= v10;
-            v5 = (v5 << (64 - 25)) | (v5 >> 25);
+            v5 = v5.rotate_right(25);
 
             v1 = v1.wrapping_add(m[3] ^ CST6);
             v1 = v1.wrapping_add(v6);
             v12 ^= v1;
-            v12 = (v12 << (64 - 32)) | (v12 >> 32);
+            v12 = v12.rotate_right(32);
             v11 = v11.wrapping_add(v12);
             v6 ^= v11;
-            v6 = (v6 << (64 - 25)) | (v6 >> 25);
+            v6 = v6.rotate_right(25);
 
             v2 = v2.wrapping_add(m[7] ^ CST1);
             v2 = v2.wrapping_add(v7);
             v13 ^= v2;
-            v13 = (v13 << (64 - 32)) | (v13 >> 32);
+            v13 = v13.rotate_right(32);
             v8 = v8.wrapping_add(v13);
             v7 ^= v8;
-            v7 = (v7 << (64 - 25)) | (v7 >> 25);
+            v7 = v7.rotate_right(25);
 
             v3 = v3.wrapping_add(m[9] ^ CST4);
             v3 = v3.wrapping_add(v4);
             v14 ^= v3;
-            v14 = (v14 << (64 - 32)) | (v14 >> 32);
+            v14 = v14.rotate_right(32);
             v9 = v9.wrapping_add(v14);
             v4 ^= v9;
-            v4 = (v4 << (64 - 25)) | (v4 >> 25);
+            v4 = v4.rotate_right(25);
 
             v2 = v2.wrapping_add(m[1] ^ CST7);
             v2 = v2.wrapping_add(v7);
             v13 ^= v2;
-            v13 = (v13 << (64 - 16)) | (v13 >> 16);
+            v13 = v13.rotate_right(16);
             v8 = v8.wrapping_add(v13);
             v7 ^= v8;
-            v7 = (v7 << (64 - 11)) | (v7 >> 11);
+            v7 = v7.rotate_right(11);
 
             v3 = v3.wrapping_add(m[4] ^ CST9);
             v3 = v3.wrapping_add(v4);
             v14 ^= v3;
-            v14 = (v14 << (64 - 16)) | (v14 >> 16);
+            v14 = v14.rotate_right(16);
             v9 = v9.wrapping_add(v14);
             v4 ^= v9;
-            v4 = (v4 << (64 - 11)) | (v4 >> 11);
+            v4 = v4.rotate_right(11);
 
             v1 = v1.wrapping_add(m[6] ^ CST3);
             v1 = v1.wrapping_add(v6);
             v12 ^= v1;
-            v12 = (v12 << (64 - 16)) | (v12 >> 16);
+            v12 = v12.rotate_right(16);
             v11 = v11.wrapping_add(v12);
             v6 ^= v11;
-            v6 = (v6 << (64 - 11)) | (v6 >> 11);
+            v6 = v6.rotate_right(11);
 
             v0 = v0.wrapping_add(m[14] ^ CST10);
             v0 = v0.wrapping_add(v5);
             v15 ^= v0;
-            v15 = (v15 << (64 - 16)) | (v15 >> 16);
+            v15 = v15.rotate_right(16);
             v10 = v10.wrapping_add(v15);
             v5 ^= v10;
-            v5 = (v5 << (64 - 11)) | (v5 >> 11);
+            v5 = v5.rotate_right(11);
 
             // Round 4.
             v0 = v0.wrapping_add(m[7] ^ CST9);
             v0 = v0.wrapping_add(v4);
             v12 ^= v0;
-            v12 = (v12 << (64 - 32)) | (v12 >> 32);
+            v12 = v12.rotate_right(32);
             v8 = v8.wrapping_add(v12);
             v4 ^= v8;
-            v4 = (v4 << (64 - 25)) | (v4 >> 25);
+            v4 = v4.rotate_right(25);
 
             v1 = v1.wrapping_add(m[3] ^ CST1);
             v1 = v1.wrapping_add(v5);
             v13 ^= v1;
-            v13 = (v13 << (64 - 32)) | (v13 >> 32);
+            v13 = v13.rotate_right(32);
             v9 = v9.wrapping_add(v13);
             v5 ^= v9;
-            v5 = (v5 << (64 - 25)) | (v5 >> 25);
+            v5 = v5.rotate_right(25);
 
             v2 = v2.wrapping_add(m[13] ^ CST12);
             v2 = v2.wrapping_add(v6);
             v14 ^= v2;
-            v14 = (v14 << (64 - 32)) | (v14 >> 32);
+            v14 = v14.rotate_right(32);
             v10 = v10.wrapping_add(v14);
             v6 ^= v10;
-            v6 = (v6 << (64 - 25)) | (v6 >> 25);
+            v6 = v6.rotate_right(25);
 
             v3 = v3.wrapping_add(m[11] ^ CST14);
             v3 = v3.wrapping_add(v7);
             v15 ^= v3;
-            v15 = (v15 << (64 - 32)) | (v15 >> 32);
+            v15 = v15.rotate_right(32);
             v11 = v11.wrapping_add(v15);
             v7 ^= v11;
-            v7 = (v7 << (64 - 25)) | (v7 >> 25);
+            v7 = v7.rotate_right(25);
 
             v2 = v2.wrapping_add(m[12] ^ CST13);
             v2 = v2.wrapping_add(v6);
             v14 ^= v2;
-            v14 = (v14 << (64 - 16)) | (v14 >> 16);
+            v14 = v14.rotate_right(16);
             v10 = v10.wrapping_add(v14);
             v6 ^= v10;
-            v6 = (v6 << (64 - 11)) | (v6 >> 11);
+            v6 = v6.rotate_right(11);
 
             v3 = v3.wrapping_add(m[14] ^ CST11);
             v3 = v3.wrapping_add(v7);
             v15 ^= v3;
-            v15 = (v15 << (64 - 16)) | (v15 >> 16);
+            v15 = v15.rotate_right(16);
             v11 = v11.wrapping_add(v15);
             v7 ^= v11;
-            v7 = (v7 << (64 - 11)) | (v7 >> 11);
+            v7 = v7.rotate_right(11);
 
             v1 = v1.wrapping_add(m[1] ^ CST3);
             v1 = v1.wrapping_add(v5);
             v13 ^= v1;
-            v13 = (v13 << (64 - 16)) | (v13 >> 16);
+            v13 = v13.rotate_right(16);
             v9 = v9.wrapping_add(v13);
             v5 ^= v9;
-            v5 = (v5 << (64 - 11)) | (v5 >> 11);
+            v5 = v5.rotate_right(11);
 
             v0 = v0.wrapping_add(m[9] ^ CST7);
             v0 = v0.wrapping_add(v4);
             v12 ^= v0;
-            v12 = (v12 << (64 - 16)) | (v12 >> 16);
+            v12 = v12.rotate_right(16);
             v8 = v8.wrapping_add(v12);
             v4 ^= v8;
-            v4 = (v4 << (64 - 11)) | (v4 >> 11);
+            v4 = v4.rotate_right(11);
 
             v0 = v0.wrapping_add(m[2] ^ CST6);
             v0 = v0.wrapping_add(v5);
             v15 ^= v0;
-            v15 = (v15 << (64 - 32)) | (v15 >> 32);
+            v15 = v15.rotate_right(32);
             v10 = v10.wrapping_add(v15);
             v5 ^= v10;
-            v5 = (v5 << (64 - 25)) | (v5 >> 25);
+            v5 = v5.rotate_right(25);
 
             v1 = v1.wrapping_add(m[5] ^ CST10);
             v1 = v1.wrapping_add(v6);
             v12 ^= v1;
-            v12 = (v12 << (64 - 32)) | (v12 >> 32);
+            v12 = v12.rotate_right(32);
             v11 = v11.wrapping_add(v12);
             v6 ^= v11;
-            v6 = (v6 << (64 - 25)) | (v6 >> 25);
+            v6 = v6.rotate_right(25);
 
             v2 = v2.wrapping_add(m[4] ^ CST0);
             v2 = v2.wrapping_add(v7);
             v13 ^= v2;
-            v13 = (v13 << (64 - 32)) | (v13 >> 32);
+            v13 = v13.rotate_right(32);
             v8 = v8.wrapping_add(v13);
             v7 ^= v8;
-            v7 = (v7 << (64 - 25)) | (v7 >> 25);
+            v7 = v7.rotate_right(25);
 
             v3 = v3.wrapping_add(m[15] ^ CST8);
             v3 = v3.wrapping_add(v4);
             v14 ^= v3;
-            v14 = (v14 << (64 - 32)) | (v14 >> 32);
+            v14 = v14.rotate_right(32);
             v9 = v9.wrapping_add(v14);
             v4 ^= v9;
-            v4 = (v4 << (64 - 25)) | (v4 >> 25);
+            v4 = v4.rotate_right(25);
 
             v2 = v2.wrapping_add(m[0] ^ CST4);
             v2 = v2.wrapping_add(v7);
             v13 ^= v2;
-            v13 = (v13 << (64 - 16)) | (v13 >> 16);
+            v13 = v13.rotate_right(16);
             v8 = v8.wrapping_add(v13);
             v7 ^= v8;
-            v7 = (v7 << (64 - 11)) | (v7 >> 11);
+            v7 = v7.rotate_right(11);
 
             v3 = v3.wrapping_add(m[8] ^ CST15);
             v3 = v3.wrapping_add(v4);
             v14 ^= v3;
-            v14 = (v14 << (64 - 16)) | (v14 >> 16);
+            v14 = v14.rotate_right(16);
             v9 = v9.wrapping_add(v14);
             v4 ^= v9;
-            v4 = (v4 << (64 - 11)) | (v4 >> 11);
+            v4 = v4.rotate_right(11);
 
             v1 = v1.wrapping_add(m[10] ^ CST5);
             v1 = v1.wrapping_add(v6);
             v12 ^= v1;
-            v12 = (v12 << (64 - 16)) | (v12 >> 16);
+            v12 = v12.rotate_right(16);
             v11 = v11.wrapping_add(v12);
             v6 ^= v11;
-            v6 = (v6 << (64 - 11)) | (v6 >> 11);
+            v6 = v6.rotate_right(11);
 
             v0 = v0.wrapping_add(m[6] ^ CST2);
             v0 = v0.wrapping_add(v5);
             v15 ^= v0;
-            v15 = (v15 << (64 - 16)) | (v15 >> 16);
+            v15 = v15.rotate_right(16);
             v10 = v10.wrapping_add(v15);
             v5 ^= v10;
-            v5 = (v5 << (64 - 11)) | (v5 >> 11);
+            v5 = v5.rotate_right(11);
 
             // Round 5.
             v0 = v0.wrapping_add(m[9] ^ CST0);
             v0 = v0.wrapping_add(v4);
             v12 ^= v0;
-            v12 = (v12 << (64 - 32)) | (v12 >> 32);
+            v12 = v12.rotate_right(32);
             v8 = v8.wrapping_add(v12);
             v4 ^= v8;
-            v4 = (v4 << (64 - 25)) | (v4 >> 25);
+            v4 = v4.rotate_right(25);
 
             v1 = v1.wrapping_add(m[5] ^ CST7);
             v1 = v1.wrapping_add(v5);
             v13 ^= v1;
-            v13 = (v13 << (64 - 32)) | (v13 >> 32);
+            v13 = v13.rotate_right(32);
             v9 = v9.wrapping_add(v13);
             v5 ^= v9;
-            v5 = (v5 << (64 - 25)) | (v5 >> 25);
+            v5 = v5.rotate_right(25);
 
             v2 = v2.wrapping_add(m[2] ^ CST4);
             v2 = v2.wrapping_add(v6);
             v14 ^= v2;
-            v14 = (v14 << (64 - 32)) | (v14 >> 32);
+            v14 = v14.rotate_right(32);
             v10 = v10.wrapping_add(v14);
             v6 ^= v10;
-            v6 = (v6 << (64 - 25)) | (v6 >> 25);
+            v6 = v6.rotate_right(25);
 
             v3 = v3.wrapping_add(m[10] ^ CST15);
             v3 = v3.wrapping_add(v7);
             v15 ^= v3;
-            v15 = (v15 << (64 - 32)) | (v15 >> 32);
+            v15 = v15.rotate_right(32);
             v11 = v11.wrapping_add(v15);
             v7 ^= v11;
-            v7 = (v7 << (64 - 25)) | (v7 >> 25);
+            v7 = v7.rotate_right(25);
 
             v2 = v2.wrapping_add(m[4] ^ CST2);
             v2 = v2.wrapping_add(v6);
             v14 ^= v2;
-            v14 = (v14 << (64 - 16)) | (v14 >> 16);
+            v14 = v14.rotate_right(16);
             v10 = v10.wrapping_add(v14);
             v6 ^= v10;
-            v6 = (v6 << (64 - 11)) | (v6 >> 11);
+            v6 = v6.rotate_right(11);
 
             v3 = v3.wrapping_add(m[15] ^ CST10);
             v3 = v3.wrapping_add(v7);
             v15 ^= v3;
-            v15 = (v15 << (64 - 16)) | (v15 >> 16);
+            v15 = v15.rotate_right(16);
             v11 = v11.wrapping_add(v15);
             v7 ^= v11;
-            v7 = (v7 << (64 - 11)) | (v7 >> 11);
+            v7 = v7.rotate_right(11);
 
             v1 = v1.wrapping_add(m[7] ^ CST5);
             v1 = v1.wrapping_add(v5);
             v13 ^= v1;
-            v13 = (v13 << (64 - 16)) | (v13 >> 16);
+            v13 = v13.rotate_right(16);
             v9 = v9.wrapping_add(v13);
             v5 ^= v9;
-            v5 = (v5 << (64 - 11)) | (v5 >> 11);
+            v5 = v5.rotate_right(11);
 
             v0 = v0.wrapping_add(m[0] ^ CST9);
             v0 = v0.wrapping_add(v4);
             v12 ^= v0;
-            v12 = (v12 << (64 - 16)) | (v12 >> 16);
+            v12 = v12.rotate_right(16);
             v8 = v8.wrapping_add(v12);
             v4 ^= v8;
-            v4 = (v4 << (64 - 11)) | (v4 >> 11);
+            v4 = v4.rotate_right(11);
 
             v0 = v0.wrapping_add(m[14] ^ CST1);
             v0 = v0.wrapping_add(v5);
             v15 ^= v0;
-            v15 = (v15 << (64 - 32)) | (v15 >> 32);
+            v15 = v15.rotate_right(32);
             v10 = v10.wrapping_add(v15);
             v5 ^= v10;
-            v5 = (v5 << (64 - 25)) | (v5 >> 25);
+            v5 = v5.rotate_right(25);
 
             v1 = v1.wrapping_add(m[11] ^ CST12);
             v1 = v1.wrapping_add(v6);
             v12 ^= v1;
-            v12 = (v12 << (64 - 32)) | (v12 >> 32);
+            v12 = v12.rotate_right(32);
             v11 = v11.wrapping_add(v12);
             v6 ^= v11;
-            v6 = (v6 << (64 - 25)) | (v6 >> 25);
+            v6 = v6.rotate_right(25);
 
             v2 = v2.wrapping_add(m[6] ^ CST8);
             v2 = v2.wrapping_add(v7);
             v13 ^= v2;
-            v13 = (v13 << (64 - 32)) | (v13 >> 32);
+            v13 = v13.rotate_right(32);
             v8 = v8.wrapping_add(v13);
             v7 ^= v8;
-            v7 = (v7 << (64 - 25)) | (v7 >> 25);
+            v7 = v7.rotate_right(25);
 
             v3 = v3.wrapping_add(m[3] ^ CST13);
             v3 = v3.wrapping_add(v4);
             v14 ^= v3;
-            v14 = (v14 << (64 - 32)) | (v14 >> 32);
+            v14 = v14.rotate_right(32);
             v9 = v9.wrapping_add(v14);
             v4 ^= v9;
-            v4 = (v4 << (64 - 25)) | (v4 >> 25);
+            v4 = v4.rotate_right(25);
 
             v2 = v2.wrapping_add(m[8] ^ CST6);
             v2 = v2.wrapping_add(v7);
             v13 ^= v2;
-            v13 = (v13 << (64 - 16)) | (v13 >> 16);
+            v13 = v13.rotate_right(16);
             v8 = v8.wrapping_add(v13);
             v7 ^= v8;
-            v7 = (v7 << (64 - 11)) | (v7 >> 11);
+            v7 = v7.rotate_right(11);
 
             v3 = v3.wrapping_add(m[13] ^ CST3);
             v3 = v3.wrapping_add(v4);
             v14 ^= v3;
-            v14 = (v14 << (64 - 16)) | (v14 >> 16);
+            v14 = v14.rotate_right(16);
             v9 = v9.wrapping_add(v14);
             v4 ^= v9;
-            v4 = (v4 << (64 - 11)) | (v4 >> 11);
+            v4 = v4.rotate_right(11);
 
             v1 = v1.wrapping_add(m[12] ^ CST11);
             v1 = v1.wrapping_add(v6);
             v12 ^= v1;
-            v12 = (v12 << (64 - 16)) | (v12 >> 16);
+            v12 = v12.rotate_right(16);
             v11 = v11.wrapping_add(v12);
             v6 ^= v11;
-            v6 = (v6 << (64 - 11)) | (v6 >> 11);
+            v6 = v6.rotate_right(11);
 
             v0 = v0.wrapping_add(m[1] ^ CST14);
             v0 = v0.wrapping_add(v5);
             v15 ^= v0;
-            v15 = (v15 << (64 - 16)) | (v15 >> 16);
+            v15 = v15.rotate_right(16);
             v10 = v10.wrapping_add(v15);
             v5 ^= v10;
-            v5 = (v5 << (64 - 11)) | (v5 >> 11);
+            v5 = v5.rotate_right(11);
 
             // Round 6.
             v0 = v0.wrapping_add(m[2] ^ CST12);

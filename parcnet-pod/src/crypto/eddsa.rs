@@ -1,4 +1,4 @@
-use crate::crypto::blake512::blake512::Blake512;
+use crate::crypto::blake512::blake512_impl::Blake512;
 use crate::crypto::poseidon_hash::hash_bigints;
 use num_bigint::BigInt;
 
@@ -56,8 +56,7 @@ fn inv(a: &BigInt, n: &BigInt) -> BigInt {
         low = new;
     }
 
-    let out = modulus(&lm, n);
-    out
+    modulus(&lm, n)
 }
 
 fn add_bj(p1: &(BigInt, BigInt), p2: &(BigInt, BigInt)) -> (BigInt, BigInt) {

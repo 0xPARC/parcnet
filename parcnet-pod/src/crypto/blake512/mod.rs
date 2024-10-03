@@ -1,2 +1,2 @@
-pub mod blake512;
+pub mod blake512_impl;
 pub mod block;

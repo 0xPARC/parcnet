@@ -32,7 +32,7 @@ mod tests {
 
     #[test]
     fn test_lean_imt() {
-        let input_strs = vec!["1", "2", "3", "4", "5"];
+        let input_strs = ["1", "2", "3", "4", "5"];
         let inputs: Vec<BigInt> = input_strs
             .iter()
             .map(|s| BigInt::from_str(s).unwrap())
