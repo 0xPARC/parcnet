@@ -87,16 +87,10 @@ impl Ord for Value {
         match self {
             Value::Bool(a) => match other {
                 Value::Bool(b) => a.cmp(b),
-                Value::Uint64(b) => a.cmp(&(*b == 1)),
+                Value::Uint64(b) => a.cmp(&uint64_to_bool(*b)),
             },
             Value::Uint64(a) => match other {
-                Value::Bool(b) => {
-                    if *b {
-                        a.cmp(&1)
-                    } else {
-                        a.cmp(&0)
-                    }
-                }
+                Value::Bool(b) => a.cmp(&bool_to_uint64(*b)),
                 Value::Uint64(b) => a.cmp(b),
             },
         }
@@ -108,16 +102,10 @@ impl PartialEq for Value {
         match self {
             Self::Uint64(a) => match other {
                 Self::Uint64(b) => a.eq(b),
-                Self::Bool(b) => {
-                    if *b {
-                        a.eq(&1)
-                    } else {
-                        a.eq(&0)
-                    }
-                }
+                Self::Bool(b) => a.eq(&bool_to_uint64(*b)),
             },
             Self::Bool(a) => match other {
-                Self::Uint64(b) => a.eq(&(*b != 0)),
+                Self::Uint64(b) => a.eq(&uint64_to_bool(*b)),
                 Self::Bool(b) => a.eq(b),
             },
         }
