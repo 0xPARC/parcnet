@@ -1,4 +1,4 @@
-use crate::e::*;
+use executor::*;
 use eyre::Result;
 
 pub fn main() -> Result<()> {
@@ -32,7 +32,7 @@ pub fn main() -> Result<()> {
                     pod: String::from("age"),
                     key: String::from("age"),
                 }),
-                op: BinaryOp::GT,
+                op: BinaryOp::Gt,
                 right: Box::new(Expression::Reference {
                     pod: String::from("OLD_ENOUGH_POD"),
                     key: String::from("age"),

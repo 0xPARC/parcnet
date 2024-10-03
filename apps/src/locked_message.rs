@@ -1,4 +1,4 @@
-use crate::e::*;
+use executor::*;
 use eyre::Result;
 
 pub fn main() -> Result<()> {
@@ -33,7 +33,7 @@ pub fn main() -> Result<()> {
                     pod: String::from("vkey"),
                     key: String::from("vkey"),
                 }),
-                op: BinaryOp::XOR,
+                op: BinaryOp::Xor,
                 right: Box::new(Expression::Reference {
                     pod: String::from("message"),
                     key: String::from("message"),
