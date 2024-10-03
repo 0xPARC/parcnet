@@ -94,7 +94,13 @@ impl Value {
                     false
                 }
             }
-            _ => false,
+            Self::Bool(a) => {
+                if let Self::Bool(b) = other {
+                    a == b
+                } else {
+                    false
+                }
+            }
         }
     }
     fn xor(&self, other: &Value) -> u64 {
@@ -113,7 +119,25 @@ impl Value {
                     0
                 }
             }
-            _ => 0,
+        }
+    }
+
+    pub fn add(&self, other: &Value) -> u64 {
+        match self {
+            Self::Uint64(a) => {
+                if let Self::Uint64(b) = other {
+                    a + b
+                } else {
+                    *a
+                }
+            }
+            Self::Bool(a) => {
+                if let Self::Bool(b) = other {
+                    (a ^ b) as u64
+                } else {
+                    *a as u64
+                }
+            }
         }
     }
 }
