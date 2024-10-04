@@ -162,6 +162,8 @@ pub enum BinaryOp {
     Ne,
     Add,
     Xor,
+    Min,
+    Max,
 }
 
 impl BinaryOp {
@@ -173,6 +175,8 @@ impl BinaryOp {
             Self::Lt => Value::Bool(left.lt(right)),
             Self::Add => left.clone().add(right.clone()),
             Self::Xor => left.clone() ^ right.clone(),
+            Self::Min => left.clone().min(right.clone()),
+            Self::Max => left.clone().max(right.clone()),
         }
     }
 }
