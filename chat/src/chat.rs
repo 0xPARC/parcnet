@@ -4,7 +4,7 @@ use crate::logic::Logic;
 use gpui::{
     actions, div, list, uniform_list, Element, InteractiveElement, IntoElement, KeyBinding,
     ListAlignment, ListSizingBehavior, ListState, ParentElement, Pixels, Render,
-    StatefulInteractiveElement, Styled, ViewContext,
+    StatefulInteractiveElement, Styled, UniformListScrollHandle, ViewContext,
 };
 use gpui::{View, VisualContext};
 use input::TextInput;
@@ -15,16 +15,19 @@ actions!(chat, [Enter]);
 pub struct Chat {
     logic: Arc<Logic>,
     message_input: View<TextInput>,
+    scroll_handle: UniformListScrollHandle,
 }
 
 impl Chat {
     pub fn new(cx: &mut ViewContext<Self>) -> Self {
         let logic = Logic::new();
         let mut message_watch = logic.get_message_watch();
+
         cx.spawn(|view, mut cx| async move {
             while message_watch.changed().await.is_ok() {
                 let _ = cx.update(|cx| {
-                    view.update(cx, |_, cx| {
+                    view.update(cx, |this, cx| {
+                        this.scroll_to_bottom();
                         cx.notify();
                     })
                 });
@@ -34,10 +37,12 @@ impl Chat {
 
         cx.bind_keys([KeyBinding::new("enter", Enter, None)]);
         let message_input = cx.new_view(TextInput::new);
+        let scroll_handle = UniformListScrollHandle::new();
 
         Self {
             logic: Arc::new(logic),
             message_input,
+            scroll_handle,
         }
     }
 
@@ -57,21 +62,19 @@ impl Chat {
         })
         .detach();
     }
+
+    fn scroll_to_bottom(&mut self) {
+        let messages_len = self.logic.get_messages().len();
+        if messages_len > 0 {
+            self.scroll_handle.scroll_to_item(messages_len - 1);
+        }
+    }
 }
 
 impl Render for Chat {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
         let view = cx.view().clone();
         let messages = self.logic.get_messages();
-        // let list_state = ListState::new(
-        //     messages.len(),
-        //     ListAlignment::Top,
-        //     Pixels(20.),
-        //     move |idx, _cx| {
-        //         let item = messages.get(idx).unwrap().clone();
-        //         div().child(item.text).into_any_element()
-        //     },
-        // );
         div()
             .key_context("Chat")
             .on_action(cx.listener(Self::enter))
@@ -95,7 +98,8 @@ impl Render for Chat {
                     }
                 })
                 .flex_grow()
-                .with_sizing_behavior(ListSizingBehavior::Auto),
+                .with_sizing_behavior(ListSizingBehavior::Auto)
+                .track_scroll(self.scroll_handle.clone()),
             )
             .child(self.message_input.clone())
     }
