@@ -1,61 +1,103 @@
-use executor::{
-    self, BinaryOp, Entry, EntryRequest, Executor, Expression, Input, InputItem, MyPods,
-    NamedExpression, Pod, PodRequest, Script, User, Value, ValueDesc,
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
 };
-use eyre::Result;
 
-fn main() -> Result<()> {
-    let script = Script {
-        inputs: vec![
-            Input {
-                name: String::from("a"),
-                item: InputItem::Request(PodRequest {
-                    from: String::from("alice"),
-                    entries: vec![EntryRequest {
-                        key: String::from("number"),
-                        value_desc: ValueDesc::Uint64,
-                    }],
+use executor::{self, BinaryOp, Entry, Executor, Expression, MyPods, Pod, User, Value};
+use eyre::{eyre, Result};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    /*
+        [add
+            [@alice [pod? x:u64]]
+            [@bob
+                [max
+                    [pod? x:u64]
+                    [pod? y:u64]]]]
+    */
+    let script = Expression::Binary {
+        op: BinaryOp::Add,
+        left: Box::new(Expression::User {
+            id: 1,
+            name: User::from("alice"),
+            expr: Box::new(Expression::Pod {
+                key: String::from("x"),
+            }),
+        }),
+        right: Box::new(Expression::User {
+            id: 2,
+            name: User::from("bob"),
+            expr: Box::new(Expression::Binary {
+                op: BinaryOp::Max,
+                left: Box::new(Expression::Pod {
+                    key: String::from("x"),
                 }),
-            },
-            Input {
-                name: String::from("b"),
-                item: InputItem::Request(PodRequest {
-                    from: String::from("bob"),
-                    entries: vec![EntryRequest {
-                        key: String::from("number"),
-                        value_desc: ValueDesc::Uint64,
-                    }],
+                right: Box::new(Expression::Pod {
+                    key: String::from("y"),
                 }),
-            },
-        ],
-        expressions: vec![NamedExpression {
-            name: String::from("add"),
-            to: vec![User::from("alice"), User::from("bob")],
-            expr: Expression::Binary {
-                left: Box::new(Expression::Reference {
-                    pod: String::from("a"),
-                    key: String::from("number"),
-                }),
-                op: BinaryOp::Add,
-                right: Box::new(Expression::Reference {
-                    pod: String::from("b"),
-                    key: String::from("number"),
-                }),
-            },
-        }],
+            }),
+        }),
     };
 
-    let pods = MyPods {
-        pods: vec![Pod {
-            entries: vec![Entry {
-                key: String::from("number"),
-                value: Value::Uint64(40),
+    let shared = Arc::new(Mutex::new(HashMap::new()));
+
+    let alice = tokio::spawn(run(
+        "alice",
+        script.clone(),
+        shared.clone(),
+        MyPods {
+            pods: vec![Pod {
+                entries: vec![Entry {
+                    key: String::from("x"),
+                    value: Value::Uint64(40),
+                }],
             }],
-        }],
-    };
-    Executor::new("alice", &script, &pods)?
-        .exec()?
-        .iter()
-        .for_each(|pod| println!("output pod: {:?}", pod));
+        },
+    ));
+    let bob = tokio::spawn(run(
+        "bob",
+        script.clone(),
+        shared.clone(),
+        MyPods {
+            pods: vec![Pod {
+                entries: vec![
+                    Entry {
+                        key: String::from("x"),
+                        value: Value::Uint64(40),
+                    },
+                    Entry {
+                        key: String::from("y"),
+                        value: Value::Uint64(50),
+                    },
+                ],
+            }],
+        },
+    ));
+
+    match tokio::try_join!(flatten(alice), flatten(bob)) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+async fn run(
+    user: &str,
+    script: Expression,
+    shared: Arc<Mutex<HashMap<u64, Value>>>,
+    pods: MyPods,
+) -> Result<()> {
+    Executor::new(user, script, Arc::new(pods), shared)?
+        .exec()
+        .await
+        .inspect(|val| println!("output: {:?}", val))?;
     Ok(())
+}
+
+async fn flatten<T>(handle: tokio::task::JoinHandle<Result<T>>) -> Result<T> {
+    match handle.await {
+        Ok(Ok(result)) => Ok(result),
+        Ok(Err(err)) => Err(err),
+        Err(err) => Err(eyre!("handle error: {}", err)),
+    }
 }

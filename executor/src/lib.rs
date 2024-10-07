@@ -2,9 +2,12 @@ use std::{
     cmp::Ordering,
     collections::HashMap,
     ops::{Add, BitXor},
+    sync::{Arc, Mutex},
+    time::Duration,
 };
 
-use eyre::{eyre, OptionExt, Result};
+use async_recursion::async_recursion;
+use eyre::{OptionExt, Result};
 
 pub type User = String;
 
@@ -15,53 +18,18 @@ pub struct Entry {
 }
 
 #[derive(Debug)]
-pub struct EntryRequest {
-    pub key: String,
-    pub value_desc: ValueDesc,
-}
-
-impl EntryRequest {
-    fn matches(&self, entry: &Entry) -> bool {
-        if self.key != entry.key {
-            false
-        } else {
-            match self.value_desc {
-                ValueDesc::Bool => matches!(entry.value, Value::Bool(_)),
-                ValueDesc::Uint64 => matches!(entry.value, Value::Uint64(_)),
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct Pod {
     pub entries: Vec<Entry>,
 }
 
 impl Pod {
-    fn get(&self, key: &str) -> Option<&Value> {
+    fn get(&self, key: &str) -> Option<Value> {
         self.entries
             .iter()
             .find(|entry| entry.key == key)
             .map(|e| &e.value)
+            .cloned()
     }
-}
-
-#[derive(Debug)]
-pub struct PodRequest {
-    pub entries: Vec<EntryRequest>,
-    pub from: User,
-}
-
-#[derive(Debug)]
-pub enum InputItem {
-    Data(Pod),
-    Request(PodRequest),
-}
-
-pub struct Input {
-    pub name: String,
-    pub item: InputItem,
 }
 
 #[derive(Clone, Debug)]
@@ -70,7 +38,7 @@ pub enum ValueDesc {
     Uint64,
 }
 
-#[derive(Clone, Debug, Eq)]
+#[derive(Copy, Clone, Debug, Eq)]
 pub enum Value {
     Bool(bool),
     Uint64(u64),
@@ -155,6 +123,7 @@ impl BitXor for Value {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BinaryOp {
     Gt,
     Lt,
@@ -173,49 +142,51 @@ impl BinaryOp {
             Self::Ne => Value::Bool(left.eq(right)),
             Self::Gt => Value::Bool(left.gt(right)),
             Self::Lt => Value::Bool(left.lt(right)),
-            Self::Add => left.clone().add(right.clone()),
-            Self::Xor => left.clone() ^ right.clone(),
-            Self::Min => left.clone().min(right.clone()),
-            Self::Max => left.clone().max(right.clone()),
+            Self::Add => left.add(*right),
+            Self::Xor => *left ^ *right,
+            Self::Min => *left.min(right),
+            Self::Max => *left.max(right),
         }
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
-    Reference {
-        pod: String,
+    User {
+        id: u64,
+        name: String,
+        expr: Box<Expression>,
+    },
+    Pod {
         key: String,
     },
     Binary {
-        left: Box<Expression>,
         op: BinaryOp,
+        left: Box<Expression>,
         right: Box<Expression>,
     },
 }
 
 impl Expression {
-    pub fn eval(&self, pods: &HashMap<String, &Pod>) -> Result<Value> {
+    #[async_recursion]
+    pub async fn eval(&self, context: Context) -> Result<Value> {
         match self {
-            Self::Reference { pod, key } => pods
-                .get(pod)
-                .ok_or_eyre("missing pod")?
-                .get(key)
-                .ok_or_eyre("missing entry")
-                .cloned(),
-            Self::Binary { left, op, right } => Ok(op.eval(&left.eval(pods)?, &right.eval(pods)?)),
+            Self::Pod { key } => context.local(key).ok_or_eyre("missing local value"),
+            Self::Binary { op, left, right } => Ok(op.eval(
+                &left.eval(context.clone()).await?,
+                &right.eval(context.clone()).await?,
+            )),
+            Self::User { id, name, expr } => {
+                if name == &context.user {
+                    let res = expr.eval(context.clone()).await?;
+                    context.set(*id, res);
+                    Ok(res)
+                } else {
+                    context.get(*id).await.ok_or_eyre("missing remote value")
+                }
+            }
         }
     }
-}
-
-pub struct NamedExpression {
-    pub name: String,
-    pub expr: Expression,
-    pub to: Vec<User>,
-}
-
-pub struct Script {
-    pub inputs: Vec<Input>,
-    pub expressions: Vec<NamedExpression>,
 }
 
 pub struct MyPods {
@@ -223,58 +194,63 @@ pub struct MyPods {
 }
 
 impl MyPods {
-    pub fn find(&self, request: &PodRequest) -> Option<&Pod> {
-        self.pods.iter().find(|pod| {
-            request.entries.iter().all(|requested_entry| {
-                pod.entries
-                    .iter()
-                    .any(|pod_entry| requested_entry.matches(pod_entry))
-            })
-        })
+    pub fn find(&self, key: &str) -> Option<Value> {
+        for pod in &self.pods {
+            if let Some(value) = pod.get(key) {
+                return Some(value);
+            }
+        }
+        None
     }
 }
 
-pub struct Executor<'a> {
-    pub user: User,
-    pub script: &'a Script,
-    pub pods: HashMap<String, &'a Pod>,
+#[derive(Clone)]
+pub struct Context {
+    user: User,
+    pods: Arc<MyPods>,
+    shared: Arc<Mutex<HashMap<u64, Value>>>,
 }
 
-impl<'a> Executor<'a> {
-    pub fn new(user: &str, script: &'a Script, pods: &'a MyPods) -> Result<Executor<'a>> {
+impl Context {
+    pub async fn get(&self, id: u64) -> Option<Value> {
+        loop {
+            if let Some(v) = self.shared.lock().unwrap().get(&id).cloned() {
+                return Some(v);
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+    pub fn set(&self, id: u64, value: Value) {
+        self.shared.lock().unwrap().insert(id, value);
+    }
+    pub fn local(&self, key: &str) -> Option<Value> {
+        self.pods.find(key)
+    }
+}
+
+pub struct Executor {
+    pub script: Expression,
+    context: Context,
+}
+
+impl Executor {
+    pub fn new(
+        user: &str,
+        script: Expression,
+        pods: Arc<MyPods>,
+        shared: Arc<Mutex<HashMap<u64, Value>>>,
+    ) -> Result<Executor> {
         Ok(Executor {
-            user: String::from(user),
             script,
-            pods: script
-                .inputs
-                .iter()
-                .filter(|input| match &input.item {
-                    InputItem::Data(_) => true,
-                    InputItem::Request(req) => req.from == user,
-                })
-                .map(|input| match &input.item {
-                    InputItem::Data(pod) => Ok((input.name.clone(), pod)),
-                    InputItem::Request(req) => match pods.find(req) {
-                        Some(pod) => Ok((input.name.clone(), pod)),
-                        None => Err(eyre!("unable to find pod")),
-                    },
-                })
-                .collect::<Result<HashMap<String, &Pod>>>()?,
+            context: Context {
+                user: User::from(user),
+                pods,
+                shared,
+            },
         })
     }
 
-    pub fn exec(&self) -> Result<Vec<Pod>> {
-        Ok(self
-            .script
-            .expressions
-            .iter()
-            .filter(|expr| expr.to.contains(&self.user))
-            .map(|expr| expr.expr.eval(&self.pods).map(|v| (expr.name.clone(), v)))
-            .collect::<Result<HashMap<String, Value>>>()?
-            .into_iter()
-            .map(|(k, v)| Pod {
-                entries: vec![Entry { key: k, value: v }],
-            })
-            .collect())
+    pub async fn exec(&self) -> Result<Value> {
+        self.script.eval(self.context.clone()).await
     }
 }
