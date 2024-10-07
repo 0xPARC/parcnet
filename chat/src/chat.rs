@@ -2,8 +2,9 @@ mod input;
 
 use crate::logic::Logic;
 use gpui::{
-    actions, div, list, InteractiveElement, IntoElement, KeyBinding, ListAlignment, ListState,
-    ParentElement, Pixels, Render, Styled, ViewContext,
+    actions, div, list, uniform_list, Element, InteractiveElement, IntoElement, KeyBinding,
+    ListAlignment, ListSizingBehavior, ListState, ParentElement, Pixels, Render,
+    StatefulInteractiveElement, Styled, ViewContext,
 };
 use gpui::{View, VisualContext};
 use input::TextInput;
@@ -60,25 +61,42 @@ impl Chat {
 
 impl Render for Chat {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+        let view = cx.view().clone();
         let messages = self.logic.get_messages();
-        let list_state = ListState::new(
-            messages.len(),
-            ListAlignment::Top,
-            Pixels(20.),
-            move |idx, _cx| {
-                let item = messages.get(idx).unwrap().clone();
-                div().child(item.text).into_any_element()
-            },
-        );
+        // let list_state = ListState::new(
+        //     messages.len(),
+        //     ListAlignment::Top,
+        //     Pixels(20.),
+        //     move |idx, _cx| {
+        //         let item = messages.get(idx).unwrap().clone();
+        //         div().child(item.text).into_any_element()
+        //     },
+        // );
         div()
             .key_context("Chat")
             .on_action(cx.listener(Self::enter))
             .flex()
             .flex_col()
             .justify_between()
+            .overflow_hidden()
+            .relative()
             .size_full()
             .bg(gpui::white())
-            .child(list(list_state).w_full().h_full())
+            .child(
+                uniform_list(view, "messages-list", messages.len(), {
+                    move |_, visible_range, _| {
+                        visible_range
+                            .map(|ix| {
+                                div()
+                                    .child(messages.get(ix).unwrap().clone().text)
+                                    .into_any_element()
+                            })
+                            .collect::<Vec<_>>()
+                    }
+                })
+                .flex_grow()
+                .with_sizing_behavior(ListSizingBehavior::Auto),
+            )
             .child(self.message_input.clone())
     }
 }

@@ -22,8 +22,8 @@ pub struct Logic {
     message_sender: Arc<Mutex<Option<GossipSender>>>,
 }
 
-const TOPIC_ID: &str = "nontdllkgf7b77fvdns3bbrer7qlmqqbqt4jwgwaq6vd3anp3euq";
-const PEER_ID: &str = "5mx77a3wae3kg34rkwl5sllw7br52aabukz5e43oae6igtv62cka";
+const TOPIC_ID: &str = "ka6iqvox3fpbtouurx2n637eiznjmgp47fbbslgdufbyob5lrk2q";
+const PEER_ID: &str = "7uarjluqs7mtnuaxohp6z5u7ysls5qglr2j2lqghbhptz5hjmhia";
 
 impl Logic {
     pub fn new() -> Self {
@@ -40,18 +40,27 @@ impl Logic {
     pub async fn send_message(&self, message: &str) {
         let messages = self.messages.clone();
         let message_watch_sender = self.message_watch.0.clone();
-        if let Some(sender) = self.message_sender.lock().await.as_ref() {
-            let message = Message {
-                timestamp: chrono::Utc::now(),
-                text: message.to_string(),
-            };
-            let bytes = message.encode();
-            info!("sending message: {}", message.text);
-            sender.broadcast(bytes).await.unwrap();
-            messages.write().map(|mut msgs| msgs.push(message)).unwrap();
-            message_watch_sender.send(()).unwrap();
-            return;
-        }
+        // if let Some(sender) = self.message_sender.lock().await.as_ref() {
+        //     let message = Message {
+        //         timestamp: chrono::Utc::now(),
+        //         text: message.to_string(),
+        //     };
+        //     let bytes = message.encode();
+        //     info!("sending message: {}", message.text);
+        //     sender.broadcast(bytes).await.unwrap();
+
+        //     return;
+        // }
+        messages
+            .write()
+            .map(|mut msgs| {
+                msgs.push(Message {
+                    timestamp: chrono::Utc::now(),
+                    text: message.to_string(),
+                })
+            })
+            .unwrap();
+        message_watch_sender.send(()).unwrap();
         warn!("no sender available");
     }
 
