@@ -13,7 +13,21 @@ iroh-base = "0.26.0"
 iroh-gossip = "0.26.0"
 iroh-net = "0.26.0"
 pkarr = "2.2.0"
+reqwest = "0.12.8"
 tokio = "1.40.0"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 unicode-segmentation = "1.12.0"
+
+[package.metadata.bundle]
+name = "chat"
+identifier = "com.0xparc.chat"
+icon = ["chat/assets/icon/32x32.png", "chat/assets/icon/128x128.png", "chat/assets/icon/128x128@2x.png"]
+resources = ["chat/assets"]
+copyright = ""
+category = "Public.App-Category.Productivity"
+short_description = "chat"
+long_description = "chat"
+
+[package.metadata.bundle.macos]
+minimum_system_version = "10.13"
