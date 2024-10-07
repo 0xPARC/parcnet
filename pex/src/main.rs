@@ -9,12 +9,15 @@ use pex::{self, BinaryOp, Entry, Executor, Expression, MyPods, Pod, User, Value}
 #[tokio::main]
 async fn main() -> Result<()> {
     /*
-        [add
-            [@alice [pod? x:u64]]
-            [@bob
-                [max
-                    [pod? x:u64]
-                    [pod? y:u64]]]]
+        [define result  [
+            [add
+                [from alice [pod? x:u64]]
+                [from bob
+                    [max
+                        [pod? x:u64]
+                        [pod? y:u64]]]]]
+        [to alice result]
+        [to bob result]
     */
     let script = Expression::Binary {
         op: BinaryOp::Add,

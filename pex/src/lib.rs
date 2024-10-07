@@ -254,3 +254,83 @@ impl Executor {
         self.script.eval(self.context.clone()).await
     }
 }
+
+enum Token {
+    OpenBracket,
+    CloseBracket,
+    Keyword(String),
+    User(String),
+    PodKey(String, String),
+}
+
+fn lex(source: &str) -> Result<Vec<Token>> {
+    todo!()
+}
+
+fn parse(tokens: &mut Vec<Token>) -> Result<Expression> {
+    let l = tokens.pop().ok_or_eyre("missing [")?;
+    while !tokens.is_empty() {
+        match tokens.pop().unwrap() {
+            Token::OpenBracket => {
+                tokens.push(Token::OpenBracket);
+                parse(tokens)
+            }
+            Token::CloseBracket => {}
+            Token::Keyword(word) => todo!(),
+            Token::User(name) => todo!(),
+            Token::PodKey(key_name, val_desc) => todo!(),
+        };
+    }
+    todo!()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse() {
+        assert_eq!(
+            parse(&mut vec![
+                Token::OpenBracket,
+                Token::Keyword(String::from("add")),
+                Token::OpenBracket,
+                Token::User(String::from("alice")),
+                Token::OpenBracket,
+                Token::Keyword(String::from("pod?")),
+                Token::PodKey(String::from("x"), String::from("u64")),
+                Token::CloseBracket,
+                Token::OpenBracket,
+                Token::User(String::from("bob")),
+                Token::Keyword(String::from("pod?")),
+                Token::PodKey(String::from("x"), String::from("u64")),
+                Token::CloseBracket,
+                Token::CloseBracket,
+            ])
+            .unwrap(),
+            Expression::Binary {
+                op: BinaryOp::Add,
+                left: Box::new(Expression::User {
+                    id: 1,
+                    name: User::from("alice"),
+                    expr: Box::new(Expression::Pod {
+                        key: String::from("x"),
+                    }),
+                }),
+                right: Box::new(Expression::User {
+                    id: 2,
+                    name: User::from("bob"),
+                    expr: Box::new(Expression::Binary {
+                        op: BinaryOp::Max,
+                        left: Box::new(Expression::Pod {
+                            key: String::from("x"),
+                        }),
+                        right: Box::new(Expression::Pod {
+                            key: String::from("y"),
+                        }),
+                    }),
+                }),
+            }
+        )
+    }
+}
