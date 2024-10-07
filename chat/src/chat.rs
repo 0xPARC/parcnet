@@ -2,9 +2,8 @@ mod input;
 
 use crate::logic::Logic;
 use gpui::{
-    actions, div, list, uniform_list, Element, InteractiveElement, IntoElement, KeyBinding,
-    ListAlignment, ListSizingBehavior, ListState, ParentElement, Pixels, Render,
-    StatefulInteractiveElement, Styled, UniformListScrollHandle, ViewContext,
+    actions, div, uniform_list, InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior,
+    ParentElement, Render, Styled, UniformListScrollHandle, ViewContext,
 };
 use gpui::{View, VisualContext};
 use input::TextInput;
