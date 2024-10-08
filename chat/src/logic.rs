@@ -5,7 +5,6 @@ mod message;
 use auto_update::AutoUpdater;
 use futures::StreamExt;
 use gossip::connect_topic;
-use gpui::SemanticVersion;
 use iroh_gossip::{
     net::{Event, GossipEvent, GossipSender},
     proto::TopicId,

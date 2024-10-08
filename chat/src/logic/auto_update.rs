@@ -186,5 +186,5 @@ fn get_current_version() -> SemanticVersion {
     // version_str
     //     .parse::<SemanticVersion>()
     //     .expect("invalid version format")
-    return SemanticVersion::new(0, 0, 1);
+    SemanticVersion::new(0, 0, 1)
 }
