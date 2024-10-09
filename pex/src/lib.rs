@@ -9,7 +9,7 @@ use std::{
 };
 
 use async_recursion::async_recursion;
-use eyre::{eyre, OptionExt, Result};
+use eyre::{eyre, Context, OptionExt, Result};
 
 #[derive(Default)]
 pub struct MyPods {
@@ -30,15 +30,15 @@ impl MyPods {
 pub type User = String;
 
 #[derive(Clone, Default)]
-pub struct Context {
+pub struct Env {
     user: User,
     pods: Arc<MyPods>,
     shared: Arc<Mutex<HashMap<u64, Value>>>,
 }
 
-impl Context {
-    pub fn new(user: User, shared: Arc<Mutex<HashMap<u64, Value>>>, pods: Arc<MyPods>) -> Context {
-        Context { user, shared, pods }
+impl Env {
+    pub fn new(user: User, shared: Arc<Mutex<HashMap<u64, Value>>>, pods: Arc<MyPods>) -> Env {
+        Env { user, shared, pods }
     }
 
     pub async fn get(&self, id: u64) -> Option<Value> {
@@ -89,6 +89,18 @@ pub enum Value {
     Bool(bool),
     String(String),
     Uint64(u64),
+}
+
+impl TryFrom<Value> for String {
+    type Error = eyre::Report;
+
+    fn try_from(value: Value) -> std::result::Result<Self, Self::Error> {
+        if let Value::String(s) = value {
+            Ok(s)
+        } else {
+            Err(eyre!("expected value to be string"))
+        }
+    }
 }
 
 impl PartialOrd for Value {
@@ -235,8 +247,8 @@ fn parse(tokens: &mut Vec<Token>) -> Result<Expr> {
     Ok(Expr::List(token.pos, list))
 }
 
-pub async fn eval(source: &str, context: Context) -> Result<Value> {
-    parse(&mut scan(source))?.eval(context).await
+pub async fn eval(source: &str, env: Env) -> Result<Value> {
+    parse(&mut scan(source))?.eval(env).await
 }
 
 #[derive(Debug, PartialEq)]
@@ -247,74 +259,73 @@ enum Expr {
 
 impl Expr {
     #[async_recursion]
-    async fn eval(&self, context: Context) -> Result<Value> {
+    async fn eval(&self, env: Env) -> Result<Value> {
         match self {
             Expr::List(_, exprs) => match &exprs[0] {
                 Expr::Atom(aid, a) => match a.as_str() {
                     "add" => Ok(exprs[1]
-                        .eval(context.clone())
+                        .eval(env.clone())
                         .await?
-                        .add(exprs[2].eval(context.clone()).await?)),
+                        .add(exprs[2].eval(env.clone()).await?)),
                     "xor" => Ok(exprs[1]
-                        .eval(context.clone())
+                        .eval(env.clone())
                         .await?
-                        .bitxor(exprs[2].eval(context.clone()).await?)),
+                        .bitxor(exprs[2].eval(env.clone()).await?)),
                     "min" => Ok(exprs[1]
-                        .eval(context.clone())
+                        .eval(env.clone())
                         .await?
-                        .min(exprs[2].eval(context.clone()).await?)),
+                        .min(exprs[2].eval(env.clone()).await?)),
                     "max" => Ok(exprs[1]
-                        .eval(context.clone())
+                        .eval(env.clone())
                         .await?
-                        .max(exprs[2].eval(context.clone()).await?)),
+                        .max(exprs[2].eval(env.clone()).await?)),
                     "eq" => Ok(Value::Bool(
                         exprs[1]
-                            .eval(context.clone())
+                            .eval(env.clone())
                             .await?
-                            .eq(&exprs[2].eval(context.clone()).await?),
+                            .eq(&exprs[2].eval(env.clone()).await?),
                     )),
                     "ne" => Ok(Value::Bool(
                         exprs[1]
-                            .eval(context.clone())
+                            .eval(env.clone())
                             .await?
-                            .ne(&exprs[2].eval(context.clone()).await?),
+                            .ne(&exprs[2].eval(env.clone()).await?),
                     )),
                     "gt" => Ok(Value::Bool(
                         exprs[1]
-                            .eval(context.clone())
+                            .eval(env.clone())
                             .await?
-                            .gt(&exprs[2].eval(context.clone()).await?),
+                            .gt(&exprs[2].eval(env.clone()).await?),
                     )),
                     "lt" => Ok(Value::Bool(
                         exprs[1]
-                            .eval(context.clone())
+                            .eval(env.clone())
                             .await?
-                            .lt(&exprs[2].eval(context.clone()).await?),
+                            .lt(&exprs[2].eval(env.clone()).await?),
                     )),
                     "from" => {
-                        if let Value::String(user) = exprs[1].eval(context.clone()).await? {
-                            if user == context.user {
-                                let res = exprs[2].eval(context.clone()).await?;
-                                context.set(*aid, res.clone());
-                                Ok(res)
-                            } else {
-                                context.get(*aid).await.ok_or_eyre("missing remote value")
-                            }
+                        let user: String = exprs[1]
+                            .eval(env.clone())
+                            .await?
+                            .try_into()
+                            .wrap_err("1st argument to 'from' must be a user name")?;
+                        if user == env.user {
+                            let res = exprs[2].eval(env.clone()).await?;
+                            env.set(*aid, res.clone());
+                            Ok(res)
                         } else {
-                            return Err(eyre!("first argument to 'from' must be a user"));
+                            env.get(*aid).await.ok_or_eyre("missing remote value")
                         }
                     }
                     "to" => todo!(),
                     "pod" => todo!(),
-                    "pod?" => {
-                        let val = if let Value::String(key) = exprs[1].eval(context.clone()).await?
-                        {
-                            context.local(&key)
-                        } else {
-                            None
-                        };
-                        val.ok_or_eyre("missing pod")
-                    }
+                    "pod?" => exprs[1]
+                        .eval(env.clone())
+                        .await?
+                        .try_into()
+                        .ok()
+                        .and_then(|key: String| env.local(&key))
+                        .ok_or_eyre("missing pod"),
                     _ => todo!(),
                 },
                 _ => Err(eyre!("first item must be an atom")),
@@ -366,7 +377,7 @@ mod tests {
     #[tokio::test]
     async fn test_eval() {
         assert_eq!(
-            eval("[add 1 [add 1 [max 42 1]]]", Context::default())
+            eval("[add 1 [add 1 [max 42 1]]]", Env::default())
                 .await
                 .unwrap(),
             Value::Uint64(44)

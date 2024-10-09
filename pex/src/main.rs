@@ -4,16 +4,21 @@ use std::{
 };
 
 use eyre::{eyre, Result};
-use pex::{self, Context, Entry, MyPods, Pod, User, Value};
+use pex::{self, Entry, Env, MyPods, Pod, User, Value};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let script = r#"[add [from alice [pod? x]] [from bob [pod? y]]]"#;
+    let script = r#"[add
+        [from alice [pod? x]]
+        [max
+            [from bob [pod? y]]
+            100]]
+    "#;
     let shared = Arc::new(Mutex::new(HashMap::new()));
 
     let alice = tokio::spawn(pex::eval(
         script,
-        Context::new(
+        Env::new(
             User::from("alice"),
             shared.clone(),
             pex::my_pods![{"x" => 22}],
@@ -22,7 +27,7 @@ async fn main() -> Result<()> {
 
     let bob = tokio::spawn(pex::eval(
         script,
-        Context::new(
+        Env::new(
             User::from("bob"),
             shared.clone(),
             pex::my_pods![{"y" => 20}],
