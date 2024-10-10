@@ -20,6 +20,8 @@ use std::{
 use tokio::sync::{watch, Mutex};
 use tracing::{info, warn};
 
+pub use auto_update::get_current_version;
+
 pub struct Logic {
     messages: Arc<RwLock<Vec<Message>>>,
     message_watch: (watch::Sender<()>, watch::Receiver<()>),
