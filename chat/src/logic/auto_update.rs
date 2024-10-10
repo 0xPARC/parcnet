@@ -133,9 +133,6 @@ async fn install_release(temp_dir: &TempDir, downloaded_dmg: PathBuf) -> Result<
         .file_name()
         .ok_or_else(|| anyhow!("invalid app path"))?;
 
-    // print the running app filename
-    println!("running_app_filename: {:?}", running_app_filename);
-
     let mount_path = temp_dir.path().join("chat");
     let mut mounted_app_path: OsString = mount_path.join(running_app_filename).into();
 

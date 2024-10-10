@@ -10,6 +10,7 @@ use iroh_gossip::{
     proto::TopicId,
 };
 use iroh_net::key::{PublicKey, SecretKey};
+use key::get_or_create_secret_key;
 use message::Message;
 use std::{
     str::FromStr,
@@ -25,8 +26,41 @@ pub struct Logic {
     _auto_updater: AutoUpdater,
 }
 
-const TOPIC_ID: &str = "uwl4njj5gy6ugn5ipcuwrvqh7aiedchif46oxyntap4ugfx7iszq";
-const PEER_ID: &str = "uglc5kp6bw4hfo3zzz6cxaignxpjirgdgdljakunqscr24xmyoyq";
+const TOPIC_ID: &str = "63fi4am3m2uu47ylikwbnkac4nyqiookbnlmcxkosqqugpg2ayja";
+const PEER_IDS: [&str; 1] = ["4h6tmz5id4yh4f6jwpdi5s6a42z4tf2ulmzcqx2o337572cbutvq"];
+
+mod key {
+    use iroh_net::key::SecretKey;
+    use std::{fs, path::PathBuf};
+    use tracing::info;
+
+    fn key_file_path() -> PathBuf {
+        std::env::current_exe()
+            .expect("failed to get current executable path")
+            .parent()
+            .expect("failed to get parent directory")
+            .join("user_key.bin")
+    }
+
+    pub fn get_or_create_secret_key() -> SecretKey {
+        let path = key_file_path();
+        match fs::read(&path) {
+            Ok(bytes) if bytes.len() == 32 => {
+                let bytes: [u8; 32] = bytes.try_into().unwrap();
+                info!("loaded existing user key");
+                SecretKey::from_bytes(&bytes)
+            }
+            _ => {
+                info!("generating new user key");
+                let key = SecretKey::generate();
+                if let Err(e) = fs::write(&path, key.to_bytes()) {
+                    info!("failed to save user key: {}", e);
+                }
+                key
+            }
+        }
+    }
+}
 
 impl Logic {
     pub fn new() -> Self {
@@ -73,11 +107,13 @@ impl Logic {
         let message_sender = self.message_sender.clone();
         let messages = self.messages.clone();
         let topic_id = TopicId::from_str(TOPIC_ID).unwrap();
-        let peer_id = PublicKey::from_str(PEER_ID).unwrap();
-        warn!("generating new secret key");
-        let secret_key = SecretKey::generate();
+        let peer_ids = PEER_IDS
+            .iter()
+            .map(|id| PublicKey::from_str(id).unwrap())
+            .collect::<Vec<_>>();
+        let secret_key = get_or_create_secret_key();
         tokio::spawn(async move {
-            let (sender, mut receiver) = connect_topic(topic_id, peer_id, secret_key).await;
+            let (sender, mut receiver) = connect_topic(topic_id, &peer_ids, secret_key).await;
             message_sender.lock().await.replace(sender);
             while let Some(Ok(event)) = receiver.next().await {
                 if let Event::Gossip(GossipEvent::Received(msg)) = event {
