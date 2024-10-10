@@ -29,8 +29,8 @@ pub struct Logic {
     _auto_updater: AutoUpdater,
 }
 
-const TOPIC_ID: &str = "63fi4am3m2uu47ylikwbnkac4nyqiookbnlmcxkosqqugpg2ayja";
-const PEER_IDS: [&str; 1] = ["4h6tmz5id4yh4f6jwpdi5s6a42z4tf2ulmzcqx2o337572cbutvq"];
+const TOPIC_ID: &str = "xyjjzwagm2c5cx56iltxtfcufdjejx2gxnyic7odeunwkndlygwa";
+const PEER_IDS: [&str; 1] = ["gawk3tiwjuvvuujgvpecpg4hcaheuzuzgnnghe4ljmz2r3zym4ya"];
 
 impl Logic {
     pub fn new() -> Self {
