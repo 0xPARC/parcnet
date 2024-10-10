@@ -55,7 +55,7 @@ async fn dht_resolve_node_addr(
 
 pub async fn connect_topic(
     topic_id: TopicId,
-    peer_id: PublicKey,
+    peer_ids: &[PublicKey],
     secret_key: SecretKey,
 ) -> (GossipSender, GossipReceiver) {
     let relay_mode = RelayMode::Default;
@@ -71,10 +71,22 @@ pub async fn connect_topic(
         .bind()
         .await
         .unwrap();
-    let peer = dht_resolve_node_addr(peer_id, discovery, endpoint.clone()).await;
+
+    let peers = peer_ids
+        .iter()
+        .map(|id| dht_resolve_node_addr(*id, discovery.clone(), endpoint.clone()))
+        .collect::<Vec<_>>();
+
     let addr = endpoint.node_addr().await.unwrap();
+
     let gossip = Gossip::from_endpoint(endpoint.clone(), Default::default(), &addr.info);
     tokio::spawn(endpoint_loop(endpoint.clone(), gossip.clone()));
-    endpoint.add_node_addr(peer).unwrap();
-    gossip.join(topic_id, vec![peer_id]).await.unwrap().split()
+    for peer in peers {
+        endpoint.add_node_addr(peer.await).unwrap();
+    }
+    gossip
+        .join(topic_id, peer_ids.to_vec())
+        .await
+        .unwrap()
+        .split()
 }

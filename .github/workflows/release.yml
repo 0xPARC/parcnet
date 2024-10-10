@@ -1,0 +1,86 @@
+name: Build & release chat
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "create a new release"
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version =' chat/Cargo.toml | sed 's/.*= "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Setup rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install deps
+        run: |
+          brew install create-dmg
+          cargo install cargo-bundle
+
+      - name: Bundle app
+        run: cargo bundle --release
+
+      - name: Create dmg
+        run: |
+          create-dmg \
+            --volname "chat" \
+            "chat.dmg" \
+            "target/release/bundle/osx/chat.app"
+
+      - name: Upload dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat-dmg
+          path: chat.dmg
+
+  release:
+    needs: build
+    if: github.event.inputs.release == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version =' parcnet/Cargo.toml | sed 's/.*= "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download dmg
+        uses: actions/download-artifact@v4
+        with:
+          name: chat-dmg
+
+      - name: Generate release notes
+        run: |
+          echo "Release notes for version ${{ steps.get_version.outputs.VERSION }}" > RELEASE_NOTES.md
+          echo "Changelog:" >> RELEASE_NOTES.md
+          git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"%s" >> RELEASE_NOTES.md
+
+      - name: Create gh release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: false
+          files: chat.dmg

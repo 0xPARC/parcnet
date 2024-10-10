@@ -455,9 +455,9 @@ impl Element for TextElement {
                 Some(fill(
                     Bounds::new(
                         point(bounds.left() + cursor_pos, bounds.top()),
-                        size(px(2.), bounds.bottom() - bounds.top()),
+                        size(px(1.), bounds.bottom() - bounds.top()),
                     ),
-                    gpui::blue(),
+                    gpui::black(),
                 )),
             )
         } else {
@@ -473,7 +473,7 @@ impl Element for TextElement {
                             bounds.bottom(),
                         ),
                     ),
-                    rgba(0x3311FF30),
+                    rgba(0x00000030),
                 )),
                 None,
             )
@@ -538,10 +538,10 @@ impl Render for TextInput {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
-            .line_height(px(30.))
+            .line_height(px(20.))
             .child(
                 div()
-                    .h(px(30. + 4. * 2.))
+                    .h(px(20. + 4. * 2.))
                     .w_full()
                     .p(px(4.))
                     .bg(white())
