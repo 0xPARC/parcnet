@@ -1,9 +1,9 @@
 mod input;
 
-use crate::logic::Logic;
+use crate::logic::{get_current_version, Logic};
 use gpui::{
-    actions, div, uniform_list, InteractiveElement, IntoElement, KeyBinding, ListSizingBehavior,
-    ParentElement, Render, Styled, UniformListScrollHandle, ViewContext,
+    actions, div, px, rgba, uniform_list, InteractiveElement, IntoElement, KeyBinding,
+    ListSizingBehavior, ParentElement, Render, Styled, UniformListScrollHandle, ViewContext,
 };
 use gpui::{View, VisualContext};
 use input::TextInput;
@@ -75,6 +75,25 @@ impl Render for Chat {
         let view = cx.view().clone();
         let messages = self.logic.get_messages();
         div()
+            .child(
+                div()
+                    .flex()
+                    .h(px(32.))
+                    .px_4()
+                    .bg(gpui::white())
+                    .text_color(gpui::black())
+                    .w_full()
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size_full()
+                            .text_xs()
+                            .text_color(rgba(0x00000030))
+                            .child(format!("chat v{}", get_current_version())),
+                    ),
+            )
             .key_context("Chat")
             .on_action(cx.listener(Self::enter))
             .flex()

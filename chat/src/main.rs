@@ -2,9 +2,10 @@ mod chat;
 mod logic;
 use chat::Chat;
 use gpui::{
-    actions, px, size, App, AppContext, Bounds, KeyBinding, VisualContext, WindowBounds,
-    WindowOptions,
+    actions, point, px, size, App, AppContext, Bounds, KeyBinding, TitlebarOptions, VisualContext,
+    WindowBounds, WindowOptions,
 };
+use logic::get_current_version;
 
 actions!(chat, [Quit]);
 
@@ -22,6 +23,11 @@ async fn main() {
         let _ = cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
+                titlebar: Some(TitlebarOptions {
+                    title: None,
+                    appears_transparent: true,
+                    traffic_light_position: Some(point(px(9.0), px(9.0))),
+                }),
                 ..Default::default()
             },
             |cx| cx.new_view(Chat::new),

@@ -6,10 +6,19 @@ use std::sync::Mutex;
 use std::{env, ffi::OsString, path::PathBuf, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::process::Command;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const RELEASES_URL: &str = "https://api.github.com/repos/0xPARC/parcnet/releases/latest";
+
+pub fn get_current_version() -> SemanticVersion {
+    warn!("using debug get current version");
+    // let version_str = env!("CARGO_PKG_VERSION").to_string();
+    // version_str
+    //     .parse::<SemanticVersion>()
+    //     .expect("invalid version format")
+    SemanticVersion::new(0, 0, 1)
+}
 
 struct MacOsUnmounter {
     mount_path: PathBuf,
@@ -104,8 +113,6 @@ async fn check_for_update(
         let asset_url = release["assets"][0]["browser_download_url"]
             .as_str()
             .unwrap();
-        // print the url
-        println!("asset_url: {}", asset_url);
         let dmg = http_client.get(asset_url).send().await?.bytes().await?;
         let temp_dir = tempfile::Builder::new().prefix("chat-update").tempdir()?;
         let downloaded_asset = temp_dir.path().join("chat.dmg");
@@ -176,12 +183,4 @@ fn get_app_path() -> PathBuf {
     dir.pop();
     dir.pop();
     dir
-}
-
-fn get_current_version() -> SemanticVersion {
-    // let version_str = env!("CARGO_PKG_VERSION").to_string();
-    // version_str
-    //     .parse::<SemanticVersion>()
-    //     .expect("invalid version format")
-    SemanticVersion::new(0, 0, 1)
 }
