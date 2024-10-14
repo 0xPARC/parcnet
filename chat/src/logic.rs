@@ -5,12 +5,12 @@ mod message;
 
 use auto_update::AutoUpdater;
 use futures::StreamExt;
-use gossip::connect_topic;
+use gossip::{close, connect_topic};
 use iroh_gossip::{
     net::{Event, GossipEvent, GossipSender},
     proto::TopicId,
 };
-use iroh_net::key::PublicKey;
+use iroh_net::{key::PublicKey, Endpoint};
 use key::get_or_create_secret_key;
 use message::Message;
 use std::{
@@ -23,6 +23,7 @@ use tracing::{info, warn};
 pub use auto_update::get_current_version;
 
 pub struct Logic {
+    endpoint: Arc<Mutex<Option<Endpoint>>>,
     messages: Arc<RwLock<Vec<Message>>>,
     message_watch: (watch::Sender<()>, watch::Receiver<()>),
     message_sender: Arc<Mutex<Option<GossipSender>>>,
@@ -37,6 +38,7 @@ impl Logic {
         let message_watch = watch::channel(());
         let auto_updater = AutoUpdater::new();
         let logic = Self {
+            endpoint: Arc::new(Mutex::new(None)),
             messages: Arc::new(RwLock::new(Vec::new())),
             message_watch,
             message_sender: Arc::new(Mutex::new(None)),
@@ -72,6 +74,12 @@ impl Logic {
         self.message_watch.1.clone()
     }
 
+    pub async fn cleanup(&self) {
+        if let Some(endpoint) = self.endpoint.lock().await.take() {
+            close(endpoint).await;
+        }
+    }
+
     fn connect(&self) {
         let message_watch_sender = self.message_watch.0.clone();
         let message_sender = self.message_sender.clone();
@@ -82,8 +90,11 @@ impl Logic {
             .map(|id| PublicKey::from_str(id).unwrap())
             .collect::<Vec<_>>();
         let secret_key = get_or_create_secret_key();
+        let endpoint = self.endpoint.clone();
         tokio::spawn(async move {
-            let (sender, mut receiver) = connect_topic(topic_id, &peer_ids, secret_key).await;
+            let (n_endpoint, sender, mut receiver) =
+                connect_topic(topic_id, &peer_ids, secret_key).await;
+            endpoint.lock().await.replace(n_endpoint);
             message_sender.lock().await.replace(sender);
             while let Some(Ok(event)) = receiver.next().await {
                 if let Event::Gossip(GossipEvent::Received(msg)) = event {
