@@ -5,7 +5,6 @@ use gpui::{
     actions, point, px, size, App, AppContext, Bounds, KeyBinding, TitlebarOptions, VisualContext,
     WindowBounds, WindowOptions,
 };
-use logic::get_current_version;
 
 actions!(chat, [Quit]);
 

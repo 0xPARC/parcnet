@@ -19,8 +19,17 @@ pub struct Chat {
 
 impl Chat {
     pub fn new(cx: &mut ViewContext<Self>) -> Self {
-        let logic = Logic::new();
+        let logic = Arc::new(Logic::new());
         let mut message_watch = logic.get_message_watch();
+
+        let logic_quit = logic.clone();
+        cx.on_app_quit(move |_| {
+            let logic_quit = logic_quit.clone();
+            async move {
+                logic_quit.cleanup().await;
+            }
+        })
+        .detach();
 
         cx.spawn(|view, mut cx| async move {
             while message_watch.changed().await.is_ok() {
@@ -39,7 +48,7 @@ impl Chat {
         let scroll_handle = UniformListScrollHandle::new();
 
         Self {
-            logic: Arc::new(logic),
+            logic,
             message_input,
             scroll_handle,
         }

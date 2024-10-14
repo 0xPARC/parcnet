@@ -5,13 +5,13 @@ use iroh_gossip::{
 };
 use iroh_net::{
     discovery::{pkarr::dht::DhtDiscovery, Discovery},
-    endpoint::Connecting,
+    endpoint::{Connecting, VarInt},
     key::{PublicKey, SecretKey},
     relay::RelayMode,
     Endpoint, NodeAddr,
 };
 use std::net::{Ipv4Addr, SocketAddrV4};
-use tracing::warn;
+use tracing::{info, warn};
 
 const GOSSIP_ALPN: &[u8] = b"/iroh-gossip/0";
 
@@ -53,11 +53,20 @@ async fn dht_resolve_node_addr(
     )
 }
 
+pub async fn close(endpoint: Endpoint) {
+    // Error code and reason are not interpreted (https://docs.rs/iroh-quinn/0.11.3/iroh_quinn/struct.Connection.html#method.close)
+    info!("closing endpoint");
+    endpoint
+        .close(VarInt::from_u32(0), &[0u8; 0])
+        .await
+        .unwrap();
+}
+
 pub async fn connect_topic(
     topic_id: TopicId,
     peer_ids: &[PublicKey],
     secret_key: SecretKey,
-) -> (GossipSender, GossipReceiver) {
+) -> (Endpoint, GossipSender, GossipReceiver) {
     let relay_mode = RelayMode::Default;
     let builder = DhtDiscovery::builder().dht(true).n0_dns_pkarr_relay();
     let discovery = builder.secret_key(secret_key.clone()).build().unwrap();
@@ -84,9 +93,10 @@ pub async fn connect_topic(
     for peer in peers {
         endpoint.add_node_addr(peer.await).unwrap();
     }
-    gossip
+    let (sender, receiver) = gossip
         .join(topic_id, peer_ids.to_vec())
         .await
         .unwrap()
-        .split()
+        .split();
+    (endpoint, sender, receiver)
 }
