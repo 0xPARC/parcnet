@@ -1,0 +1,14 @@
+[package]
+name = "pod2"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "pod2"
+path = "src/lib.rs"
+
+[dependencies]
+plonky2 = { git = "https://github.com/mir-protocol/plonky2" }
+anyhow = "1.0.56"
+rand = "0.8.5"
+log = "0.4.22"
