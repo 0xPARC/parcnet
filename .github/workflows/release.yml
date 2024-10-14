@@ -14,6 +14,7 @@ on:
 jobs:
   build:
     runs-on: macos-latest
+    environment: release-chat
     steps:
       - uses: actions/checkout@v4
 
@@ -36,12 +37,31 @@ jobs:
       - name: Bundle app
         run: cargo bundle --release
 
+      - name: Install the Apple certificate
+        env:
+          APPLE_DID_CERTIFICATE_BASE64: ${{ secrets.APPLE_DID_CERTIFICATE_BASE64 }}
+        run: |
+          echo $APPLE_DID_CERTIFICATE_BASE64 | base64 --decode > certificate.p12
+          security create-keychain -p "" parcnet-chat-codesign.keychain
+          security default-keychain -s parcnet-chat-codesign.keychain
+          security unlock-keychain -p "" parcnet-chat-codesign.keychain
+          security import certificate.p12 -k parcnet-chat-codesign.keychain -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" parcnet-chat-codesign.keychain
+
+      - name: Codesign app
+        run: |
+          codesign --sign "Developer ID Application: Small Brain Engineering, Inc (D7642W43D2)" --keychain parcnet-chat-codesign.keychain --force --options runtime --timestamp target/release/bundle/osx/chat.app
+
       - name: Create dmg
         run: |
           create-dmg \
             --volname "chat" \
             "chat.dmg" \
             "target/release/bundle/osx/chat.app"
+
+      - name: Codesign dmg
+        run: |
+          codesign --sign "Developer ID Application: Small Brain Engineering, Inc (D7642W43D2)" --keychain parcnet-chat-codesign.keychain --force --options runtime --timestamp chat.dmg
 
       - name: Upload dmg
         uses: actions/upload-artifact@v4
@@ -51,6 +71,7 @@ jobs:
 
   release:
     needs: build
+    environment: release-chat
     if: github.event.inputs.release == 'true'
     runs-on: macos-latest
     steps:
@@ -66,6 +87,15 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: chat-dmg
+
+      - name: Notarize
+        env:
+          APPLECONNECT_KEY: ${{ secrets.APPLECONNECT_KEY }}
+        run: |
+          cargo install apple-codesign
+          echo "$APPLECONNECT_KEY" > key.json
+          rcodesign notary-submit --api-key-path key.json chat.dmg --staple
+          rm key.json
 
       - name: Generate release notes
         run: |

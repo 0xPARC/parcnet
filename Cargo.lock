@@ -915,6 +915,8 @@ dependencies = [
  "iroh-net",
  "pkarr",
  "reqwest",
+ "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
