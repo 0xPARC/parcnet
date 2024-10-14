@@ -108,6 +108,18 @@ pub enum StatementPredicate {
     SumOf = 6,
 }
 
+pub fn predicate_name(predicate: StatementPredicate) -> String {
+    match predicate {
+        StatementPredicate::None => "NONE".to_string(),
+        StatementPredicate::ValueOf => "VALUEOF".to_string(),
+        StatementPredicate::Equal => "EQUAL".to_string(),
+        StatementPredicate::NotEqual => "NOTEQUAL".to_string(),
+        StatementPredicate::Gt => "GT".to_string(),
+        StatementPredicate::Contains => "CONTAINS".to_string(),
+        StatementPredicate::SumOf => "SUMOF".to_string(),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Statement {
     pub predicate: StatementPredicate,
@@ -251,7 +263,7 @@ impl POD {
                 let payload_hash_vec = vec![payload_hash];
                 let protocol = SchnorrSigner::new();
 
-                let wrapped_pk = self.payload.statements_map.get("entry-_signer");
+                let wrapped_pk = self.payload.statements_map.get("VALUEOF:_signer");
 
                 if wrapped_pk.is_none() {
                     return Err("No signer found in payload".into());
@@ -295,7 +307,7 @@ impl POD {
 
         for entry in kv_pairs {
             statement_map.insert(
-                "entry-".to_owned() + &entry.key,
+                "VALUEOF:".to_owned() + &entry.key,
                 Statement::from_entry(&entry, GadgetID::SCHNORR16),
             );
         }
@@ -323,10 +335,12 @@ impl POD {
                     let new_statement = cmd.execute(GadgetID::ORACLE, statements);
                     match new_statement {
                         Some(new_statement) => {
-                            statements
-                                .get_mut("_SELF")
-                                .unwrap()
-                                .insert(cmd.output_statement_name.clone(), new_statement);
+                            statements.get_mut("_SELF").unwrap().insert(
+                                predicate_name(new_statement.predicate)
+                                    + ":"
+                                    + &cmd.output_statement_name,
+                                new_statement,
+                            );
                         }
                         None => {
                             print!("{:?}", cmd);
@@ -374,14 +388,16 @@ impl GPGInput {
         origin_renaming_map: HashMap<(String, String), String>,
     ) -> Self {
         let mut pods_and_names_list = Vec::new();
+        let mut origin_renaming_map_clone = origin_renaming_map.clone();
         for (name, pod) in named_pods.iter() {
             pods_and_names_list.push((name.clone(), pod.clone()));
+            origin_renaming_map_clone.insert((name.clone(), "_SELF".to_string()), name.clone());
         }
         pods_and_names_list.sort_by(|a, b| a.0.cmp(&b.0));
 
         Self {
             pods_list: pods_and_names_list.clone(),
-            origin_renaming_map: origin_renaming_map.clone(),
+            origin_renaming_map: origin_renaming_map_clone,
         }
     }
 
@@ -525,7 +541,8 @@ pub enum OperationType {
     TransitiveEqualityFromStatements = 6,
     GtToNonequality = 7,
     ContainsFromEntries = 8,
-    SumOf = 9,
+    RenameContainedBy = 9,
+    SumOf = 10,
 }
 
 #[derive(Clone, Debug)]
@@ -785,6 +802,50 @@ impl OperationType {
                     _ => None,
                 }
             }
+            (
+                OperationType::RenameContainedBy,
+                Some(left_statement),
+                Some(right_statement),
+                _,
+                _,
+            ) => match (left_statement, right_statement) {
+                (
+                    Statement {
+                        predicate: StatementPredicate::Contains,
+                        origin1: ll_origin,
+                        key1: ll_key_name,
+                        origin2: Some(lr_origin),
+                        key2: Some(lr_key_name),
+                        origin3: None,
+                        key3: None,
+                        optional_value: None,
+                    },
+                    Statement {
+                        predicate: StatementPredicate::Equal,
+                        origin1: rl_origin,
+                        key1: rl_key_name,
+                        origin2: Some(rr_origin),
+                        key2: Some(rr_key_name),
+                        origin3: None,
+                        key3: None,
+                        optional_value: None,
+                    },
+                ) if (ll_origin.origin_id, &ll_key_name)
+                    == ((rl_origin.origin_id, &rl_key_name)) =>
+                {
+                    Some(Statement {
+                        predicate: StatementPredicate::Contains,
+                        origin1: rr_origin.clone(),
+                        key1: rr_key_name.clone(),
+                        origin2: Some(lr_origin.clone()),
+                        key2: Some(lr_key_name.clone()),
+                        origin3: None,
+                        key3: None,
+                        optional_value: None,
+                    })
+                }
+                _ => None,
+            },
             // SumOf <=> statement 1's value = statement 2's value + statement 3's value
             (OperationType::SumOf, Some(statement1), Some(statement2), Some(statement3), _) => {
                 match (
@@ -1053,7 +1114,7 @@ fn schnorr_pod_test() -> Result<(), Error> {
     let stmt_in_map = schnorr_pod3
         .payload
         .statements_map
-        .get_mut("entry-some key");
+        .get_mut("VALUEOF:some key");
     stmt_in_map.unwrap().optional_value = Some(ScalarOrVec::Scalar(GoldilocksField(37)));
     schnorr_pod3.payload.statements_list[1].1.optional_value =
         Some(ScalarOrVec::Scalar(GoldilocksField(37)));
@@ -1085,24 +1146,26 @@ fn schnorr_pod_test() -> Result<(), Error> {
     Ok(())
 }
 
+// i haven't written asserts yet to check the correctness of oracle and oracle2 pods
+// but i've manually inspected output and it looks good
 #[test]
-fn god_pod_from_schnorr_test() -> Result<(), Error> {
-    println!("god_pod_from_schnorr_test");
+fn oracle_pod_from_schnorr_test() -> Result<(), Error> {
+    println!("oracle_pod_from_schnorr_test");
     // Start with some values.
     let scalar1 = GoldilocksField(36);
     let scalar2 = GoldilocksField(52);
-    let scalar3 = GoldilocksField(90);
+    let scalar3 = GoldilocksField(88);
     let vector_value = vec![scalar1, scalar2];
 
     // make entries
-    let entry1 = Entry::new_from_scalar("some key".to_string(), scalar1);
-    let entry2 = Entry::new_from_scalar("some other key".to_string(), scalar2);
+    let entry1 = Entry::new_from_scalar("apple".to_string(), scalar1);
+    let entry2 = Entry::new_from_scalar("banana".to_string(), scalar2);
     let entry3 = Entry::new_from_vec("vector entry".to_string(), vector_value.clone());
-    let entry4 = Entry::new_from_scalar("new key".to_string(), scalar2);
+    let entry4 = Entry::new_from_scalar("scalar entry".to_string(), scalar2);
     let entry5 = Entry::new_from_scalar("foo".to_string(), GoldilocksField(100));
     let entry6 = Entry::new_from_scalar("baz".to_string(), GoldilocksField(120));
-    let entry7 = Entry::new_from_scalar("yum".to_string(), scalar2);
-    let _entry9 = Entry::new_from_scalar("godpod introduced entry key".to_string(), scalar3);
+    let entry7 = Entry::new_from_scalar("bar".to_string(), scalar2);
+    let entry9 = Entry::new_from_scalar("claimed sum".to_string(), scalar3);
 
     // three schnorr pods
     let schnorr_pod1 = POD::execute_schnorr_gadget(
@@ -1114,36 +1177,19 @@ fn god_pod_from_schnorr_test() -> Result<(), Error> {
         &vec![entry3.clone(), entry4.clone()],
         &SchnorrSecretKey { sk: 42 },
     );
-
-    let schnorr_pod3 = POD::execute_schnorr_gadget(
-        &vec![entry5.clone(), entry6.clone(), entry7.clone()],
-        &SchnorrSecretKey { sk: 83 },
-    );
-
     // make an OraclePOD using from_pods called on the two schnorr PODs
 
     // first make the GPG input
 
     // make a map of named POD inputs
     let mut named_input_pods = HashMap::new();
-    named_input_pods.insert("schnorrPOD1".to_string(), schnorr_pod1.clone());
+    named_input_pods.insert("p1".to_string(), schnorr_pod1.clone());
     named_input_pods.insert("schnorrPOD2".to_string(), schnorr_pod2.clone());
-    named_input_pods.insert("schnorrPOD3".to_string(), schnorr_pod3.clone());
 
     // make a map of (pod name, old origin name) to new origin name
-    let mut origin_renaming_map = HashMap::new();
-    origin_renaming_map.insert(
-        ("schnorrPOD1".to_string(), "_SELF".to_string()),
-        "schnorrPOD1".to_string(),
-    );
-    origin_renaming_map.insert(
-        ("schnorrPOD2".to_string(), "_SELF".to_string()),
-        "schnorrPOD2".to_string(),
-    );
-    origin_renaming_map.insert(
-        ("schnorrPOD3".to_string(), "_SELF".to_string()),
-        "schnorrPOD3".to_string(),
-    );
+    let origin_renaming_map = HashMap::new();
+    // all the inputs are schnorr PODs whose only referenced origin is _SELF
+    // _SELF is taken care of automatically so origin_renaming_map can be empty
 
     let gpg_input = GPGInput::new(named_input_pods, origin_renaming_map);
 
@@ -1151,41 +1197,41 @@ fn god_pod_from_schnorr_test() -> Result<(), Error> {
     let ops = vec![
         OperationCmd {
             operation_type: OperationType::CopyStatement,
-            statement_1_parent: Some("schnorrPOD1".to_string()),
-            statement_1_name: Some("entry-some key".to_string()),
+            statement_1_parent: Some("p1".to_string()),
+            statement_1_name: Some("VALUEOF:apple".to_string()),
             statement_2_parent: None,
             statement_2_name: None,
             statement_3_parent: None,
             statement_3_name: None,
             optional_entry: None,
-            output_statement_name: "schnorrPOD1-some key".to_string(),
+            output_statement_name: "p1-apple".to_string(),
         },
         OperationCmd {
             operation_type: OperationType::CopyStatement,
-            statement_1_parent: Some("schnorrPOD1".to_string()),
-            statement_1_name: Some("entry-some other key".to_string()),
+            statement_1_parent: Some("p1".to_string()),
+            statement_1_name: Some("VALUEOF:banana".to_string()),
             statement_2_parent: None,
             statement_2_name: None,
             statement_3_parent: None,
             statement_3_name: None,
             optional_entry: None,
-            output_statement_name: "schnorrPOD1-some other key".to_string(),
+            output_statement_name: "p1-banana".to_string(),
         },
         OperationCmd {
             operation_type: OperationType::CopyStatement,
-            statement_1_parent: Some("schnorrPOD1".to_string()),
-            statement_1_name: Some("entry-_signer".to_string()),
+            statement_1_parent: Some("p1".to_string()),
+            statement_1_name: Some("VALUEOF:_signer".to_string()),
             statement_2_parent: None,
             statement_2_name: None,
             statement_3_parent: None,
             statement_3_name: None,
             optional_entry: None,
-            output_statement_name: "schnorrPOD1-signer".to_string(),
+            output_statement_name: "p1-signer".to_string(),
         },
         OperationCmd {
             operation_type: OperationType::CopyStatement,
             statement_1_parent: Some("schnorrPOD2".to_string()),
-            statement_1_name: Some("entry-vector entry".to_string()),
+            statement_1_name: Some("VALUEOF:vector entry".to_string()),
             statement_2_parent: None,
             statement_2_name: None,
             statement_3_parent: None,
@@ -1196,18 +1242,18 @@ fn god_pod_from_schnorr_test() -> Result<(), Error> {
         OperationCmd {
             operation_type: OperationType::CopyStatement,
             statement_1_parent: Some("schnorrPOD2".to_string()),
-            statement_1_name: Some("entry-new key".to_string()),
+            statement_1_name: Some("VALUEOF:scalar entry".to_string()),
             statement_2_parent: None,
             statement_2_name: None,
             statement_3_parent: None,
             statement_3_name: None,
             optional_entry: None,
-            output_statement_name: "schnorrPOD2-new key".to_string(),
+            output_statement_name: "a scalar entry".to_string(),
         },
         OperationCmd {
             operation_type: OperationType::CopyStatement,
             statement_1_parent: Some("schnorrPOD2".to_string()),
-            statement_1_name: Some("entry-_signer".to_string()),
+            statement_1_name: Some("VALUEOF:_signer".to_string()),
             statement_2_parent: None,
             statement_2_name: None,
             statement_3_parent: None,
@@ -1216,44 +1262,697 @@ fn god_pod_from_schnorr_test() -> Result<(), Error> {
             output_statement_name: "schnorrPOD2-signer".to_string(),
         },
         OperationCmd {
-            operation_type: OperationType::CopyStatement,
-            statement_1_parent: Some("schnorrPOD3".to_string()),
-            statement_1_name: Some("entry-yum".to_string()),
-            statement_2_parent: None,
-            statement_2_name: None,
-            statement_3_parent: None,
-            statement_3_name: None,
-            optional_entry: None,
-            output_statement_name: "schnorrPOD3-yum".to_string(),
-        },
-        OperationCmd {
             operation_type: OperationType::EqualityFromEntries,
-            statement_1_parent: Some("schnorrPOD1".to_string()),
-            statement_1_name: Some("entry-some other key".to_string()),
+            statement_1_parent: Some("p1".to_string()),
+            statement_1_name: Some("VALUEOF:banana".to_string()),
             statement_2_parent: Some("schnorrPOD2".to_string()),
-            statement_2_name: Some("entry-new key".to_string()),
+            statement_2_name: Some("VALUEOF:scalar entry".to_string()),
             statement_3_parent: None,
             statement_3_name: None,
             optional_entry: None,
             output_statement_name: "eq1".to_string(),
         },
         OperationCmd {
-            operation_type: OperationType::ContainsFromEntries,
-            statement_1_parent: Some("_SELF".to_string()),
-            statement_1_name: Some("schnorrPOD2-vec-entry".to_string()),
-            statement_2_parent: Some("schnorrPOD1".to_string()),
-            statement_2_name: Some("entry-some key".to_string()),
+            operation_type: OperationType::GtFromEntries,
+            statement_1_parent: Some("p1".to_string()),
+            statement_1_name: Some("VALUEOF:banana".to_string()),
+            statement_2_parent: Some("p1".to_string()),
+            statement_2_name: Some("VALUEOF:apple".to_string()),
             statement_3_parent: None,
             statement_3_name: None,
             optional_entry: None,
-            output_statement_name: "contains test".to_string(),
+            output_statement_name: "apple banana comparison".to_string(),
+        },
+        // this operation creates a statement on top of a statement
+        // created by an earlier operation
+        OperationCmd {
+            operation_type: OperationType::ContainsFromEntries,
+            statement_1_parent: Some("_SELF".to_string()),
+            statement_1_name: Some("VALUEOF:schnorrPOD2-vec-entry".to_string()),
+            statement_2_parent: Some("p1".to_string()),
+            statement_2_name: Some("VALUEOF:apple".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "CONTAINS:contains1".to_string(),
         },
     ];
 
-    let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &ops);
-    let statements = &oracle_pod.unwrap();
-    for statement in statements.payload.statements_list.iter() {
-        println!("statement: {:?}", statement);
+    let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &ops).unwrap();
+    assert!(oracle_pod.verify()? == true);
+
+    // make another oracle POD which takes that oracle POD and a schnorr POD
+
+    let schnorr_pod3 = POD::execute_schnorr_gadget(
+        &vec![entry5.clone(), entry6.clone(), entry7.clone()],
+        &SchnorrSecretKey { sk: 83 },
+    );
+
+    // make the GPG input
+
+    // make a map of named POD inputs
+    let mut named_input_pods2 = HashMap::new();
+    named_input_pods2.insert("oraclePODParent".to_string(), oracle_pod.clone());
+    named_input_pods2.insert("p3".to_string(), schnorr_pod3.clone());
+
+    // make a map of (pod name, old origin name) to new origin name
+    let mut origin_renaming_map2 = HashMap::new();
+    // let's keep the name of the first origin and shorten the name of the second origin
+    origin_renaming_map2.insert(
+        ("oraclePODParent".to_string(), "p1".to_string()),
+        "p1".to_string(),
+    );
+    origin_renaming_map2.insert(
+        ("oraclePODParent".to_string(), "schnorrPOD2".to_string()),
+        "p2".to_string(),
+    );
+
+    let gpg_input = GPGInput::new(named_input_pods2, origin_renaming_map2);
+
+    // make a list of the operations we want to call
+
+    let ops = vec![
+        OperationCmd {
+            operation_type: OperationType::EqualityFromEntries,
+            statement_1_parent: Some("oraclePODParent".to_string()),
+            statement_1_name: Some("VALUEOF:a scalar entry".to_string()),
+            statement_2_parent: Some("p3".to_string()),
+            statement_2_name: Some("VALUEOF:bar".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "eq2".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::TransitiveEqualityFromStatements,
+            statement_1_parent: Some("oraclePODParent".to_string()),
+            statement_1_name: Some("EQUAL:eq1".to_string()),
+            statement_2_parent: Some("_SELF".to_string()),
+            statement_2_name: Some("EQUAL:eq2".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "EQUAL:transitive eq".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::NewEntry,
+            statement_1_parent: None,
+            statement_1_name: None,
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(entry9.clone()),
+            output_statement_name: "entry for claimed sum".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::SumOf,
+            statement_1_parent: Some("_SELF".to_string()),
+            statement_1_name: Some("VALUEOF:entry for claimed sum".to_string()),
+            statement_2_parent: Some("oraclePODParent".to_string()),
+            statement_2_name: Some("VALUEOF:p1-apple".to_string()),
+            statement_3_parent: Some("oraclePODParent".to_string()),
+            statement_3_name: Some("VALUEOF:a scalar entry".to_string()),
+            optional_entry: None,
+            output_statement_name: "sumof entry".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("oraclePODParent".to_string()),
+            statement_1_name: Some("VALUEOF:schnorrPOD2-signer".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "p2-signer".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::GtToNonequality,
+            statement_1_parent: Some("oraclePODParent".to_string()),
+            statement_1_name: Some("GT:apple banana comparison".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "apple banana nonequality".to_string(),
+        },
+    ];
+
+    let oracle_pod2 = POD::execute_oracle_gadget(&gpg_input, &ops).unwrap();
+    for statement in oracle_pod2.payload.statements_list.iter() {
+        println!("{:?}", statement);
     }
+    assert!(oracle_pod2.verify()? == true);
+    Ok(())
+}
+
+#[test]
+fn goodboy_test() -> Result<(), Error> {
+    let protocol = SchnorrSigner::new();
+
+    let alice_sk = SchnorrSecretKey { sk: 25 };
+    let alice_pk = protocol.keygen(&alice_sk).pk;
+    let bob_sk = SchnorrSecretKey { sk: 26 };
+    let bob_pk = protocol.keygen(&bob_sk).pk;
+    let charlie_sk = SchnorrSecretKey { sk: 27 };
+    let charlie_pk = protocol.keygen(&charlie_sk).pk;
+
+    let goog_sk = SchnorrSecretKey { sk: 28 };
+    let goog_pk = protocol.keygen(&goog_sk).pk;
+    let msft_sk = SchnorrSecretKey { sk: 29 };
+    let msft_pk = protocol.keygen(&msft_sk).pk;
+    let fb_sk = SchnorrSecretKey { sk: 30 };
+    let fb_pk = protocol.keygen(&fb_sk).pk;
+
+    let known_attestors = vec![goog_pk, msft_pk, fb_pk];
+
+    let gb1_user = Entry::new_from_scalar("user".to_string(), bob_pk);
+    let gb1_age = Entry::new_from_scalar("age".to_string(), GoldilocksField(27));
+    let gb1 = POD::execute_schnorr_gadget(&vec![gb1_user.clone(), gb1_age.clone()], &goog_sk);
+
+    let gb2_user = Entry::new_from_scalar("user".to_string(), bob_pk);
+    let gb2 = POD::execute_schnorr_gadget(&vec![gb2_user.clone()], &msft_sk);
+
+    let gb3_user = Entry::new_from_scalar("user".to_string(), charlie_pk);
+    let gb3_age = Entry::new_from_scalar("age".to_string(), GoldilocksField(18));
+    let gb3 = POD::execute_schnorr_gadget(&vec![gb3_user.clone(), gb3_age.clone()], &msft_sk);
+
+    let gb4_user = Entry::new_from_scalar("user".to_string(), charlie_pk);
+    let gb4 = POD::execute_schnorr_gadget(&vec![gb4_user.clone()], &fb_sk);
+
+    let alice_user_entry = Entry::new_from_scalar("user".to_string(), alice_pk);
+    let known_attestors_entry =
+        Entry::new_from_vec("known_attestors".to_string(), known_attestors.clone());
+
+    let bob_alice = POD::execute_schnorr_gadget(&vec![alice_user_entry.clone()], &bob_sk);
+    let charlie_alice = POD::execute_schnorr_gadget(&vec![alice_user_entry.clone()], &charlie_sk);
+
+    // make the "bob trusted friend" POD
+    let mut bob_tf_input_pods = HashMap::new();
+    bob_tf_input_pods.insert("bob-gb1".to_string(), gb1.clone());
+    bob_tf_input_pods.insert("bob-gb2".to_string(), gb2.clone());
+    bob_tf_input_pods.insert("bob-alice".to_string(), bob_alice.clone());
+
+    let bob_tf_input = GPGInput::new(bob_tf_input_pods, HashMap::new());
+
+    let bob_tf_ops = vec![
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("bob-alice".to_string()),
+            statement_1_name: Some("VALUEOF:_signer".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "bob-alice signer".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("bob-alice".to_string()),
+            statement_1_name: Some("VALUEOF:user".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "bob-alice user".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("bob-gb1".to_string()),
+            statement_1_name: Some("VALUEOF:age".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "bob age".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::NewEntry,
+            statement_1_parent: None,
+            statement_1_name: None,
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(known_attestors_entry.clone()),
+            output_statement_name: "known_attestors".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::EqualityFromEntries,
+            statement_1_parent: Some("bob-alice".to_string()),
+            statement_1_name: Some("VALUEOF:_signer".to_string()),
+            statement_2_parent: Some("bob-gb1".to_string()),
+            statement_2_name: Some("VALUEOF:user".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(known_attestors_entry.clone()),
+            output_statement_name: "gb1 attests to correct user".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::EqualityFromEntries,
+            statement_1_parent: Some("bob-alice".to_string()),
+            statement_1_name: Some("VALUEOF:_signer".to_string()),
+            statement_2_parent: Some("bob-gb2".to_string()),
+            statement_2_name: Some("VALUEOF:user".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(known_attestors_entry.clone()),
+            output_statement_name: "gb2 attests to correct user".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::NonequalityFromEntries,
+            statement_1_parent: Some("bob-gb1".to_string()),
+            statement_1_name: Some("VALUEOF:_signer".to_string()),
+            statement_2_parent: Some("bob-gb2".to_string()),
+            statement_2_name: Some("VALUEOF:_signer".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(known_attestors_entry.clone()),
+            output_statement_name: "gb1 and gb2 are different".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::ContainsFromEntries,
+            statement_1_parent: Some("_SELF".to_string()),
+            statement_1_name: Some("VALUEOF:known_attestors".to_string()),
+            statement_2_parent: Some("bob-gb1".to_string()),
+            statement_2_name: Some("VALUEOF:_signer".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(known_attestors_entry.clone()),
+            output_statement_name: "gb1 has known signer".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::ContainsFromEntries,
+            statement_1_parent: Some("_SELF".to_string()),
+            statement_1_name: Some("VALUEOF:known_attestors".to_string()),
+            statement_2_parent: Some("bob-gb2".to_string()),
+            statement_2_name: Some("VALUEOF:_signer".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(known_attestors_entry.clone()),
+            output_statement_name: "gb2 has known signer".to_string(),
+        },
+    ];
+
+    let bob_tf = POD::execute_oracle_gadget(&bob_tf_input, &bob_tf_ops).unwrap();
+    assert!(bob_tf.verify()? == true);
+
+    // make the "bob trusted friend" POD
+    let mut charlie_tf_input_pods = HashMap::new();
+    charlie_tf_input_pods.insert("charlie-gb3".to_string(), gb3.clone());
+    charlie_tf_input_pods.insert("charlie-gb4".to_string(), gb4.clone());
+    charlie_tf_input_pods.insert("charlie-alice".to_string(), charlie_alice.clone());
+
+    let charlie_tf_input = GPGInput::new(charlie_tf_input_pods, HashMap::new());
+
+    let charlie_tf_ops = vec![
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("charlie-alice".to_string()),
+            statement_1_name: Some("VALUEOF:_signer".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "charlie-alice signer".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("charlie-alice".to_string()),
+            statement_1_name: Some("VALUEOF:user".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "charlie-alice user".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("charlie-gb3".to_string()),
+            statement_1_name: Some("VALUEOF:age".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "charlie age".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::NewEntry,
+            statement_1_parent: None,
+            statement_1_name: None,
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(known_attestors_entry.clone()),
+            output_statement_name: "known_attestors".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::EqualityFromEntries,
+            statement_1_parent: Some("charlie-alice".to_string()),
+            statement_1_name: Some("VALUEOF:_signer".to_string()),
+            statement_2_parent: Some("charlie-gb3".to_string()),
+            statement_2_name: Some("VALUEOF:user".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(known_attestors_entry.clone()),
+            output_statement_name: "gb3 attests to correct user".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::EqualityFromEntries,
+            statement_1_parent: Some("charlie-alice".to_string()),
+            statement_1_name: Some("VALUEOF:_signer".to_string()),
+            statement_2_parent: Some("charlie-gb4".to_string()),
+            statement_2_name: Some("VALUEOF:user".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(known_attestors_entry.clone()),
+            output_statement_name: "gb4 attests to correct user".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::NonequalityFromEntries,
+            statement_1_parent: Some("charlie-gb3".to_string()),
+            statement_1_name: Some("VALUEOF:_signer".to_string()),
+            statement_2_parent: Some("charlie-gb4".to_string()),
+            statement_2_name: Some("VALUEOF:_signer".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(known_attestors_entry.clone()),
+            output_statement_name: "gb3 and gb4 are different".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::ContainsFromEntries,
+            statement_1_parent: Some("_SELF".to_string()),
+            statement_1_name: Some("VALUEOF:known_attestors".to_string()),
+            statement_2_parent: Some("charlie-gb3".to_string()),
+            statement_2_name: Some("VALUEOF:_signer".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(known_attestors_entry.clone()),
+            output_statement_name: "gb3 has known signer".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::ContainsFromEntries,
+            statement_1_parent: Some("_SELF".to_string()),
+            statement_1_name: Some("VALUEOF:known_attestors".to_string()),
+            statement_2_parent: Some("charlie-gb4".to_string()),
+            statement_2_name: Some("VALUEOF:_signer".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(known_attestors_entry.clone()),
+            output_statement_name: "gb4 has known signer".to_string(),
+        },
+    ];
+
+    let charlie_tf = POD::execute_oracle_gadget(&charlie_tf_input, &charlie_tf_ops).unwrap();
+    assert!(charlie_tf.verify()? == true);
+
+    // make the "great boy" POD
+    let age_bound_entry =
+        Entry::new_from_scalar("known_attestors".to_string(), GoldilocksField(17));
+    let age_sum_entry = Entry::new_from_scalar("age_sum".to_string(), GoldilocksField(45));
+    let mut grb_input_pods = HashMap::new();
+    grb_input_pods.insert("friend1".to_string(), bob_tf.clone());
+    grb_input_pods.insert("friend2".to_string(), charlie_tf.clone());
+
+    // make a map of (pod name, old origin name) to new origin name
+    let mut grb_origin_rename_map = HashMap::new();
+    // let's keep the name of the first origin and shorten the name of the second origin
+    grb_origin_rename_map.insert(
+        ("friend1".to_string(), "bob-gb1".to_string()),
+        "gb1".to_string(),
+    );
+    grb_origin_rename_map.insert(
+        ("friend1".to_string(), "bob-gb2".to_string()),
+        "gb2".to_string(),
+    );
+    grb_origin_rename_map.insert(
+        ("friend1".to_string(), "bob-alice".to_string()),
+        "friend1-attest".to_string(),
+    );
+    grb_origin_rename_map.insert(
+        ("friend2".to_string(), "charlie-gb3".to_string()),
+        "gb3".to_string(),
+    );
+    grb_origin_rename_map.insert(
+        ("friend2".to_string(), "charlie-gb4".to_string()),
+        "gb4".to_string(),
+    );
+    grb_origin_rename_map.insert(
+        ("friend2".to_string(), "charlie-alice".to_string()),
+        "friend2-attest".to_string(),
+    );
+
+    let grb_input = GPGInput::new(grb_input_pods, grb_origin_rename_map);
+
+    let grb_ops = vec![
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("friend1".to_string()),
+            statement_1_name: Some("VALUEOF:bob-alice user".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "friend1 attested user".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("friend2".to_string()),
+            statement_1_name: Some("VALUEOF:charlie-alice user".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "friend2 attested user".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::NewEntry,
+            statement_1_parent: None,
+            statement_1_name: None,
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(age_bound_entry.clone()),
+            output_statement_name: "age_bound".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::NewEntry,
+            statement_1_parent: None,
+            statement_1_name: None,
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(age_sum_entry.clone()),
+            output_statement_name: "age_sum".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::NewEntry,
+            statement_1_parent: None,
+            statement_1_name: None,
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: Some(known_attestors_entry.clone()),
+            output_statement_name: "known_attestors".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::EqualityFromEntries,
+            statement_1_parent: Some("friend1".to_string()),
+            statement_1_name: Some("VALUEOF:known_attestors".to_string()),
+            statement_2_parent: Some("_SELF".to_string()),
+            statement_2_name: Some("VALUEOF:known_attestors".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "friend1 known_attestors same as _SELF".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::EqualityFromEntries,
+            statement_1_parent: Some("friend2".to_string()),
+            statement_1_name: Some("VALUEOF:known_attestors".to_string()),
+            statement_2_parent: Some("_SELF".to_string()),
+            statement_2_name: Some("VALUEOF:known_attestors".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "friend2 known_attestors same as _SELF".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("friend1".to_string()),
+            statement_1_name: Some("EQUAL:gb1 attests to correct user".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "gb1 attests to correct user".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::RenameContainedBy,
+            statement_1_parent: Some("friend1".to_string()),
+            statement_1_name: Some("CONTAINS:gb1 has known signer".to_string()),
+            statement_2_parent: Some("_SELF".to_string()),
+            statement_2_name: Some("EQUAL:friend1 known_attestors same as _SELF".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "gb1 has known signer".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("friend1".to_string()),
+            statement_1_name: Some("EQUAL:gb2 attests to correct user".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "gb2 attests to correct user".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::RenameContainedBy,
+            statement_1_parent: Some("friend1".to_string()),
+            statement_1_name: Some("CONTAINS:gb2 has known signer".to_string()),
+            statement_2_parent: Some("_SELF".to_string()),
+            statement_2_name: Some("EQUAL:friend1 known_attestors same as _SELF".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "gb2 has known signer".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("friend1".to_string()),
+            statement_1_name: Some("NOTEQUAL:gb1 and gb2 are different".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "gb1 and gb2 are different".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("friend2".to_string()),
+            statement_1_name: Some("EQUAL:gb3 attests to correct user".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "gb3 attests to correct user".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::RenameContainedBy,
+            statement_1_parent: Some("friend2".to_string()),
+            statement_1_name: Some("CONTAINS:gb3 has known signer".to_string()),
+            statement_2_parent: Some("_SELF".to_string()),
+            statement_2_name: Some("EQUAL:friend2 known_attestors same as _SELF".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "gb3 has known signer".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("friend2".to_string()),
+            statement_1_name: Some("EQUAL:gb4 attests to correct user".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "gb4 attests to correct user".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::RenameContainedBy,
+            statement_1_parent: Some("friend2".to_string()),
+            statement_1_name: Some("CONTAINS:gb4 has known signer".to_string()),
+            statement_2_parent: Some("_SELF".to_string()),
+            statement_2_name: Some("EQUAL:friend2 known_attestors same as _SELF".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "gb4 has known signer".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::CopyStatement,
+            statement_1_parent: Some("friend2".to_string()),
+            statement_1_name: Some("NOTEQUAL:gb3 and gb4 are different".to_string()),
+            statement_2_parent: None,
+            statement_2_name: None,
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "gb4 attests to correct user".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::NonequalityFromEntries,
+            statement_1_parent: Some("friend1".to_string()),
+            statement_1_name: Some("VALUEOF:bob-alice signer".to_string()),
+            statement_2_parent: Some("friend2".to_string()),
+            statement_2_name: Some("VALUEOF:charlie-alice signer".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "friend1 and friend2 are different".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::GtFromEntries,
+            statement_1_parent: Some("friend1".to_string()),
+            statement_1_name: Some("VALUEOF:bob age".to_string()),
+            statement_2_parent: Some("_SELF".to_string()),
+            statement_2_name: Some("VALUEOF:age_bound".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "friend1 is at least 18".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::GtFromEntries,
+            statement_1_parent: Some("friend2".to_string()),
+            statement_1_name: Some("VALUEOF:charlie age".to_string()),
+            statement_2_parent: Some("_SELF".to_string()),
+            statement_2_name: Some("VALUEOF:age_bound".to_string()),
+            statement_3_parent: None,
+            statement_3_name: None,
+            optional_entry: None,
+            output_statement_name: "friend2 is at least 18".to_string(),
+        },
+        OperationCmd {
+            operation_type: OperationType::SumOf,
+            statement_1_parent: Some("_SELF".to_string()),
+            statement_1_name: Some("VALUEOF:age_sum".to_string()),
+            statement_2_parent: Some("friend1".to_string()),
+            statement_2_name: Some("VALUEOF:bob age".to_string()),
+            statement_3_parent: Some("friend2".to_string()),
+            statement_3_name: Some("VALUEOF:charlie age".to_string()),
+            optional_entry: None,
+            output_statement_name: "sum of friend1 and friend2 ages".to_string(),
+        },
+    ];
+
+    let alice_grb = POD::execute_oracle_gadget(&grb_input, &grb_ops).unwrap();
+    assert!(alice_grb.verify()? == true);
+
+    for statement in alice_grb.payload.statements_list {
+        println!("{:?}", statement);
+    }
+
     Ok(())
 }
