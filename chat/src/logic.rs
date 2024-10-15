@@ -20,7 +20,7 @@ use std::{
 use tokio::sync::{watch, Mutex};
 use tracing::{info, warn};
 
-pub use auto_update::get_current_version;
+pub use auto_update::{get_app_path, get_current_version, is_dev};
 
 pub struct Logic {
     endpoint: Arc<Mutex<Option<Endpoint>>>,

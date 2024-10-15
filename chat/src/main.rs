@@ -1,16 +1,32 @@
 mod chat;
 mod logic;
+
 use chat::Chat;
 use gpui::{
     actions, point, px, size, App, AppContext, Bounds, KeyBinding, TitlebarOptions, VisualContext,
     WindowBounds, WindowOptions,
 };
+use logic::{get_app_path, is_dev};
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 actions!(chat, [Quit]);
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt().init();
+    let app_dir = get_app_path();
+    let file_appender = RollingFileAppender::new(Rotation::NEVER, app_dir, "chat.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    tracing_subscriber::registry()
+        .with(if is_dev() {
+            Some(fmt::layer().with_writer(non_blocking))
+        } else {
+            None
+        })
+        .with(fmt::layer().with_writer(std::io::stdout))
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .init();
 
     App::new().run(|cx: &mut AppContext| {
         cx.activate(true);
