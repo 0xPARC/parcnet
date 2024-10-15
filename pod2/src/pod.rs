@@ -14,88 +14,26 @@ use crate::schnorr::SchnorrSecretKey;
 use crate::schnorr::SchnorrSignature;
 use crate::schnorr::SchnorrSigner;
 
+use entry::Entry;
+use gadget::GadgetID;
+use origin::Origin;
+use payload::{HashablePayload, PODPayload};
+use value::{HashableEntryValue, ScalarOrVec};
+
 //mod circuit;
+mod entry;
+mod gadget;
+mod operation;
+mod origin;
+mod payload;
+mod statement;
 mod util;
+mod value;
 
 pub(crate) type Error = Box<dyn std::error::Error>;
 
-// EntryValue trait, and ScalarOrVec type which implements it.
-// This is a field element or array of field elements.
-pub trait HashableEntryValue: Clone + PartialEq {
-    fn hash_or_value(&self) -> GoldilocksField;
-}
-
-impl HashableEntryValue for GoldilocksField {
-    fn hash_or_value(&self) -> GoldilocksField {
-        *self
-    }
-}
-
-impl HashableEntryValue for Vec<GoldilocksField> {
-    fn hash_or_value(&self) -> GoldilocksField {
-        PoseidonHash::hash_no_pad(self).to_vec()[0]
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum ScalarOrVec {
-    Scalar(GoldilocksField),
-    Vector(Vec<GoldilocksField>),
-}
-
-impl HashableEntryValue for ScalarOrVec {
-    fn hash_or_value(&self) -> GoldilocksField {
-        match self {
-            Self::Scalar(s) => s.hash_or_value(),
-            Self::Vector(v) => v.hash_or_value(),
-        }
-    }
-}
-
-// An Entry, which is just a key-value pair.
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Entry {
-    pub key: String,
-    pub value: ScalarOrVec,
-}
-
-impl Entry {
-    pub fn new_from_scalar(key: String, value: GoldilocksField) -> Self {
-        Entry {
-            key,
-            value: ScalarOrVec::Scalar(value),
-        }
-    }
-
-    pub fn new_from_vec(key: String, value: Vec<GoldilocksField>) -> Self {
-        Entry {
-            key,
-            value: ScalarOrVec::Vector(value),
-        }
-    }
-}
-
-// An Origin, which represents a reference to an ancestor POD.
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Origin {
-    pub origin_id: GoldilocksField, // reserve 0 for NONE, 1 for SELF
-    pub origin_name: String,
-    pub gadget_id: GadgetID, // if origin_id is SELF, this is none; otherwise, it's the gadget_id
-}
-
-impl Origin {
-    pub const NONE: Self = Origin {
-        origin_id: GoldilocksField::ZERO,
-        origin_name: String::new(),
-        gadget_id: GadgetID::NONE,
-    };
-}
-
 // A Statement, which is a claim about one or more entries.
 // Entries are ValueOf statements.
-
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(u64)]
 pub enum StatementPredicate {
@@ -153,93 +91,6 @@ impl Statement {
             optional_value: Some(entry.value.clone()),
         }
     }
-}
-
-// HashablePayload trait, and PODPayload which implements it.
-
-pub trait HashablePayload: Clone + PartialEq {
-    fn to_field_vec(&self) -> Vec<GoldilocksField>;
-
-    fn hash_payload(&self) -> GoldilocksField {
-        let ins = self.to_field_vec();
-        PoseidonHash::hash_no_pad(&ins).to_vec()[0]
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct PODPayload {
-    statements_list: Vec<(String, Statement)>, // ORDERED list of statements, ordered by names
-    pub statements_map: HashMap<String, Statement>,
-}
-
-impl PODPayload {
-    pub fn new(statements: &HashMap<String, Statement>) -> Self {
-        let mut statements_and_names_list = Vec::new();
-        for (name, statement) in statements.iter() {
-            statements_and_names_list.push((name.clone(), statement.clone()));
-        }
-        statements_and_names_list.sort_by(|a, b| a.0.cmp(&b.0));
-        Self {
-            statements_list: statements_and_names_list,
-            statements_map: statements.clone(),
-        }
-    }
-}
-
-impl HashablePayload for Vec<Statement> {
-    fn to_field_vec(&self) -> Vec<GoldilocksField> {
-        self.iter()
-            .map(|statement| {
-                [
-                    vec![
-                        GoldilocksField(statement.predicate as u64),
-                        statement.origin1.origin_id,
-                        GoldilocksField(statement.origin1.gadget_id as u64),
-                        hash_string_to_field(&statement.key1),
-                    ],
-                    match &statement.origin2 {
-                        Some(o) => vec![o.origin_id, GoldilocksField(o.gadget_id as u64)],
-                        _ => vec![GoldilocksField(0), GoldilocksField(0)],
-                    },
-                    match &statement.key2 {
-                        Some(kn) => vec![hash_string_to_field(kn)],
-                        _ => vec![GoldilocksField::ZERO],
-                    },
-                    match &statement.origin3 {
-                        Some(o) => vec![o.origin_id, GoldilocksField(o.gadget_id as u64)],
-                        _ => vec![GoldilocksField(0), GoldilocksField(0)],
-                    },
-                    match &statement.key3 {
-                        Some(kn) => vec![hash_string_to_field(kn)],
-                        _ => vec![GoldilocksField::ZERO],
-                    },
-                    match &statement.optional_value {
-                        Some(x) => vec![x.hash_or_value()],
-                        _ => vec![GoldilocksField::ZERO],
-                    },
-                ]
-                .concat()
-            })
-            .collect::<Vec<Vec<GoldilocksField>>>()
-            .concat()
-    }
-}
-
-impl HashablePayload for PODPayload {
-    fn to_field_vec(&self) -> Vec<GoldilocksField> {
-        let mut statements_vec = Vec::new();
-        for (_, statement) in self.statements_list.iter() {
-            statements_vec.push(statement.clone());
-        }
-        statements_vec.to_field_vec()
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum GadgetID {
-    NONE = 0,
-    SCHNORR16 = 1,
-    ORACLE = 2,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]

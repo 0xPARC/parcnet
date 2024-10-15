@@ -1,0 +1,89 @@
+// HashablePayload trait, and PODPayload which implements it.
+
+use std::collections::HashMap;
+
+use plonky2::{
+    field::{goldilocks_field::GoldilocksField, types::Field},
+    hash::poseidon::PoseidonHash,
+    plonk::config::{GenericHashOut, Hasher},
+};
+
+use super::{util::hash_string_to_field, value::HashableEntryValue, Statement};
+
+pub trait HashablePayload: Clone + PartialEq {
+    fn to_field_vec(&self) -> Vec<GoldilocksField>;
+
+    fn hash_payload(&self) -> GoldilocksField {
+        let ins = self.to_field_vec();
+        PoseidonHash::hash_no_pad(&ins).to_vec()[0]
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PODPayload {
+    pub statements_list: Vec<(String, Statement)>, // ORDERED list of statements, ordered by names
+    pub statements_map: HashMap<String, Statement>,
+}
+
+impl PODPayload {
+    pub fn new(statements: &HashMap<String, Statement>) -> Self {
+        let mut statements_and_names_list = Vec::new();
+        for (name, statement) in statements.iter() {
+            statements_and_names_list.push((name.clone(), statement.clone()));
+        }
+        statements_and_names_list.sort_by(|a, b| a.0.cmp(&b.0));
+        Self {
+            statements_list: statements_and_names_list,
+            statements_map: statements.clone(),
+        }
+    }
+}
+
+impl HashablePayload for Vec<Statement> {
+    fn to_field_vec(&self) -> Vec<GoldilocksField> {
+        self.iter()
+            .map(|statement| {
+                [
+                    vec![
+                        GoldilocksField(statement.predicate as u64),
+                        statement.origin1.origin_id,
+                        GoldilocksField(statement.origin1.gadget_id as u64),
+                        hash_string_to_field(&statement.key1),
+                    ],
+                    match &statement.origin2 {
+                        Some(o) => vec![o.origin_id, GoldilocksField(o.gadget_id as u64)],
+                        _ => vec![GoldilocksField(0), GoldilocksField(0)],
+                    },
+                    match &statement.key2 {
+                        Some(kn) => vec![hash_string_to_field(kn)],
+                        _ => vec![GoldilocksField::ZERO],
+                    },
+                    match &statement.origin3 {
+                        Some(o) => vec![o.origin_id, GoldilocksField(o.gadget_id as u64)],
+                        _ => vec![GoldilocksField(0), GoldilocksField(0)],
+                    },
+                    match &statement.key3 {
+                        Some(kn) => vec![hash_string_to_field(kn)],
+                        _ => vec![GoldilocksField::ZERO],
+                    },
+                    match &statement.optional_value {
+                        Some(x) => vec![x.hash_or_value()],
+                        _ => vec![GoldilocksField::ZERO],
+                    },
+                ]
+                .concat()
+            })
+            .collect::<Vec<Vec<GoldilocksField>>>()
+            .concat()
+    }
+}
+
+impl HashablePayload for PODPayload {
+    fn to_field_vec(&self) -> Vec<GoldilocksField> {
+        let mut statements_vec = Vec::new();
+        for (_, statement) in self.statements_list.iter() {
+            statements_vec.push(statement.clone());
+        }
+        statements_vec.to_field_vec()
+    }
+}
