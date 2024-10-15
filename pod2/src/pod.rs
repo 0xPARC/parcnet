@@ -106,6 +106,8 @@ pub enum StatementPredicate {
     Gt = 4,
     Contains = 5,
     SumOf = 6,
+    ProductOf = 7,
+    MaxOf = 8,
 }
 
 pub fn predicate_name(predicate: StatementPredicate) -> String {
@@ -117,6 +119,8 @@ pub fn predicate_name(predicate: StatementPredicate) -> String {
         StatementPredicate::Gt => "GT".to_string(),
         StatementPredicate::Contains => "CONTAINS".to_string(),
         StatementPredicate::SumOf => "SUMOF".to_string(),
+        StatementPredicate::ProductOf => "PRODUCTOF".to_string(),
+        StatementPredicate::MaxOf => "MAXOF".to_string(),
     }
 }
 
@@ -543,6 +547,8 @@ pub enum OperationType {
     ContainsFromEntries = 8,
     RenameContainedBy = 9,
     SumOf = 10,
+    ProductOf = 11,
+    MaxOf = 12,
 }
 
 #[derive(Clone, Debug)]
@@ -873,6 +879,72 @@ impl OperationType {
                         key3: Some(statement3.key1.clone()),
                         optional_value: None,
                     }),
+                    _ => None,
+                }
+            }
+            (OperationType::ProductOf, Some(statement1), Some(statement2), Some(statement3), _) => {
+                match (
+                    statement1.predicate,
+                    statement1.optional_value,
+                    statement2.predicate,
+                    statement2.optional_value,
+                    statement3.predicate,
+                    statement3.optional_value,
+                ) {
+                    (
+                        StatementPredicate::ValueOf,
+                        Some(ScalarOrVec::Scalar(product)),
+                        StatementPredicate::ValueOf,
+                        Some(ScalarOrVec::Scalar(left_product)),
+                        StatementPredicate::ValueOf,
+                        Some(ScalarOrVec::Scalar(right_product)),
+                    ) if (product == left_product * right_product) => Some(Statement {
+                        predicate: StatementPredicate::ProductOf,
+                        origin1: statement1.origin1,
+                        key1: statement1.key1.clone(),
+                        origin2: Some(statement2.origin1),
+                        key2: Some(statement2.key1.clone()),
+                        origin3: Some(statement3.origin1),
+                        key3: Some(statement3.key1.clone()),
+                        optional_value: None,
+                    }),
+                    _ => None,
+                }
+            }
+            (OperationType::MaxOf, Some(statement1), Some(statement2), Some(statement3), _) => {
+                match (
+                    statement1.predicate,
+                    statement1.optional_value,
+                    statement2.predicate,
+                    statement2.optional_value,
+                    statement3.predicate,
+                    statement3.optional_value,
+                ) {
+                    (
+                        StatementPredicate::ValueOf,
+                        Some(ScalarOrVec::Scalar(max)),
+                        StatementPredicate::ValueOf,
+                        Some(ScalarOrVec::Scalar(left_value)),
+                        StatementPredicate::ValueOf,
+                        Some(ScalarOrVec::Scalar(right_value)),
+                    ) if (max
+                        == if left_value.to_canonical_u64() > right_value.to_canonical_u64() {
+                            left_value
+                        } else {
+                            right_value
+                        }) =>
+                    {
+                        Some(Statement {
+                            predicate: StatementPredicate::MaxOf,
+                            origin1: statement1.origin1,
+                            key1: statement1.key1.clone(),
+                            origin2: Some(statement2.origin1),
+                            key2: Some(statement2.key1.clone()),
+                            origin3: Some(statement3.origin1),
+                            key3: Some(statement3.key1.clone()),
+                            optional_value: None,
+                        })
+                    }
                     _ => None,
                 }
             }
@@ -1413,6 +1485,8 @@ mod tests {
 
     #[test]
     fn goodboy_test() -> Result<(), Error> {
+        // A HackMD detailing execution and how each statement gets deduced is available here https://hackmd.io/@gubsheep/B1Rajmik1g
+
         let protocol = SchnorrSigner::new();
 
         let alice_sk = SchnorrSecretKey { sk: 25 };
@@ -1957,6 +2031,395 @@ mod tests {
         for statement in alice_grb.payload.statements_list {
             println!("{:?}", statement);
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn final_pod_test() -> Result<(), Error> {
+        // In this test we will execute this PEX script below and generate final-pod using
+        // The oracle gadget on 4 different SchnorrPOD assigned to Alice, Bob, and Charlie
+
+        // [createpod final-pod  ; Charlie's pod (multiplayer execution from Alice and Bob)
+        //  remote-max [max [from @alice [pod? [result [+ [pod? [x]] [pod? [z]]]]]]
+        //                  [from @bob [pod? [result [* [pod? [a]] [pod? [b]]]]]]]
+        //
+        //  local-sum [+ [pod? [local-value]] 42]
+        //
+        //  overall-max [max remote-max
+        //                   local-sum]]
+
+        let alice_sk = SchnorrSecretKey { sk: 25 };
+        let bob_sk = SchnorrSecretKey { sk: 26 };
+        let charlie_sk = SchnorrSecretKey { sk: 27 };
+        // Let's create simple-pod-1
+
+        // [createpod simple-pod-1  ; Alice's first pod
+        //   x 10
+        //   y 20]
+
+        let simple_pod_1_x = Entry::new_from_scalar("x".to_string(), GoldilocksField(10));
+        let simple_pod_1_y = Entry::new_from_scalar("y".to_string(), GoldilocksField(20));
+
+        let simple_pod_1 = POD::execute_schnorr_gadget(
+            &vec![simple_pod_1_x.clone(), simple_pod_1_y.clone()],
+            &alice_sk,
+        );
+
+        // ^
+        // [defpod simple-pod-1
+        //   x 10
+        //   y 20
+        //   :meta [[user @alice]]]
+
+        // Let's create simple-pod-2
+
+        // [createpod simple-pod-2  ; Alice's second pod
+        //   z 15
+        //   w 25]
+
+        let simple_pod_2_z = Entry::new_from_scalar("z".to_string(), GoldilocksField(15));
+        let simple_pod_2_w = Entry::new_from_scalar("w".to_string(), GoldilocksField(25));
+
+        let simple_pod_2 = POD::execute_schnorr_gadget(
+            &vec![simple_pod_2_z.clone(), simple_pod_2_w.clone()],
+            &alice_sk,
+        );
+
+        // [defpod simple-pod-2
+        //   z 15
+        //   w 25
+        //   :meta [[user @alice]]]
+
+        // Let's create simple-pod-3
+
+        // [createpod simple-pod-3  ; Bob's pod
+        //   a 30
+        //   b 40]
+
+        let simple_pod_3_a = Entry::new_from_scalar("a".to_string(), GoldilocksField(30));
+        let simple_pod_3_b = Entry::new_from_scalar("b".to_string(), GoldilocksField(40));
+
+        let simple_pod_3 = POD::execute_schnorr_gadget(
+            &vec![simple_pod_3_a.clone(), simple_pod_3_b.clone()],
+            &bob_sk,
+        );
+
+        // [defpod simple-pod-3
+        //   a 30
+        //   b 40
+        //   :meta [[user @bob]]]
+
+        // Let's create Charlie's local pod
+
+        // [createpod simple-pod-4  ; Charlie's pod
+        //   local-value 100]
+
+        let simple_pod_4_local_value =
+            Entry::new_from_scalar("local-value".to_string(), GoldilocksField(100));
+
+        let simple_pod_4 =
+            POD::execute_schnorr_gadget(&vec![simple_pod_4_local_value.clone()], &charlie_sk);
+
+        // Now let's create the sum-pod using the Oracle gadget
+
+        // [createpod sum-pod  ; Alice's sum pod
+        //   result [+ [pod? [x]]    ; Get x from Alice's simple-pod-1
+        //             [pod? [z]]]]  ; Get z from Alice's simple-pod-2
+
+        let mut sum_pod_input_pods = HashMap::new();
+        sum_pod_input_pods.insert("pod-1".to_string(), simple_pod_1.clone());
+        sum_pod_input_pods.insert("pod-2".to_string(), simple_pod_2.clone());
+
+        // No need to do origin remapping because it's all SELF
+        let sum_pod_input = GPGInput::new(sum_pod_input_pods, HashMap::new());
+
+        // Note to Ryan: a better way to do these OperationCmd is to have an enum with different
+        // Fields inside it for each operation
+        // In fact we could probably do the same for statement where it would be a big enum type
+        // We wouldn't have as many Some and None everywhere.
+
+        let sum_pod_ops = vec![
+            // If we have this operation, we would copy X and reveal it. Here we don't copy X (we just prove that 25 is the sum of x and z)
+            // OperationCmd {
+            //     operation_type: OperationType::CopyStatement,
+            //     statement_1_parent: Some("pod-1".to_string()), // a pointer to simple_pod_1, using the sum_pod_input_pods HashMap
+            //     statement_1_name: Some("VALUEOF:x".to_string()), // a pointer to the value of statement in simple_pod_1
+            //                                                     // this name comes from applying the predicate name (from predicate_name) followed by the
+            //                                                     // statement name
+            //     statement_2_parent: None,
+            //     statement_2_name: None,
+            //     statement_3_name: None,
+            //     statement_3_parent: None,
+            //     optional_entry: None,
+            //     output_statement_name: "pod-1-value-of-x".to_string()
+            // },
+            OperationCmd {
+                operation_type: OperationType::NewEntry,
+                statement_1_parent: None,
+                statement_1_name: None,
+                statement_2_parent: None,
+                statement_2_name: None,
+                statement_3_parent: None,
+                statement_3_name: None,
+                optional_entry: Some(Entry::new_from_scalar(
+                    "result".to_string(),
+                    GoldilocksField(10 + 15),
+                )), // We store simple-pod-1.x + simple-pod-2.z in a new entry
+                output_statement_name: "result".to_string(), // statement name are only used to have operations point at statement (poor man's pointer)
+                                                             // they are not cryptographic, hence why we need another name beyond the optional entry
+            },
+            OperationCmd {
+                operation_type: OperationType::SumOf,
+                statement_1_parent: Some("_SELF".to_string()),
+                statement_1_name: Some("VALUEOF:result".to_string()),
+                statement_2_parent: Some("pod-2".to_string()),
+                statement_2_name: Some("VALUEOF:z".to_string()),
+                statement_3_parent: Some("pod-1".to_string()),
+                statement_3_name: Some("VALUEOF:x".to_string()),
+                optional_entry: None,
+                output_statement_name: "sum-of-pod-1-x-and-pod-2-z".to_string(),
+            },
+        ];
+
+        let sum_pod = POD::execute_oracle_gadget(&sum_pod_input, &sum_pod_ops).unwrap();
+        assert!(sum_pod.verify()? == true);
+
+        // [defpod sum-pod
+        //   result 25
+        //   :meta [[user @alice]
+        //          [result [+ [pod? [x]] [pod? [z]]]]]]
+
+        // Now let's create the product-pod using the Oracle gadget
+
+        // [createpod product-pod  ; Bob's product pod
+        //   result [* [pod? [a]]    ; Get a from Bob's simple-pod-3
+        //             [pod? [b]]]]  ; Get b from Bob's simple-pod-3
+
+        let mut product_pod_input_pods = HashMap::new();
+        product_pod_input_pods.insert("pod-3".to_string(), simple_pod_3.clone());
+
+        // No need to do origin remapping because it's all SELF
+        let product_pod_input = GPGInput::new(product_pod_input_pods, HashMap::new());
+
+        let product_pod_ops = vec![
+            OperationCmd {
+                operation_type: OperationType::NewEntry,
+                statement_1_parent: None,
+                statement_1_name: None,
+                statement_2_parent: None,
+                statement_2_name: None,
+                statement_3_parent: None,
+                statement_3_name: None,
+                optional_entry: Some(Entry::new_from_scalar(
+                    "result".to_string(),
+                    GoldilocksField(30 * 40),
+                )), // We store simple-pod-1.x + simple-pod-2.z in a new entry
+                output_statement_name: "result".to_string(), // statement name are only used to have operations point at statement (poor man's pointer)
+                                                             // they are not cryptographic, hence why we need another name beyond the optional entry
+            },
+            OperationCmd {
+                operation_type: OperationType::ProductOf,
+                statement_1_parent: Some("_SELF".to_string()),
+                statement_1_name: Some("VALUEOF:result".to_string()),
+                statement_2_parent: Some("pod-3".to_string()),
+                statement_2_name: Some("VALUEOF:a".to_string()),
+                statement_3_parent: Some("pod-3".to_string()),
+                statement_3_name: Some("VALUEOF:b".to_string()),
+                optional_entry: None,
+                output_statement_name: "product-of-pod-3-a-and-pod-3-b".to_string(),
+            },
+        ];
+
+        let product_pod = POD::execute_oracle_gadget(&product_pod_input, &product_pod_ops).unwrap();
+        assert!(product_pod.verify()? == true);
+
+        // [defpod product-pod
+        //   result 1200
+        //   :meta [[user @bob]
+        //          [result [* [pod? [a]] [pod? [b]]]]]]
+
+        // And finally, now let's put together the final POD
+        // Because the Oracle Gadget is meant to receive all the PODs involved in the computation
+        // Details on where the POD comes from (like from @alice or from @bob) will not be visible in the operations below
+        // You can think of the Oracle gadget as a magic box into which we put all the input PODs and we compute the output
+
+        // [createpod final-pod  ; Charlie's pod (multiplayer execution from Alice and Bob)
+        //   remote-max [max [from @alice [pod? [result [+ [pod? [x]] [pod? [z]]]]]]
+        //                   [from @bob [pod? [result [* [pod? [a]] [pod? [b]]]]]]]
+        //
+        //   local-sum [+ [pod? [local-value]] 42]
+        //
+        //   overall-max [max remote-max
+        //                    local-sum]]
+
+        let mut final_pod_input_pods = HashMap::new();
+        final_pod_input_pods.insert("sum-pod".to_string(), sum_pod.clone());
+        final_pod_input_pods.insert("product-pod".to_string(), product_pod.clone());
+        final_pod_input_pods.insert("simple-pod-4".to_string(), simple_pod_4.clone());
+
+        // We need to remap the origins that are in product-pod and sum-pod. They can't just
+        // become product-pod and sum-pod, they need their own name
+        // We'll simply collapse them to pod-1, pod-2, pod-3 given there is no name clash here
+        // (ie: an origin in sum-pod doesn't clash with an origin in product-pod)
+        let mut final_pod_origin_renaming_map = HashMap::new();
+        final_pod_origin_renaming_map.insert(
+            ("sum-pod".to_string(), "pod-1".to_string()),
+            "pod-1".to_string(),
+        );
+        final_pod_origin_renaming_map.insert(
+            ("sum-pod".to_string(), "pod-2".to_string()),
+            "pod-2".to_string(),
+        );
+        final_pod_origin_renaming_map.insert(
+            ("product-pod".to_string(), "pod-3".to_string()),
+            "pod-3".to_string(),
+        );
+        // Note to Ryan: remapping is unnecessary if we don't have strings as poor man's pointer
+        // It would never be ambiguous what we are referring to
+        // However the serialization story is unknown. Maybe we use content ID as origin.
+        // The issue with content ID is they can leak data because you can brute force a hidden
+        // value if you happen to know all of them but that one (keep hashing different value till you get to the same ID)
+        let final_pod_input = GPGInput::new(final_pod_input_pods, final_pod_origin_renaming_map);
+
+        let final_pod_ops = vec![
+            // We copy the ProductOf and SumOf statement from product-pod and sum-pod
+            // To carry over that part of the computational graph
+            // We want final-pod's remote-max to be clearly the max of two entries called
+            // "result" that came from the sum and the product of other pods
+            // We could have remote-max be the max of two pod (and stop there)
+            // But this is not what is being expressed in the createpod of final-pod
+            OperationCmd {
+                operation_type: OperationType::CopyStatement,
+                statement_1_parent: Some("sum-pod".to_string()),
+                statement_1_name: Some("SUMOF:sum-of-pod-1-x-and-pod-2-z".to_string()),
+                statement_2_parent: None,
+                statement_2_name: None,
+                statement_3_parent: None,
+                statement_3_name: None,
+                optional_entry: None,
+                output_statement_name: "sum-of-pod-1-x-and-pod-2-z".to_string(),
+            },
+            OperationCmd {
+                operation_type: OperationType::CopyStatement,
+                statement_1_parent: Some("product-pod".to_string()),
+                statement_1_name: Some("PRODUCTOF:product-of-pod-3-a-and-pod-3-b".to_string()),
+                statement_2_parent: None,
+                statement_2_name: None,
+                statement_3_parent: None,
+                statement_3_name: None,
+                optional_entry: None,
+                output_statement_name: "product-of-pod-3-a-and-pod-3-b".to_string(),
+            },
+            OperationCmd {
+                operation_type: OperationType::NewEntry,
+                statement_1_parent: None,
+                statement_1_name: None,
+                statement_2_parent: None,
+                statement_2_name: None,
+                statement_3_parent: None,
+                statement_3_name: None,
+                optional_entry: Some(Entry::new_from_scalar(
+                    "remote-max".to_string(),
+                    GoldilocksField(1200),
+                )),
+                output_statement_name: "remote-max".to_string(),
+            },
+            OperationCmd {
+                operation_type: OperationType::MaxOf,
+                statement_1_parent: Some("_SELF".to_string()),
+                statement_1_name: Some("VALUEOF:remote-max".to_string()),
+                statement_2_parent: Some("sum-pod".to_string()),
+                statement_2_name: Some("VALUEOF:result".to_string()),
+                statement_3_parent: Some("product-pod".to_string()),
+                statement_3_name: Some("VALUEOF:result".to_string()),
+                optional_entry: None,
+                output_statement_name: "max-sum-pod-and-product-pod".to_string(),
+            },
+            OperationCmd {
+                operation_type: OperationType::NewEntry,
+                statement_1_parent: None,
+                statement_1_name: None,
+                statement_2_parent: None,
+                statement_2_name: None,
+                statement_3_parent: None,
+                statement_3_name: None,
+                optional_entry: Some(Entry::new_from_scalar(
+                    "42".to_string(),
+                    GoldilocksField(42),
+                )),
+                output_statement_name: "42".to_string(),
+            },
+            OperationCmd {
+                operation_type: OperationType::NewEntry,
+                statement_1_parent: None,
+                statement_1_name: None,
+                statement_2_parent: None,
+                statement_2_name: None,
+                statement_3_parent: None,
+                statement_3_name: None,
+                optional_entry: Some(Entry::new_from_scalar(
+                    "local-sum".to_string(),
+                    GoldilocksField(142),
+                )),
+                output_statement_name: "local-sum".to_string(),
+            },
+            OperationCmd {
+                operation_type: OperationType::SumOf,
+                statement_1_parent: Some("_SELF".to_string()),
+                statement_1_name: Some("VALUEOF:local-sum".to_string()),
+                statement_2_parent: Some("simple-pod-4".to_string()),
+                statement_2_name: Some("VALUEOF:local-value".to_string()),
+                statement_3_parent: Some("_SELF".to_string()),
+                statement_3_name: Some("VALUEOF:42".to_string()),
+                optional_entry: None,
+                output_statement_name: "sum-of-simple-pod-4-local-value-and-42".to_string(),
+            },
+            OperationCmd {
+                operation_type: OperationType::NewEntry,
+                statement_1_parent: None,
+                statement_1_name: None,
+                statement_2_parent: None,
+                statement_2_name: None,
+                statement_3_parent: None,
+                statement_3_name: None,
+                optional_entry: Some(Entry::new_from_scalar(
+                    "overall-max".to_string(),
+                    GoldilocksField(1200),
+                )),
+                output_statement_name: "overall-max".to_string(),
+            },
+            OperationCmd {
+                operation_type: OperationType::MaxOf,
+                statement_1_parent: Some("_SELF".to_string()),
+                statement_1_name: Some("VALUEOF:overall-max".to_string()),
+                statement_2_parent: Some("_SELF".to_string()),
+                statement_2_name: Some("VALUEOF:remote-max".to_string()),
+                statement_3_parent: Some("_SELF".to_string()),
+                statement_3_name: Some("VALUEOF:local-sum".to_string()),
+                optional_entry: None,
+                output_statement_name: "max-of-remote-max-and-local-max".to_string(),
+            },
+        ];
+
+        let final_pod = POD::execute_oracle_gadget(&final_pod_input, &final_pod_ops).unwrap();
+        assert!(final_pod.verify()? == true);
+
+        // If you are curious what the statements in this POD are
+        // for statement in final_pod.payload.statements_list {
+        //     println!("{:?}", statement);
+        // }
+
+        // [defpod final-pod
+        //   remote-max 1200
+        //   local-sum 142
+        //   overall-max 1200
+        //   :meta [[user @charlie]
+        //          [remote-max [max [pod? [result [+ [pod? [x]] [pod? [z]]]]]
+        //                           [pod? [result [* [pod? [a]] [pod? [b]]]]]]]
+        //          [local-sum [+ [pod? [local-value]] 42]]
+        //          [overall-max [max local-sum
+        //                            custom-sum]]]]
 
         Ok(())
     }
