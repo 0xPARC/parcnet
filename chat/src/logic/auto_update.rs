@@ -3,21 +3,19 @@ use anyhow::{anyhow, ensure};
 use gpui::{Result, SemanticVersion};
 use serde_json::Value;
 use std::sync::Mutex;
-use std::{env, ffi::OsString, path::PathBuf, sync::Arc, time::Duration};
+use std::{env, path::PathBuf, sync::Arc, time::Duration};
 use tempfile::TempDir;
 use tokio::process::Command;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const RELEASES_URL: &str = "https://api.github.com/repos/0xPARC/parcnet/releases/latest";
 
 pub fn get_current_version() -> SemanticVersion {
-    warn!("using debug get current version");
-    // let version_str = env!("CARGO_PKG_VERSION").to_string();
-    // version_str
-    //     .parse::<SemanticVersion>()
-    //     .expect("invalid version format")
-    SemanticVersion::new(0, 0, 1)
+    let version_str = env!("CARGO_PKG_VERSION").to_string();
+    version_str
+        .parse::<SemanticVersion>()
+        .expect("invalid version format")
 }
 
 struct MacOsUnmounter {
@@ -93,6 +91,10 @@ async fn check_for_update(
     status: Arc<Mutex<AutoUpdateStatus>>,
     current_version: SemanticVersion,
 ) -> Result<()> {
+    if is_dev() {
+        info!("detected dev mode, skipping auto update");
+        return Ok(());
+    }
     *status.lock().unwrap() = AutoUpdateStatus::Checking;
     let http_client = reqwest::Client::new();
     let release: Value = http_client
@@ -117,15 +119,14 @@ async fn check_for_update(
         let temp_dir = tempfile::Builder::new().prefix("chat-update").tempdir()?;
         let downloaded_asset = temp_dir.path().join("chat.dmg");
         tokio::fs::write(&downloaded_asset, &dmg).await?;
-
         *status.lock().unwrap() = AutoUpdateStatus::Installing;
         let path = install_release(&temp_dir, downloaded_asset).await?;
-
+        info!("updated to version {} at {:?}", latest_version, path);
         *status.lock().unwrap() = AutoUpdateStatus::Updated {
             binary_path: path.clone(),
         };
-
-        Command::new(path).spawn()?;
+        info!("restarting the app");
+        Command::new("open").arg("-n").arg(&path).spawn()?;
         std::process::exit(0);
     } else {
         *status.lock().unwrap() = AutoUpdateStatus::Idle;
@@ -135,15 +136,8 @@ async fn check_for_update(
 
 async fn install_release(temp_dir: &TempDir, downloaded_dmg: PathBuf) -> Result<PathBuf> {
     let running_app_path = get_app_path();
-
-    let running_app_filename = running_app_path
-        .file_name()
-        .ok_or_else(|| anyhow!("invalid app path"))?;
-
     let mount_path = temp_dir.path().join("chat");
-    let mut mounted_app_path: OsString = mount_path.join(running_app_filename).into();
 
-    mounted_app_path.push("/");
     let output = Command::new("hdiutil")
         .args(["attach", "-nobrowse"])
         .arg(&downloaded_dmg)
@@ -164,7 +158,7 @@ async fn install_release(temp_dir: &TempDir, downloaded_dmg: PathBuf) -> Result<
 
     let output = Command::new("rsync")
         .args(["-av", "--delete"])
-        .arg(&mounted_app_path)
+        .arg(mount_path.join("chat.app/"))
         .arg(&running_app_path)
         .output()
         .await?;
@@ -178,8 +172,18 @@ async fn install_release(temp_dir: &TempDir, downloaded_dmg: PathBuf) -> Result<
     Ok(running_app_path)
 }
 
-fn get_app_path() -> PathBuf {
+#[cfg(feature = "dev-mode")]
+pub fn is_dev() -> bool {
+    true
+}
+#[cfg(not(feature = "dev-mode"))]
+pub fn is_dev() -> bool {
+    false
+}
+
+pub fn get_app_path() -> PathBuf {
     let mut dir = env::current_exe().unwrap();
+    dir.pop();
     dir.pop();
     dir.pop();
     dir
