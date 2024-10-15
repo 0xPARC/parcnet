@@ -102,7 +102,7 @@ jobs:
         run: |
           cargo install apple-codesign
           echo "$APPLECONNECT_KEY" > key.json
-          rcodesign notary-submit --api-key-path key.json chat.dmg --staple
+          rcodesign notary-submit --wait --max-wait-seconds 1440 --staple --api-key-path key.json chat.dmg
           rm key.json
 
       - name: Generate release notes

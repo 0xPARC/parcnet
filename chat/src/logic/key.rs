@@ -4,7 +4,7 @@ use tracing::info;
 
 fn key_file_path() -> PathBuf {
     std::env::current_exe()
-        .expect("failed to get current executable path")
+        .expect("failed to get executable path")
         .parent()
         .expect("failed to get parent directory")
         .join("user_key.bin")
