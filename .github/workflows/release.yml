@@ -44,15 +44,15 @@ jobs:
           echo "Decoding certificate..."
           echo $APPLE_DID_CERTIFICATE_BASE64 | base64 --decode > certificate.p12
           echo "Creating keychain..."
-          security create-keychain -p "" parcnet-chat-codesign.keychain
+          security create-keychain -p "pwd" parcnet-chat-codesign.keychain
           echo "Setting default keychain..."
           security default-keychain -s parcnet-chat-codesign.keychain
           echo "Unlocking keychain..."
-          security unlock-keychain -p "" parcnet-chat-codesign.keychain
+          security unlock-keychain -p "pwd" parcnet-chat-codesign.keychain
           echo "Importing certificate..."
           security import certificate.p12 -k parcnet-chat-codesign.keychain -T /usr/bin/codesign
           echo "Setting key partition list..."
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" parcnet-chat-codesign.keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "pwd" parcnet-chat-codesign.keychain
           echo "Certificate installation complete."
 
       - name: Codesign app
