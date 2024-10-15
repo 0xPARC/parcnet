@@ -33,11 +33,7 @@ fn str_to_fields(s: &str) -> Vec<GoldilocksField> {
     // Split up into chunks of length 4 and convert these to u32s
     // (big-endian convention), embedding the result in the field.
     s_bv.chunks(4)
-        .map(|chunk| {
-            chunk
-                .iter()
-                .fold(0, |acc, b| 256 * acc + *b as u32)
-        })
+        .map(|chunk| chunk.iter().fold(0, |acc, b| 256 * acc + *b as u32))
         .map(|n| GoldilocksField(n as u64))
         .collect()
 }
