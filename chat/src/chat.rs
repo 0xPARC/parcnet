@@ -1,4 +1,6 @@
+pub mod assets;
 mod input;
+mod loader;
 
 use crate::logic::{get_current_version, Logic};
 use gpui::{
@@ -7,6 +9,7 @@ use gpui::{
 };
 use gpui::{View, VisualContext};
 use input::TextInput;
+use loader::Loader;
 use std::sync::Arc;
 
 actions!(chat, [Enter]);
@@ -14,6 +17,7 @@ actions!(chat, [Enter]);
 pub struct Chat {
     logic: Arc<Logic>,
     message_input: View<TextInput>,
+    loader: View<Loader>,
     scroll_handle: UniformListScrollHandle,
 }
 
@@ -27,6 +31,7 @@ impl Chat {
         .detach();
 
         let mut message_watch = logic.get_message_watch();
+        let mut initial_sync_watch = logic.get_initial_sync_wach();
 
         let logic_quit = logic.clone();
         cx.on_app_quit(move |_| {
@@ -49,13 +54,26 @@ impl Chat {
         })
         .detach();
 
+        cx.spawn(|view, mut cx| async move {
+            while initial_sync_watch.changed().await.is_ok() {
+                let _ = cx.update(|cx| {
+                    view.update(cx, |_this, cx| {
+                        cx.notify();
+                    })
+                });
+            }
+        })
+        .detach();
+
         cx.bind_keys([KeyBinding::new("enter", Enter, None)]);
         let message_input = cx.new_view(TextInput::new);
+        let loader = cx.new_view(Loader::new);
         let scroll_handle = UniformListScrollHandle::new();
 
         Self {
             logic,
             message_input,
+            loader,
             scroll_handle,
         }
     }
@@ -90,51 +108,84 @@ impl Render for Chat {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
         let view = cx.view().clone();
         let messages = self.logic.get_messages();
-        div()
-            .child(
-                div()
-                    .flex()
-                    .h(px(32.))
-                    .px_4()
-                    .bg(gpui::white())
-                    .text_color(gpui::black())
-                    .w_full()
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .size_full()
-                            .text_xs()
-                            .text_color(rgba(0x00000030))
-                            .child(format!("chat v{}", get_current_version())),
-                    ),
-            )
-            .key_context("Chat")
-            .on_action(cx.listener(Self::enter))
-            .flex()
-            .flex_col()
-            .justify_between()
-            .overflow_hidden()
-            .relative()
-            .size_full()
-            .bg(gpui::white())
-            .child(
-                uniform_list(view, "messages-list", messages.len(), {
-                    move |_, visible_range, _| {
-                        visible_range
-                            .map(|ix| {
-                                div()
-                                    .child(messages.get(ix).unwrap().clone().text)
-                                    .into_any_element()
-                            })
-                            .collect::<Vec<_>>()
-                    }
-                })
-                .flex_grow()
-                .with_sizing_behavior(ListSizingBehavior::Auto)
-                .track_scroll(self.scroll_handle.clone()),
-            )
-            .child(self.message_input.clone())
+        let initial_sync = self.logic.get_initial_sync();
+        if initial_sync {
+            div()
+                .child(
+                    div()
+                        .flex()
+                        .h(px(32.))
+                        .px_4()
+                        .bg(gpui::white())
+                        .text_color(gpui::black())
+                        .w_full()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .size_full()
+                                .text_xs()
+                                .text_color(rgba(0x00000030))
+                                .child(format!("chat v{}", get_current_version())),
+                        ),
+                )
+                .key_context("Chat")
+                .flex()
+                .flex_col()
+                .justify_between()
+                .overflow_hidden()
+                .relative()
+                .size_full()
+                .bg(gpui::white())
+                .child(self.loader.clone())
+        } else {
+            div()
+                .child(
+                    div()
+                        .flex()
+                        .h(px(32.))
+                        .px_4()
+                        .bg(gpui::white())
+                        .text_color(gpui::black())
+                        .w_full()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .size_full()
+                                .text_xs()
+                                .text_color(rgba(0x00000030))
+                                .child(format!("chat v{}", get_current_version())),
+                        ),
+                )
+                .key_context("Chat")
+                .on_action(cx.listener(Self::enter))
+                .flex()
+                .flex_col()
+                .justify_between()
+                .overflow_hidden()
+                .relative()
+                .size_full()
+                .bg(gpui::white())
+                .child(
+                    uniform_list(view, "messages-list", messages.len(), {
+                        move |_, visible_range, _| {
+                            visible_range
+                                .map(|ix| {
+                                    div()
+                                        .child(messages.get(ix).unwrap().clone().text)
+                                        .into_any_element()
+                                })
+                                .collect::<Vec<_>>()
+                        }
+                    })
+                    .flex_grow()
+                    .with_sizing_behavior(ListSizingBehavior::Auto)
+                    .track_scroll(self.scroll_handle.clone()),
+                )
+                .child(self.message_input.clone())
+        }
     }
 }
