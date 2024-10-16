@@ -56,8 +56,8 @@ impl Logic {
         let discovery_config = DiscoveryConfig::Custom(Box::new(discovery));
 
         let mut transport_config = TransportConfig::default();
-        transport_config.keep_alive_interval(Some(Duration::from_millis(500)));
-        transport_config.max_idle_timeout(Some(VarInt::from_u32(500).into()));
+        transport_config.keep_alive_interval(Some(Duration::from_millis(250)));
+        transport_config.max_idle_timeout(Some(VarInt::from_u32(1_000).into()));
 
         let iroh = iroh::node::Builder::default()
             .enable_docs()
