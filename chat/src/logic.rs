@@ -29,8 +29,8 @@ pub struct Logic {
     _auto_updater: AutoUpdater,
 }
 
-const DOC0: &str = "rgr7456ik7xqlz6343lazimxmydyfm7jfgurmty536pjticnhm6a";
-const DOC0_TICKET: &str = "docaaacbu5tcpf3ik75fj7tqxp2g4bx7rhrwrvokdrwzcg5pavyxtkszx6wagjxapzshbqvhgcqmwekibswgyzjchrpjjydepjup2n7z6qd7l646aaa";
+const DOC0: &str = "6noafdqcxno4xv4ejf5xpma6gcl4gaw4w2gxsyvlp6kfwq3t6i2q";
+const DOC0_TICKET: &str = "docaaacaxeh5eddy2cni7cuu5gail5gaxqqy2loiv6cghg5u45akcplu4skahswyqlad2rachperq7aesmyhoxycbsn7djsqwrn4m7yd7pkr3rxwaaa";
 
 impl Logic {
     pub fn new() -> Self {
