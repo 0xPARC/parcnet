@@ -16,7 +16,6 @@ use gadget::GadgetID;
 use payload::{HashablePayload, PODPayload};
 use value::ScalarOrVec;
 
-
 use operation::OperationCmd as OpCmd;
 
 use statement::Statement;
@@ -30,7 +29,6 @@ mod payload;
 mod statement;
 mod util;
 mod value;
-
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum PODProof {
@@ -97,14 +95,15 @@ impl POD {
             key: "_signer".to_string(),
             value: ScalarOrVec::Scalar(protocol.keygen(sk).pk),
         });
-        let mut statement_map: HashMap<String, Statement> = HashMap::new();
-
-        for entry in kv_pairs {
-            statement_map.insert(
-                "VALUEOF:".to_owned() + &entry.key,
-                Statement::from_entry(&entry, GadgetID::SCHNORR16),
-            );
-        }
+        let statement_map: HashMap<String, Statement> = kv_pairs
+            .iter()
+            .map(|entry| {
+                (
+                    format!("VALUEOF:{}", entry.key),
+                    Statement::from_entry(entry, GadgetID::SCHNORR16),
+                )
+            })
+            .collect();
 
         let payload = PODPayload::new(&statement_map);
         let payload_hash = payload.hash_payload();
@@ -118,49 +117,43 @@ impl POD {
     }
 
     pub fn execute_oracle_gadget(input: &GPGInput, cmds: &[OpCmd]) -> Result<Self> {
-        let mut statements = input.remap_origin_ids_by_name();
-        match &mut statements {
-            Ok(statements) => {
-                statements.insert("_SELF".to_string(), HashMap::new());
-                for cmd in cmds {
-                    let OpCmd(op, output_name) = cmd;
-                    let new_statement = op.execute(GadgetID::ORACLE, statements)?;
-                    statements.get_mut("_SELF").unwrap().insert(
-                        format!("{}:{}", new_statement.predicate(), output_name),
-                        new_statement,
-                    );
-                }
-                let out_statements = statements.get("_SELF").unwrap();
-                let out_payload = PODPayload::new(out_statements);
-                let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
-                let protocol = SchnorrSigner::new();
-                let payload_hash = out_payload.hash_payload();
-                let payload_hash_vec = vec![payload_hash];
-
-                // signature is a hardcoded skey (currently 0)
-                // todo is to build a limited version of this with a ZKP
-                // would start by making it so that the ZKP only allows
-                // a max number of input PODs, max number of entries/statements per input POD,
-                // max number of statements for output POD, and some max number of each type of operation
-                let proof = protocol.sign(&payload_hash_vec, &SchnorrSecretKey { sk: 0 }, &mut rng);
-                Ok(Self {
-                    payload: out_payload,
-                    proof: PODProof::Oracle(proof),
-                    proof_type: GadgetID::ORACLE,
-                })
-            }
-            Err(e) => panic!("Error: {:?}", e),
+        let mut statements = input.remap_origin_ids_by_name()?;
+        statements.insert("_SELF".to_string(), HashMap::new());
+        for cmd in cmds {
+            let OpCmd(op, output_name) = cmd;
+            let new_statement = op.execute(GadgetID::ORACLE, &statements)?;
+            statements.get_mut("_SELF").unwrap().insert(
+                format!("{}:{}", new_statement.predicate(), output_name),
+                new_statement,
+            );
         }
+        let out_statements = statements.get("_SELF").unwrap();
+        let out_payload = PODPayload::new(out_statements);
+        let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
+        let protocol = SchnorrSigner::new();
+        let payload_hash = out_payload.hash_payload();
+        let payload_hash_vec = vec![payload_hash];
+
+        // signature is a hardcoded skey (currently 0)
+        // todo is to build a limited version of this with a ZKP
+        // would start by making it so that the ZKP only allows
+        // a max number of input PODs, max number of entries/statements per input POD,
+        // max number of statements for output POD, and some max number of each type of operation
+        let proof = protocol.sign(&payload_hash_vec, &SchnorrSecretKey { sk: 0 }, &mut rng);
+        Ok(Self {
+            payload: out_payload,
+            proof: PODProof::Oracle(proof),
+            proof_type: GadgetID::ORACLE,
+        })
     }
 }
 
-// Operations
-
 #[derive(Clone, Debug)]
 pub struct GPGInput {
-    pub pods_list: Vec<(String, POD)>, // ORDERED list of pods, ordered by names
+    /// ORDERED list of pods, ordered by names
+    pub pods_list: Vec<(String, POD)>,
 
-    // map from (pod name, old origin name) to new origin name
+    /// map from (pod name, old origin name) to new origin name
     pub origin_renaming_map: HashMap<(String, String), String>,
 }
 
@@ -183,10 +176,10 @@ impl GPGInput {
         }
     }
 
-    // returns a map from input POD name to (map from statement name to statement)
-    // the inner statements have their old origin names and IDs are replaced with
-    // the new origin names as specified by inputs.origin_renaming_map
-    // and with new origin IDs which correspond to the lexicographic order of the new origin names
+    /// returns a map from input POD name to (map from statement name to statement)
+    /// the inner statements have their old origin names and IDs are replaced with
+    /// the new origin names as specified by inputs.origin_renaming_map
+    /// and with new origin IDs which correspond to the lexicographic order of the new origin names
     fn remap_origin_ids_by_name(&self) -> Result<HashMap<String, HashMap<String, Statement>>> {
         // Sorted new origin name list
         let mut new_origin_name_list = self
@@ -256,8 +249,8 @@ impl GPGInput {
 
 #[cfg(test)]
 mod tests {
-    use statement::StatementRef;
     use operation::Operation as Op;
+    use statement::StatementRef;
 
     use super::*;
     #[test]

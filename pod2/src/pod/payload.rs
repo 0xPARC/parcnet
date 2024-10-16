@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use plonky2::{
-    field::{goldilocks_field::GoldilocksField},
+    field::goldilocks_field::GoldilocksField,
     hash::poseidon::PoseidonHash,
     plonk::config::{GenericHashOut, Hasher},
 };
