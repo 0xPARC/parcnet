@@ -106,7 +106,6 @@ impl Logic {
             while let Some(Ok(event)) = events.next().await {
                 match event {
                     LiveEvent::InsertRemote { .. } | LiveEvent::InsertLocal { .. } => {
-                        // This is kinda buggy because it seems stuff might not be reflected in the story immediately (also refetching everything here is stupid)
                         let mut new_messages = Vec::new();
                         let mut entries = doc.get_many(iroh::docs::store::Query::all()).await?;
                         while let Some(Ok(entry)) = entries.next().await {
