@@ -68,7 +68,8 @@ impl Chat {
             let _ = logic.send_message(&message).await;
             let _ = cx.update(|cx| {
                 message_input.update(cx, |input, _| input.reset());
-                view.update(cx, |_, cx| {
+                view.update(cx, |this, cx| {
+                    this.scroll_to_bottom();
                     cx.notify();
                 })
                 .unwrap();

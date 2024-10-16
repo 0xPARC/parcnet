@@ -118,21 +118,22 @@ impl Logic {
             let message_watch_sender = self.message_watch.0.clone();
             while let Some(Ok(event)) = events.next().await {
                 match event {
-                    LiveEvent::InsertRemote { .. } | LiveEvent::InsertLocal { .. } => {
-                        let mut new_messages = Vec::new();
-                        let mut entries = doc.get_many(iroh::docs::store::Query::all()).await?;
-                        while let Some(Ok(entry)) = entries.next().await {
+                    LiveEvent::InsertRemote {
+                        entry,
+                        content_status,
+                        from: _,
+                    } => {
+                        if content_status.eq(&iroh::docs::ContentStatus::Complete) {
                             if let Ok(content) =
                                 iroh.blobs().read_to_bytes(entry.content_hash()).await
                             {
                                 if let Some(message) = Message::decode(content) {
-                                    new_messages.push(message);
+                                    self.messages.write().unwrap().push(message);
+                                    self.messages.write().unwrap().sort_by_key(|m| m.timestamp);
+                                    message_watch_sender.send(()).unwrap();
                                 }
                             }
                         }
-                        new_messages.sort_by_key(|m| m.timestamp);
-                        *self.messages.write().unwrap() = new_messages;
-                        message_watch_sender.send(()).unwrap();
                     }
                     _ => {}
                 }
@@ -143,27 +144,33 @@ impl Logic {
 
     pub async fn send_message(&self, message: &str) -> anyhow::Result<()> {
         info!("sending message: {}", message);
-        let iroh = self.iroh.read().await;
-        let doc = self.doc0.read().await;
 
-        if let (Some(iroh), Some(doc)) = (iroh.as_ref(), doc.as_ref()) {
-            let message = Message {
-                timestamp: chrono::Utc::now(),
-                text: message.to_string(),
-            };
-            let content = message.encode();
-            let author = iroh.authors().default().await?;
-            doc.set_bytes(
-                author,
-                message.timestamp.timestamp_micros().to_string(),
-                content,
-            )
-            .await?;
-            info!("message sent");
-            Ok(())
-        } else {
-            anyhow::bail!("Iroh or Doc not initialized")
-        }
+        let message = Message {
+            timestamp: chrono::Utc::now(),
+            text: message.to_string(),
+        };
+        let content = message.encode();
+        let timestamp = message.timestamp;
+
+        let iroh = Arc::clone(&self.iroh);
+        let doc0 = Arc::clone(&self.doc0);
+
+        self.messages.write().unwrap().push(message);
+
+        tokio::spawn(async move {
+            let iroh = iroh.read().await;
+            let doc0 = doc0.read().await;
+            if let (Some(iroh), Some(doc0)) = (iroh.as_ref(), doc0.as_ref()) {
+                let author = iroh.authors().default().await?;
+                doc0.set_bytes(author, timestamp.timestamp_micros().to_string(), content)
+                    .await?;
+                info!("message sent");
+                Ok::<_, anyhow::Error>(())
+            } else {
+                anyhow::bail!("Iroh or Doc not initialized")
+            }
+        });
+        Ok(())
     }
 
     pub fn get_messages(&self) -> Vec<Message> {
