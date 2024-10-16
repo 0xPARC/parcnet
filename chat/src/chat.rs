@@ -100,7 +100,7 @@ impl Render for Chat {
                             .size_full()
                             .text_xs()
                             .text_color(rgba(0x00000030))
-                            .child(format!("chat v{}", get_current_version())),
+                            .child(format!("chat 2v{}", get_current_version())),
                     ),
             )
             .key_context("Chat")

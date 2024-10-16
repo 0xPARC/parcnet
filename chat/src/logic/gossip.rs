@@ -1,9 +1,9 @@
 use futures::StreamExt;
-use iroh_gossip::{
+use iroh::gossip::{
     net::{Gossip, GossipReceiver, GossipSender},
     proto::TopicId,
 };
-use iroh_net::{
+use iroh::net::{
     discovery::{pkarr::dht::DhtDiscovery, Discovery},
     endpoint::{Connecting, VarInt},
     key::{PublicKey, SecretKey},
@@ -32,7 +32,7 @@ async fn endpoint_loop(endpoint: Endpoint, gossip: Gossip) {
 async fn handle_connection(mut conn: Connecting, gossip: Gossip) {
     let alpn = conn.alpn().await.unwrap();
     let conn = conn.await.unwrap();
-    let peer_id = iroh_net::endpoint::get_remote_node_id(&conn).unwrap();
+    let peer_id = iroh::net::endpoint::get_remote_node_id(&conn).unwrap();
     match alpn.as_ref() {
         GOSSIP_ALPN => gossip.handle_connection(conn).await.unwrap(),
         _ => warn!("ignoring connection from {peer_id}: unsupported ALPN protocol"),
