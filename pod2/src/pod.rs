@@ -262,12 +262,12 @@ mod tests {
         let vector_value = vec![scalar1, scalar2];
 
         // Create entries
-        let entry1 = Entry::new_from_scalar("some key".to_string(), scalar1);
-        let entry2 = Entry::new_from_scalar("some other key".to_string(), scalar2);
-        let entry3 = Entry::new_from_vec("vector entry".to_string(), vector_value.clone());
-        let entry4 = Entry::new_from_scalar("another scalar1".to_string(), scalar1);
-        let entry5 = Entry::new_from_scalar("yet another scalar1".to_string(), scalar1);
-        let entry6 = Entry::new_from_scalar("scalar3".to_string(), scalar3);
+        let entry1 = Entry::new_from_scalar("some key", scalar1);
+        let entry2 = Entry::new_from_scalar("some other key", scalar2);
+        let entry3 = Entry::new_from_vec("vector entry", vector_value.clone());
+        let entry4 = Entry::new_from_scalar("another scalar1", scalar1);
+        let entry5 = Entry::new_from_scalar("yet another scalar1", scalar1);
+        let entry6 = Entry::new_from_scalar("scalar3", scalar3);
 
         // Create entry statements.
         let entry_statement1 = Statement::from_entry(&entry1, GadgetID::NONE);
@@ -380,11 +380,11 @@ mod tests {
         let scalar2 = GoldilocksField(52);
         let vector_value = vec![scalar1, scalar2];
 
-        let entry1 = Entry::new_from_scalar("some key".to_string(), scalar1);
-        let entry2 = Entry::new_from_scalar("some other key".to_string(), scalar2);
-        let entry3 = Entry::new_from_vec("vector entry".to_string(), vector_value.clone());
+        let entry1 = Entry::new_from_scalar("some key", scalar1);
+        let entry2 = Entry::new_from_scalar("some other key", scalar2);
+        let entry3 = Entry::new_from_vec("vector entry", vector_value.clone());
 
-        let other_entry = Entry::new_from_scalar("some key".to_string(), GoldilocksField(37));
+        let other_entry = Entry::new_from_scalar("some key", GoldilocksField(37));
         let other_statement = Statement::from_entry(&other_entry, GadgetID::SCHNORR16);
 
         let schnorr_pod1 = POD::execute_schnorr_gadget(
@@ -449,14 +449,14 @@ mod tests {
         let vector_value = vec![scalar1, scalar2];
 
         // make entries
-        let entry1 = Entry::new_from_scalar("apple".to_string(), scalar1);
-        let entry2 = Entry::new_from_scalar("banana".to_string(), scalar2);
-        let entry3 = Entry::new_from_vec("vector entry".to_string(), vector_value.clone());
-        let entry4 = Entry::new_from_scalar("scalar entry".to_string(), scalar2);
-        let entry5 = Entry::new_from_scalar("foo".to_string(), GoldilocksField(100));
-        let entry6 = Entry::new_from_scalar("baz".to_string(), GoldilocksField(120));
-        let entry7 = Entry::new_from_scalar("bar".to_string(), scalar2);
-        let entry9 = Entry::new_from_scalar("claimed sum".to_string(), scalar3);
+        let entry1 = Entry::new_from_scalar("apple", scalar1);
+        let entry2 = Entry::new_from_scalar("banana", scalar2);
+        let entry3 = Entry::new_from_vec("vector entry", vector_value.clone());
+        let entry4 = Entry::new_from_scalar("scalar entry", scalar2);
+        let entry5 = Entry::new_from_scalar("foo", GoldilocksField(100));
+        let entry6 = Entry::new_from_scalar("baz", GoldilocksField(120));
+        let entry7 = Entry::new_from_scalar("bar", scalar2);
+        let entry9 = Entry::new_from_scalar("claimed sum", scalar3);
 
         // three schnorr pods
         let schnorr_pod1 = POD::execute_schnorr_gadget(
@@ -487,69 +487,51 @@ mod tests {
         // make a list of the operations we want to call
         let ops = vec![
             OpCmd(
-                Op::CopyStatement(StatementRef("p1".to_string(), "VALUEOF:apple".to_string())),
-                "p1-apple".to_string(),
+                Op::CopyStatement(StatementRef("p1", "VALUEOF:apple")),
+                "p1-apple",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef("p1".to_string(), "VALUEOF:banana".to_string())),
-                "p1-banana".to_string(),
+                Op::CopyStatement(StatementRef("p1", "VALUEOF:banana")),
+                "p1-banana",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "p1".to_string(),
-                    "VALUEOF:_signer".to_string(),
-                )),
-                "p1-signer".to_string(),
+                Op::CopyStatement(StatementRef("p1", "VALUEOF:_signer")),
+                "p1-signer",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "schnorrPOD2".to_string(),
-                    "VALUEOF:vector entry".to_string(),
-                )),
-                "schnorrPOD2-vec-entry".to_string(),
+                Op::CopyStatement(StatementRef("schnorrPOD2", "VALUEOF:vector entry")),
+                "schnorrPOD2-vec-entry",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "schnorrPOD2".to_string(),
-                    "VALUEOF:scalar entry".to_string(),
-                )),
-                "a scalar entry".to_string(),
+                Op::CopyStatement(StatementRef("schnorrPOD2", "VALUEOF:scalar entry")),
+                "a scalar entry",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "schnorrPOD2".to_string(),
-                    "VALUEOF:_signer".to_string(),
-                )),
-                "schnorrPOD2-signer".to_string(),
+                Op::CopyStatement(StatementRef("schnorrPOD2", "VALUEOF:_signer")),
+                "schnorrPOD2-signer",
             ),
             OpCmd(
                 Op::EqualityFromEntries(
-                    StatementRef("p1".to_string(), "VALUEOF:banana".to_string()),
-                    StatementRef(
-                        "schnorrPOD2".to_string(),
-                        "VALUEOF:scalar entry".to_string(),
-                    ),
+                    StatementRef("p1", "VALUEOF:banana"),
+                    StatementRef("schnorrPOD2", "VALUEOF:scalar entry"),
                 ),
-                "eq1".to_string(),
+                "eq1",
             ),
             OpCmd(
                 Op::GtFromEntries(
-                    StatementRef("p1".to_string(), "VALUEOF:banana".to_string()),
-                    StatementRef("p1".to_string(), "VALUEOF:apple".to_string()),
+                    StatementRef("p1", "VALUEOF:banana"),
+                    StatementRef("p1", "VALUEOF:apple"),
                 ),
-                "apple banana comparison".to_string(),
+                "apple banana comparison",
             ),
             // this operation creates a statement on top of a statement
             // created by an earlier operation
             OpCmd(
                 Op::ContainsFromEntries(
-                    StatementRef(
-                        "_SELF".to_string(),
-                        "VALUEOF:schnorrPOD2-vec-entry".to_string(),
-                    ),
-                    StatementRef("p1".to_string(), "VALUEOF:apple".to_string()),
+                    StatementRef("_SELF", "VALUEOF:schnorrPOD2-vec-entry"),
+                    StatementRef("p1", "VALUEOF:apple"),
                 ),
-                "CONTAINS:contains1".to_string(),
+                "CONTAINS:contains1",
             ),
         ];
 
@@ -589,55 +571,40 @@ mod tests {
         let ops = vec![
             OpCmd(
                 Op::EqualityFromEntries(
-                    StatementRef(
-                        "oraclePODParent".to_string(),
-                        "VALUEOF:a scalar entry".to_string(),
-                    ),
-                    StatementRef("p3".to_string(), "VALUEOF:bar".to_string()),
+                    StatementRef("oraclePODParent", "VALUEOF:a scalar entry"),
+                    StatementRef("p3", "VALUEOF:bar"),
                 ),
-                "eq2".to_string(),
+                "eq2",
             ),
             OpCmd(
                 Op::TransitiveEqualityFromStatements(
-                    StatementRef("oraclePODParent".to_string(), "EQUAL:eq1".to_string()),
-                    StatementRef("_SELF".to_string(), "EQUAL:eq2".to_string()),
+                    StatementRef("oraclePODParent", "EQUAL:eq1"),
+                    StatementRef("_SELF", "EQUAL:eq2"),
                 ),
-                "EQUAL:transitive eq".to_string(),
+                "EQUAL:transitive eq",
             ),
-            OpCmd(
-                Op::NewEntry(entry9.clone()),
-                "entry for claimed sum".to_string(),
-            ),
+            OpCmd(Op::NewEntry(entry9.clone()), "entry for claimed sum"),
             OpCmd(
                 Op::SumOf(
-                    StatementRef(
-                        "_SELF".to_string(),
-                        "VALUEOF:entry for claimed sum".to_string(),
-                    ),
-                    StatementRef(
-                        "oraclePODParent".to_string(),
-                        "VALUEOF:p1-apple".to_string(),
-                    ),
-                    StatementRef(
-                        "oraclePODParent".to_string(),
-                        "VALUEOF:a scalar entry".to_string(),
-                    ),
+                    StatementRef("_SELF", "VALUEOF:entry for claimed sum"),
+                    StatementRef("oraclePODParent", "VALUEOF:p1-apple"),
+                    StatementRef("oraclePODParent", "VALUEOF:a scalar entry"),
                 ),
-                "sumof entry".to_string(),
+                "sumof entry",
             ),
             OpCmd(
                 Op::CopyStatement(StatementRef(
-                    "oraclePODParent".to_string(),
-                    "VALUEOF:schnorrPOD2-signer".to_string(),
+                    "oraclePODParent",
+                    "VALUEOF:schnorrPOD2-signer",
                 )),
-                "p2-signer".to_string(),
+                "p2-signer",
             ),
             OpCmd(
                 Op::GtToNonequality(StatementRef(
-                    "oraclePODParent".to_string(),
-                    "GT:apple banana comparison".to_string(),
+                    "oraclePODParent",
+                    "GT:apple banana comparison",
                 )),
-                "apple banana nonequality".to_string(),
+                "apple banana nonequality",
             ),
         ];
 
@@ -671,23 +638,22 @@ mod tests {
 
         let known_attestors = vec![goog_pk, msft_pk, fb_pk];
 
-        let gb1_user = Entry::new_from_scalar("user".to_string(), bob_pk);
-        let gb1_age = Entry::new_from_scalar("age".to_string(), GoldilocksField(27));
+        let gb1_user = Entry::new_from_scalar("user", bob_pk);
+        let gb1_age = Entry::new_from_scalar("age", GoldilocksField(27));
         let gb1 = POD::execute_schnorr_gadget(&vec![gb1_user.clone(), gb1_age.clone()], &goog_sk);
 
-        let gb2_user = Entry::new_from_scalar("user".to_string(), bob_pk);
+        let gb2_user = Entry::new_from_scalar("user", bob_pk);
         let gb2 = POD::execute_schnorr_gadget(&vec![gb2_user.clone()], &msft_sk);
 
-        let gb3_user = Entry::new_from_scalar("user".to_string(), charlie_pk);
-        let gb3_age = Entry::new_from_scalar("age".to_string(), GoldilocksField(18));
+        let gb3_user = Entry::new_from_scalar("user", charlie_pk);
+        let gb3_age = Entry::new_from_scalar("age", GoldilocksField(18));
         let gb3 = POD::execute_schnorr_gadget(&vec![gb3_user.clone(), gb3_age.clone()], &msft_sk);
 
-        let gb4_user = Entry::new_from_scalar("user".to_string(), charlie_pk);
+        let gb4_user = Entry::new_from_scalar("user", charlie_pk);
         let gb4 = POD::execute_schnorr_gadget(&vec![gb4_user.clone()], &fb_sk);
 
-        let alice_user_entry = Entry::new_from_scalar("user".to_string(), alice_pk);
-        let known_attestors_entry =
-            Entry::new_from_vec("known_attestors".to_string(), known_attestors.clone());
+        let alice_user_entry = Entry::new_from_scalar("user", alice_pk);
+        let known_attestors_entry = Entry::new_from_vec("known_attestors", known_attestors.clone());
 
         let bob_alice = POD::execute_schnorr_gadget(&vec![alice_user_entry.clone()], &bob_sk);
         let charlie_alice =
@@ -703,64 +669,55 @@ mod tests {
 
         let bob_tf_ops = vec![
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "bob-alice".to_string(),
-                    "VALUEOF:_signer".to_string(),
-                )),
-                "bob-alice signer".to_string(),
+                Op::CopyStatement(StatementRef("bob-alice", "VALUEOF:_signer")),
+                "bob-alice signer",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "bob-alice".to_string(),
-                    "VALUEOF:user".to_string(),
-                )),
-                "bob-alice user".to_string(),
+                Op::CopyStatement(StatementRef("bob-alice", "VALUEOF:user")),
+                "bob-alice user",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "bob-gb1".to_string(),
-                    "VALUEOF:age".to_string(),
-                )),
-                "bob age".to_string(),
+                Op::CopyStatement(StatementRef("bob-gb1", "VALUEOF:age")),
+                "bob age",
             ),
             OpCmd(
                 Op::NewEntry(known_attestors_entry.clone()),
-                "known_attestors".to_string(),
+                "known_attestors",
             ),
             OpCmd(
                 Op::EqualityFromEntries(
-                    StatementRef("bob-alice".to_string(), "VALUEOF:_signer".to_string()),
-                    StatementRef("bob-gb1".to_string(), "VALUEOF:user".to_string()),
+                    StatementRef("bob-alice", "VALUEOF:_signer"),
+                    StatementRef("bob-gb1", "VALUEOF:user"),
                 ),
-                "gb1 attests to correct user".to_string(),
+                "gb1 attests to correct user",
             ),
             OpCmd(
                 Op::EqualityFromEntries(
-                    StatementRef("bob-alice".to_string(), "VALUEOF:_signer".to_string()),
-                    StatementRef("bob-gb2".to_string(), "VALUEOF:user".to_string()),
+                    StatementRef("bob-alice", "VALUEOF:_signer"),
+                    StatementRef("bob-gb2", "VALUEOF:user"),
                 ),
-                "gb2 attests to correct user".to_string(),
+                "gb2 attests to correct user",
             ),
             OpCmd(
                 Op::NonequalityFromEntries(
-                    StatementRef("bob-gb1".to_string(), "VALUEOF:_signer".to_string()),
-                    StatementRef("bob-gb2".to_string(), "VALUEOF:_signer".to_string()),
+                    StatementRef("bob-gb1", "VALUEOF:_signer"),
+                    StatementRef("bob-gb2", "VALUEOF:_signer"),
                 ),
-                "gb1 and gb2 are different".to_string(),
+                "gb1 and gb2 are different",
             ),
             OpCmd(
                 Op::ContainsFromEntries(
-                    StatementRef("_SELF".to_string(), "VALUEOF:known_attestors".to_string()),
-                    StatementRef("bob-gb1".to_string(), "VALUEOF:_signer".to_string()),
+                    StatementRef("_SELF", "VALUEOF:known_attestors"),
+                    StatementRef("bob-gb1", "VALUEOF:_signer"),
                 ),
-                "gb1 has known signer".to_string(),
+                "gb1 has known signer",
             ),
             OpCmd(
                 Op::ContainsFromEntries(
-                    StatementRef("_SELF".to_string(), "VALUEOF:known_attestors".to_string()),
-                    StatementRef("bob-gb2".to_string(), "VALUEOF:_signer".to_string()),
+                    StatementRef("_SELF", "VALUEOF:known_attestors"),
+                    StatementRef("bob-gb2", "VALUEOF:_signer"),
                 ),
-                "gb2 has known signer".to_string(),
+                "gb2 has known signer",
             ),
         ];
 
@@ -777,64 +734,55 @@ mod tests {
 
         let charlie_tf_ops = vec![
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "charlie-alice".to_string(),
-                    "VALUEOF:_signer".to_string(),
-                )),
-                "charlie-alice signer".to_string(),
+                Op::CopyStatement(StatementRef("charlie-alice", "VALUEOF:_signer")),
+                "charlie-alice signer",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "charlie-alice".to_string(),
-                    "VALUEOF:user".to_string(),
-                )),
-                "charlie-alice user".to_string(),
+                Op::CopyStatement(StatementRef("charlie-alice", "VALUEOF:user")),
+                "charlie-alice user",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "charlie-gb3".to_string(),
-                    "VALUEOF:age".to_string(),
-                )),
-                "charlie age".to_string(),
+                Op::CopyStatement(StatementRef("charlie-gb3", "VALUEOF:age")),
+                "charlie age",
             ),
             OpCmd(
                 Op::NewEntry(known_attestors_entry.clone()),
-                "known_attestors".to_string(),
+                "known_attestors",
             ),
             OpCmd(
                 Op::EqualityFromEntries(
-                    StatementRef("charlie-alice".to_string(), "VALUEOF:_signer".to_string()),
-                    StatementRef("charlie-gb3".to_string(), "VALUEOF:user".to_string()),
+                    StatementRef("charlie-alice", "VALUEOF:_signer"),
+                    StatementRef("charlie-gb3", "VALUEOF:user"),
                 ),
-                "gb3 attests to correct user".to_string(),
+                "gb3 attests to correct user",
             ),
             OpCmd(
                 Op::EqualityFromEntries(
-                    StatementRef("charlie-alice".to_string(), "VALUEOF:_signer".to_string()),
-                    StatementRef("charlie-gb4".to_string(), "VALUEOF:user".to_string()),
+                    StatementRef("charlie-alice", "VALUEOF:_signer"),
+                    StatementRef("charlie-gb4", "VALUEOF:user"),
                 ),
-                "gb4 attests to correct user".to_string(),
+                "gb4 attests to correct user",
             ),
             OpCmd(
                 Op::NonequalityFromEntries(
-                    StatementRef("charlie-gb3".to_string(), "VALUEOF:_signer".to_string()),
-                    StatementRef("charlie-gb4".to_string(), "VALUEOF:_signer".to_string()),
+                    StatementRef("charlie-gb3", "VALUEOF:_signer"),
+                    StatementRef("charlie-gb4", "VALUEOF:_signer"),
                 ),
-                "gb3 and gb4 are different".to_string(),
+                "gb3 and gb4 are different",
             ),
             OpCmd(
                 Op::ContainsFromEntries(
-                    StatementRef("_SELF".to_string(), "VALUEOF:known_attestors".to_string()),
-                    StatementRef("charlie-gb3".to_string(), "VALUEOF:_signer".to_string()),
+                    StatementRef("_SELF", "VALUEOF:known_attestors"),
+                    StatementRef("charlie-gb3", "VALUEOF:_signer"),
                 ),
-                "gb3 has known signer".to_string(),
+                "gb3 has known signer",
             ),
             OpCmd(
                 Op::ContainsFromEntries(
-                    StatementRef("_SELF".to_string(), "VALUEOF:known_attestors".to_string()),
-                    StatementRef("charlie-gb4".to_string(), "VALUEOF:_signer".to_string()),
+                    StatementRef("_SELF", "VALUEOF:known_attestors"),
+                    StatementRef("charlie-gb4", "VALUEOF:_signer"),
                 ),
-                "gb4 has known signer".to_string(),
+                "gb4 has known signer",
             ),
         ];
 
@@ -842,9 +790,8 @@ mod tests {
         assert!(charlie_tf.verify()? == true);
 
         // make the "great boy" POD
-        let age_bound_entry =
-            Entry::new_from_scalar("known_attestors".to_string(), GoldilocksField(17));
-        let age_sum_entry = Entry::new_from_scalar("age_sum".to_string(), GoldilocksField(45));
+        let age_bound_entry = Entry::new_from_scalar("known_attestors", GoldilocksField(17));
+        let age_sum_entry = Entry::new_from_scalar("age_sum", GoldilocksField(45));
         let mut grb_input_pods = HashMap::new();
         grb_input_pods.insert("friend1".to_string(), bob_tf.clone());
         grb_input_pods.insert("friend2".to_string(), charlie_tf.clone());
@@ -881,170 +828,119 @@ mod tests {
 
         let grb_ops = vec![
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "friend1".to_string(),
-                    "VALUEOF:bob-alice user".to_string(),
-                )),
-                "friend1 attested user".to_string(),
+                Op::CopyStatement(StatementRef("friend1", "VALUEOF:bob-alice user")),
+                "friend1 attested user",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "friend2".to_string(),
-                    "VALUEOF:charlie-alice user".to_string(),
-                )),
-                "friend2 attested user".to_string(),
+                Op::CopyStatement(StatementRef("friend2", "VALUEOF:charlie-alice user")),
+                "friend2 attested user",
             ),
-            OpCmd(
-                Op::NewEntry(age_bound_entry.clone()),
-                "age_bound".to_string(),
-            ),
-            OpCmd(Op::NewEntry(age_sum_entry.clone()), "age_sum".to_string()),
+            OpCmd(Op::NewEntry(age_bound_entry.clone()), "age_bound"),
+            OpCmd(Op::NewEntry(age_sum_entry.clone()), "age_sum"),
             OpCmd(
                 Op::NewEntry(known_attestors_entry.clone()),
-                "known_attestors".to_string(),
+                "known_attestors",
             ),
             OpCmd(
                 Op::EqualityFromEntries(
-                    StatementRef("friend1".to_string(), "VALUEOF:known_attestors".to_string()),
-                    StatementRef("_SELF".to_string(), "VALUEOF:known_attestors".to_string()),
+                    StatementRef("friend1", "VALUEOF:known_attestors"),
+                    StatementRef("_SELF", "VALUEOF:known_attestors"),
                 ),
-                "friend1 known_attestors same as _SELF".to_string(),
+                "friend1 known_attestors same as _SELF",
             ),
             OpCmd(
                 Op::EqualityFromEntries(
-                    StatementRef("friend2".to_string(), "VALUEOF:known_attestors".to_string()),
-                    StatementRef("_SELF".to_string(), "VALUEOF:known_attestors".to_string()),
+                    StatementRef("friend2", "VALUEOF:known_attestors"),
+                    StatementRef("_SELF", "VALUEOF:known_attestors"),
                 ),
-                "friend2 known_attestors same as _SELF".to_string(),
+                "friend2 known_attestors same as _SELF",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "friend1".to_string(),
-                    "EQUAL:gb1 attests to correct user".to_string(),
-                )),
-                "gb1 attests to correct user".to_string(),
+                Op::CopyStatement(StatementRef("friend1", "EQUAL:gb1 attests to correct user")),
+                "gb1 attests to correct user",
             ),
             OpCmd(
                 Op::RenameContainedBy(
-                    StatementRef(
-                        "friend1".to_string(),
-                        "CONTAINS:gb1 has known signer".to_string(),
-                    ),
-                    StatementRef(
-                        "_SELF".to_string(),
-                        "EQUAL:friend1 known_attestors same as _SELF".to_string(),
-                    ),
+                    StatementRef("friend1", "CONTAINS:gb1 has known signer"),
+                    StatementRef("_SELF", "EQUAL:friend1 known_attestors same as _SELF"),
                 ),
-                "gb1 has known signer".to_string(),
+                "gb1 has known signer",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "friend1".to_string(),
-                    "EQUAL:gb2 attests to correct user".to_string(),
-                )),
-                "gb2 attests to correct user".to_string(),
+                Op::CopyStatement(StatementRef("friend1", "EQUAL:gb2 attests to correct user")),
+                "gb2 attests to correct user",
             ),
             OpCmd(
                 Op::RenameContainedBy(
-                    StatementRef(
-                        "friend1".to_string(),
-                        "CONTAINS:gb2 has known signer".to_string(),
-                    ),
-                    StatementRef(
-                        "_SELF".to_string(),
-                        "EQUAL:friend1 known_attestors same as _SELF".to_string(),
-                    ),
+                    StatementRef("friend1", "CONTAINS:gb2 has known signer"),
+                    StatementRef("_SELF", "EQUAL:friend1 known_attestors same as _SELF"),
                 ),
-                "gb2 has known signer".to_string(),
+                "gb2 has known signer",
             ),
             OpCmd(
                 Op::CopyStatement(StatementRef(
-                    "friend1".to_string(),
-                    "NOTEQUAL:gb1 and gb2 are different".to_string(),
+                    "friend1",
+                    "NOTEQUAL:gb1 and gb2 are different",
                 )),
-                "gb1 and gb2 are different".to_string(),
+                "gb1 and gb2 are different",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "friend2".to_string(),
-                    "EQUAL:gb3 attests to correct user".to_string(),
-                )),
-                "gb3 attests to correct user".to_string(),
+                Op::CopyStatement(StatementRef("friend2", "EQUAL:gb3 attests to correct user")),
+                "gb3 attests to correct user",
             ),
             OpCmd(
                 Op::RenameContainedBy(
-                    StatementRef(
-                        "friend2".to_string(),
-                        "CONTAINS:gb3 has known signer".to_string(),
-                    ),
-                    StatementRef(
-                        "_SELF".to_string(),
-                        "EQUAL:friend2 known_attestors same as _SELF".to_string(),
-                    ),
+                    StatementRef("friend2", "CONTAINS:gb3 has known signer"),
+                    StatementRef("_SELF", "EQUAL:friend2 known_attestors same as _SELF"),
                 ),
-                "gb3 has known signer".to_string(),
+                "gb3 has known signer",
             ),
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "friend2".to_string(),
-                    "EQUAL:gb4 attests to correct user".to_string(),
-                )),
-                "gb4 attests to correct user".to_string(),
+                Op::CopyStatement(StatementRef("friend2", "EQUAL:gb4 attests to correct user")),
+                "gb4 attests to correct user",
             ),
             OpCmd(
                 Op::RenameContainedBy(
-                    StatementRef(
-                        "friend2".to_string(),
-                        "CONTAINS:gb4 has known signer".to_string(),
-                    ),
-                    StatementRef(
-                        "_SELF".to_string(),
-                        "EQUAL:friend2 known_attestors same as _SELF".to_string(),
-                    ),
+                    StatementRef("friend2", "CONTAINS:gb4 has known signer"),
+                    StatementRef("_SELF", "EQUAL:friend2 known_attestors same as _SELF"),
                 ),
-                "gb4 has known signer".to_string(),
+                "gb4 has known signer",
             ),
             OpCmd(
                 Op::CopyStatement(StatementRef(
-                    "friend2".to_string(),
-                    "NOTEQUAL:gb3 and gb4 are different".to_string(),
+                    "friend2",
+                    "NOTEQUAL:gb3 and gb4 are different",
                 )),
-                "gb4 attests to correct user".to_string(),
+                "gb4 attests to correct user",
             ),
             OpCmd(
                 Op::NonequalityFromEntries(
-                    StatementRef(
-                        "friend1".to_string(),
-                        "VALUEOF:bob-alice signer".to_string(),
-                    ),
-                    StatementRef(
-                        "friend2".to_string(),
-                        "VALUEOF:charlie-alice signer".to_string(),
-                    ),
+                    StatementRef("friend1", "VALUEOF:bob-alice signer"),
+                    StatementRef("friend2", "VALUEOF:charlie-alice signer"),
                 ),
-                "friend1 and friend2 are different".to_string(),
+                "friend1 and friend2 are different",
             ),
             OpCmd(
                 Op::GtFromEntries(
-                    StatementRef("friend1".to_string(), "VALUEOF:bob age".to_string()),
-                    StatementRef("_SELF".to_string(), "VALUEOF:age_bound".to_string()),
+                    StatementRef("friend1", "VALUEOF:bob age"),
+                    StatementRef("_SELF", "VALUEOF:age_bound"),
                 ),
-                "friend1 is at least 18".to_string(),
+                "friend1 is at least 18",
             ),
             OpCmd(
                 Op::GtFromEntries(
-                    StatementRef("friend2".to_string(), "VALUEOF:charlie age".to_string()),
-                    StatementRef("_SELF".to_string(), "VALUEOF:age_bound".to_string()),
+                    StatementRef("friend2", "VALUEOF:charlie age"),
+                    StatementRef("_SELF", "VALUEOF:age_bound"),
                 ),
-                "friend2 is at least 18".to_string(),
+                "friend2 is at least 18",
             ),
             OpCmd(
                 Op::SumOf(
-                    StatementRef("_SELF".to_string(), "VALUEOF:age_sum".to_string()),
-                    StatementRef("friend1".to_string(), "VALUEOF:bob age".to_string()),
-                    StatementRef("friend2".to_string(), "VALUEOF:charlie age".to_string()),
+                    StatementRef("_SELF", "VALUEOF:age_sum"),
+                    StatementRef("friend1", "VALUEOF:bob age"),
+                    StatementRef("friend2", "VALUEOF:charlie age"),
                 ),
-                "sum of friend1 and friend2 ages".to_string(),
+                "sum of friend1 and friend2 ages",
             ),
         ];
 
@@ -1081,8 +977,8 @@ mod tests {
         //   x 10
         //   y 20]
 
-        let simple_pod_1_x = Entry::new_from_scalar("x".to_string(), GoldilocksField(10));
-        let simple_pod_1_y = Entry::new_from_scalar("y".to_string(), GoldilocksField(20));
+        let simple_pod_1_x = Entry::new_from_scalar("x", GoldilocksField(10));
+        let simple_pod_1_y = Entry::new_from_scalar("y", GoldilocksField(20));
 
         let simple_pod_1 = POD::execute_schnorr_gadget(
             &vec![simple_pod_1_x.clone(), simple_pod_1_y.clone()],
@@ -1101,8 +997,8 @@ mod tests {
         //   z 15
         //   w 25]
 
-        let simple_pod_2_z = Entry::new_from_scalar("z".to_string(), GoldilocksField(15));
-        let simple_pod_2_w = Entry::new_from_scalar("w".to_string(), GoldilocksField(25));
+        let simple_pod_2_z = Entry::new_from_scalar("z", GoldilocksField(15));
+        let simple_pod_2_w = Entry::new_from_scalar("w", GoldilocksField(25));
 
         let simple_pod_2 = POD::execute_schnorr_gadget(
             &vec![simple_pod_2_z.clone(), simple_pod_2_w.clone()],
@@ -1120,8 +1016,8 @@ mod tests {
         //   a 30
         //   b 40]
 
-        let simple_pod_3_a = Entry::new_from_scalar("a".to_string(), GoldilocksField(30));
-        let simple_pod_3_b = Entry::new_from_scalar("b".to_string(), GoldilocksField(40));
+        let simple_pod_3_a = Entry::new_from_scalar("a", GoldilocksField(30));
+        let simple_pod_3_b = Entry::new_from_scalar("b", GoldilocksField(40));
 
         let simple_pod_3 = POD::execute_schnorr_gadget(
             &vec![simple_pod_3_a.clone(), simple_pod_3_b.clone()],
@@ -1138,8 +1034,7 @@ mod tests {
         // [createpod simple-pod-4  ; Charlie's pod
         //   local-value 100]
 
-        let simple_pod_4_local_value =
-            Entry::new_from_scalar("local-value".to_string(), GoldilocksField(100));
+        let simple_pod_4_local_value = Entry::new_from_scalar("local-value", GoldilocksField(100));
 
         let simple_pod_4 =
             POD::execute_schnorr_gadget(&vec![simple_pod_4_local_value.clone()], &charlie_sk);
@@ -1165,26 +1060,23 @@ mod tests {
         let sum_pod_ops = vec![
             // If we have this operation, we would copy X and reveal it. Here we don't copy X (we just prove that 25 is the sum of x and z)
             // OpCmd(
-            //     Op::CopyStatement(StatementRef("pod-1".to_string(), "VALUEOF:x".to_string())), // a pointer to simple_pod_1, using the sum_pod_input_pods HashMap
+            //     Op::CopyStatement(StatementRef("pod-1", "VALUEOF:x")), // a pointer to simple_pod_1, using the sum_pod_input_pods HashMap
             //     // this name comes from applying the predicate name (from predicate_name) followed by the
             //     // statement name
-            //     "pod-1-value-of-x".to_string(),
+            //     "pod-1-value-of-x",
             // ),
             OpCmd(
-                Op::NewEntry(Entry::new_from_scalar(
-                    "result".to_string(),
-                    GoldilocksField(10 + 15),
-                )), // We store simple-pod-1.x + simple-pod-2.z in a new entry
-                "result".to_string(), // statement name are only used to have operations point at statement (poor man's pointer)
-                                      // they are not cryptographic, hence why we need another name beyond the optional entry
+                Op::NewEntry(Entry::new_from_scalar("result", GoldilocksField(10 + 15))), // We store simple-pod-1.x + simple-pod-2.z in a new entry
+                "result", // statement name are only used to have operations point at statement (poor man's pointer)
+                          // they are not cryptographic, hence why we need another name beyond the optional entry
             ),
             OpCmd(
                 Op::SumOf(
-                    StatementRef("_SELF".to_string(), "VALUEOF:result".to_string()),
-                    StatementRef("pod-2".to_string(), "VALUEOF:z".to_string()),
-                    StatementRef("pod-1".to_string(), "VALUEOF:x".to_string()),
+                    StatementRef("_SELF", "VALUEOF:result"),
+                    StatementRef("pod-2", "VALUEOF:z"),
+                    StatementRef("pod-1", "VALUEOF:x"),
                 ),
-                "sum-of-pod-1-x-and-pod-2-z".to_string(),
+                "sum-of-pod-1-x-and-pod-2-z",
             ),
         ];
 
@@ -1210,19 +1102,16 @@ mod tests {
 
         let product_pod_ops = vec![
             OpCmd(
-                Op::NewEntry(Entry::new_from_scalar(
-                    "result".to_string(),
-                    GoldilocksField(30 * 40),
-                )),
-                "result".to_string(),
+                Op::NewEntry(Entry::new_from_scalar("result", GoldilocksField(30 * 40))),
+                "result",
             ),
             OpCmd(
                 Op::ProductOf(
-                    StatementRef("_SELF".to_string(), "VALUEOF:result".to_string()),
-                    StatementRef("pod-3".to_string(), "VALUEOF:a".to_string()),
-                    StatementRef("pod-3".to_string(), "VALUEOF:b".to_string()),
+                    StatementRef("_SELF", "VALUEOF:result"),
+                    StatementRef("pod-3", "VALUEOF:a"),
+                    StatementRef("pod-3", "VALUEOF:b"),
                 ),
-                "product-of-pod-3-a-and-pod-3-b".to_string(),
+                "product-of-pod-3-a-and-pod-3-b",
             ),
         ];
 
@@ -1285,73 +1174,55 @@ mod tests {
             // We could have remote-max be the max of two pod (and stop there)
             // But this is not what is being expressed in the createpod of final-pod
             OpCmd(
-                Op::CopyStatement(StatementRef(
-                    "sum-pod".to_string(),
-                    "SUMOF:sum-of-pod-1-x-and-pod-2-z".to_string(),
-                )),
-                "sum-of-pod-1-x-and-pod-2-z".to_string(),
+                Op::CopyStatement(StatementRef("sum-pod", "SUMOF:sum-of-pod-1-x-and-pod-2-z")),
+                "sum-of-pod-1-x-and-pod-2-z",
             ),
             OpCmd(
                 Op::CopyStatement(StatementRef(
-                    "product-pod".to_string(),
-                    "PRODUCTOF:product-of-pod-3-a-and-pod-3-b".to_string(),
+                    "product-pod",
+                    "PRODUCTOF:product-of-pod-3-a-and-pod-3-b",
                 )),
-                "product-of-pod-3-a-and-pod-3-b".to_string(),
+                "product-of-pod-3-a-and-pod-3-b",
             ),
             OpCmd(
-                Op::NewEntry(Entry::new_from_scalar(
-                    "remote-max".to_string(),
-                    GoldilocksField(1200),
-                )),
-                "remote-max".to_string(),
+                Op::NewEntry(Entry::new_from_scalar("remote-max", GoldilocksField(1200))),
+                "remote-max",
             ),
             OpCmd(
                 Op::MaxOf(
-                    StatementRef("_SELF".to_string(), "VALUEOF:remote-max".to_string()),
-                    StatementRef("sum-pod".to_string(), "VALUEOF:result".to_string()),
-                    StatementRef("product-pod".to_string(), "VALUEOF:result".to_string()),
+                    StatementRef("_SELF", "VALUEOF:remote-max"),
+                    StatementRef("sum-pod", "VALUEOF:result"),
+                    StatementRef("product-pod", "VALUEOF:result"),
                 ),
-                "max-sum-pod-and-product-pod".to_string(),
+                "max-sum-pod-and-product-pod",
             ),
             OpCmd(
-                Op::NewEntry(Entry::new_from_scalar(
-                    "42".to_string(),
-                    GoldilocksField(42),
-                )),
-                "42".to_string(),
+                Op::NewEntry(Entry::new_from_scalar("42", GoldilocksField(42))),
+                "42",
             ),
             OpCmd(
-                Op::NewEntry(Entry::new_from_scalar(
-                    "local-sum".to_string(),
-                    GoldilocksField(142),
-                )),
-                "local-sum".to_string(),
+                Op::NewEntry(Entry::new_from_scalar("local-sum", GoldilocksField(142))),
+                "local-sum",
             ),
             OpCmd(
                 Op::SumOf(
-                    StatementRef("_SELF".to_string(), "VALUEOF:local-sum".to_string()),
-                    StatementRef(
-                        "simple-pod-4".to_string(),
-                        "VALUEOF:local-value".to_string(),
-                    ),
-                    StatementRef("_SELF".to_string(), "VALUEOF:42".to_string()),
+                    StatementRef("_SELF", "VALUEOF:local-sum"),
+                    StatementRef("simple-pod-4", "VALUEOF:local-value"),
+                    StatementRef("_SELF", "VALUEOF:42"),
                 ),
-                "sum-of-simple-pod-4-local-value-and-42".to_string(),
+                "sum-of-simple-pod-4-local-value-and-42",
             ),
             OpCmd(
-                Op::NewEntry(Entry::new_from_scalar(
-                    "overall-max".to_string(),
-                    GoldilocksField(1200),
-                )),
-                "overall-max".to_string(),
+                Op::NewEntry(Entry::new_from_scalar("overall-max", GoldilocksField(1200))),
+                "overall-max",
             ),
             OpCmd(
                 Op::MaxOf(
-                    StatementRef("_SELF".to_string(), "VALUEOF:overall-max".to_string()),
-                    StatementRef("_SELF".to_string(), "VALUEOF:remote-max".to_string()),
-                    StatementRef("_SELF".to_string(), "VALUEOF:local-sum".to_string()),
+                    StatementRef("_SELF", "VALUEOF:overall-max"),
+                    StatementRef("_SELF", "VALUEOF:remote-max"),
+                    StatementRef("_SELF", "VALUEOF:local-sum"),
                 ),
-                "max-of-remote-max-and-local-max".to_string(),
+                "max-of-remote-max-and-local-max",
             ),
         ];
 

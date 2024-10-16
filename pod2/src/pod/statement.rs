@@ -235,19 +235,19 @@ impl StatementOrRef for Statement {
 
 /// Typical statement ref type.
 #[derive(Clone, Debug)]
-pub struct StatementRef(pub String, pub String);
+pub struct StatementRef<'a, 'b>(pub &'a str, pub &'b str);
 
-impl StatementOrRef for StatementRef {
+impl<'a, 'b> StatementOrRef for StatementRef<'a, 'b> {
     type StatementTable = HashMap<String, HashMap<String, Statement>>;
     fn deref_cloned(&self, table: &Self::StatementTable) -> Result<Statement> {
         let StatementRef(parent_name, statement_name) = self;
         table
-            .get(parent_name)
+            .get(*parent_name)
             .ok_or(anyhow!(
                 "Statement parent {} missing from statement table!",
                 parent_name
             ))?
-            .get(statement_name)
+            .get(*statement_name)
             .ok_or(anyhow!(
                 "Statement {} with parent {} missing from statement table!",
                 statement_name,

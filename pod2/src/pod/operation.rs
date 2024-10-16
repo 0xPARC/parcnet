@@ -181,4 +181,4 @@ impl<S: StatementOrRef> Operation<S> {
 
 /// Named operation struct
 #[derive(Clone, Debug)]
-pub struct OperationCmd(pub Operation<StatementRef>, pub String);
+pub struct OperationCmd<'a, 'b, 'c>(pub Operation<StatementRef<'a, 'b>>, pub &'c str);
