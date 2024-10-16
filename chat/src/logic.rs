@@ -6,11 +6,11 @@ mod message;
 use auto_update::AutoUpdater;
 use futures::StreamExt;
 use gossip::{close, connect_topic};
-use iroh_gossip::{
+use iroh::gossip::{
     net::{Event, GossipEvent, GossipSender},
     proto::TopicId,
 };
-use iroh_net::{key::PublicKey, Endpoint};
+use iroh::net::{key::PublicKey, Endpoint};
 use key::get_or_create_secret_key;
 use message::Message;
 use std::{

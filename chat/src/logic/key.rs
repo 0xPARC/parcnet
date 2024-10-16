@@ -1,4 +1,4 @@
-use iroh_net::key::SecretKey;
+use iroh::net::key::SecretKey;
 use std::{fs, path::PathBuf};
 use tracing::info;
 
