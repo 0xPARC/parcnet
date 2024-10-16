@@ -28,7 +28,7 @@ pub struct Logic {
     _auto_updater: AutoUpdater,
 }
 
-const DOP0: &str = "j2kblusfmti4mvc662jprvncnkes5qydcqj4bdl54ko6bdyfsx5a";
+const DOC0: &str = "j2kblusfmti4mvc662jprvncnkes5qydcqj4bdl54ko6bdyfsx5a";
 const DOC0_TICKET: &str = "docaaacak27d7p7ksnzob3gho3y45ocpdpjejbb3fmnsy2h7ot6f7xgg4pzafn7exieodujj72s7cyhw2dzv4to2wdowgvt5rdlvqilfodb4ba7uaaa";
 
 impl Logic {
