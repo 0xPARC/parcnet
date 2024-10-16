@@ -28,6 +28,8 @@ pub struct Logic {
     doc0: Arc<tokio::sync::RwLock<Option<Doc>>>,
     messages: RwLock<Vec<Message>>,
     message_watch: (watch::Sender<()>, watch::Receiver<()>),
+    initial_sync: RwLock<bool>,
+    initial_sync_watch: (watch::Sender<()>, watch::Receiver<()>),
     _auto_updater: AutoUpdater,
 }
 
@@ -37,6 +39,7 @@ const DOC0_TICKET: &str = "docaaacaxeh5eddy2cni7cuu5gail5gaxqqy2loiv6cghg5u45akc
 impl Logic {
     pub fn new() -> Self {
         let message_watch = watch::channel(());
+        let initial_sync_watch = watch::channel(());
         let auto_updater = AutoUpdater::new();
 
         Self {
@@ -44,6 +47,8 @@ impl Logic {
             doc0: Arc::new(tokio::sync::RwLock::new(None)),
             messages: RwLock::new(Vec::new()),
             message_watch,
+            initial_sync: RwLock::new(true),
+            initial_sync_watch,
             _auto_updater: auto_updater,
         }
     }
@@ -115,25 +120,24 @@ impl Logic {
         let iroh = self.iroh.read().await;
         if let (Some(doc), Some(iroh)) = (doc.as_ref(), iroh.as_ref()) {
             let mut events = doc.subscribe().await?;
-            let message_watch_sender = self.message_watch.0.clone();
             while let Some(Ok(event)) = events.next().await {
+                // When getting ContentReady event, it means something we have finished downloading
+                // PendingContentReady means we are done with our initial sync
                 match event {
-                    LiveEvent::InsertRemote {
-                        entry,
-                        content_status,
-                        from: _,
-                    } => {
-                        if content_status.eq(&iroh::docs::ContentStatus::Complete) {
-                            if let Ok(content) =
-                                iroh.blobs().read_to_bytes(entry.content_hash()).await
-                            {
-                                if let Some(message) = Message::decode(content) {
-                                    self.messages.write().unwrap().push(message);
-                                    self.messages.write().unwrap().sort_by_key(|m| m.timestamp);
-                                    message_watch_sender.send(()).unwrap();
-                                }
+                    LiveEvent::ContentReady { hash } => {
+                        if let Ok(content) = iroh.blobs().read_to_bytes(hash).await {
+                            if let Some(message) = Message::decode(content) {
+                                info!("inserting message");
+                                self.messages.write().unwrap().push(message);
+                                self.messages.write().unwrap().sort_by_key(|m| m.timestamp);
+                                self.message_watch.0.send(()).unwrap();
                             }
                         }
+                    }
+                    LiveEvent::PendingContentReady => {
+                        info!("sync is done");
+                        *self.initial_sync.write().unwrap() = false;
+                        self.initial_sync_watch.0.send(()).unwrap();
                     }
                     _ => {}
                 }
@@ -173,12 +177,20 @@ impl Logic {
         Ok(())
     }
 
+    pub fn get_initial_sync(&self) -> bool {
+        *self.initial_sync.read().unwrap()
+    }
+
     pub fn get_messages(&self) -> Vec<Message> {
         self.messages.read().map(|msg| msg.clone()).unwrap()
     }
 
     pub fn get_message_watch(&self) -> watch::Receiver<()> {
         self.message_watch.1.clone()
+    }
+
+    pub fn get_initial_sync_wach(&self) -> watch::Receiver<()> {
+        self.initial_sync_watch.1.clone()
     }
 
     pub async fn cleanup(&self) -> anyhow::Result<()> {
