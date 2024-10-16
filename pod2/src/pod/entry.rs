@@ -10,16 +10,16 @@ pub struct Entry {
 }
 
 impl Entry {
-    pub fn new_from_scalar(key: String, value: GoldilocksField) -> Self {
+    pub fn new_from_scalar(key: &str, value: GoldilocksField) -> Self {
         Entry {
-            key,
+            key: key.to_string(),
             value: ScalarOrVec::Scalar(value),
         }
     }
 
-    pub fn new_from_vec(key: String, value: Vec<GoldilocksField>) -> Self {
+    pub fn new_from_vec(key: &str, value: Vec<GoldilocksField>) -> Self {
         Entry {
-            key,
+            key: key.to_string(),
             value: ScalarOrVec::Vector(value),
         }
     }
