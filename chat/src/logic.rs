@@ -4,9 +4,10 @@ mod persistence;
 
 use auto_update::AutoUpdater;
 use futures::StreamExt;
-use iroh::client::docs::LiveEvent;
 use iroh::client::Doc;
 use iroh::docs::DocTicket;
+use iroh::net::discovery::pkarr::dht::DhtDiscovery;
+use iroh::{client::docs::LiveEvent, node::DiscoveryConfig};
 use message::Message;
 use persistence::get_or_create_secret_key;
 use std::{
@@ -28,8 +29,8 @@ pub struct Logic {
     _auto_updater: AutoUpdater,
 }
 
-const DOC0: &str = "j2kblusfmti4mvc662jprvncnkes5qydcqj4bdl54ko6bdyfsx5a";
-const DOC0_TICKET: &str = "docaaacak27d7p7ksnzob3gho3y45ocpdpjejbb3fmnsy2h7ot6f7xgg4pzafn7exieodujj72s7cyhw2dzv4to2wdowgvt5rdlvqilfodb4ba7uaaa";
+const DOC0: &str = "rgr7456ik7xqlz6343lazimxmydyfm7jfgurmty536pjticnhm6a";
+const DOC0_TICKET: &str = "docaaacbu5tcpf3ik75fj7tqxp2g4bx7rhrwrvokdrwzcg5pavyxtkszx6wagjxapzshbqvhgcqmwekibswgyzjchrpjjydepjup2n7z6qd7l646aaa";
 
 impl Logic {
     pub fn new() -> Self {
@@ -48,9 +49,13 @@ impl Logic {
     pub async fn initialize(&self) -> anyhow::Result<()> {
         info!("initializing chat logic");
         let secret_key = get_or_create_secret_key();
+        let builder = DhtDiscovery::builder().dht(true).n0_dns_pkarr_relay();
+        let discovery = builder.secret_key(secret_key.clone()).build().unwrap();
+        let discovery_config = DiscoveryConfig::Custom(Box::new(discovery));
         let iroh = iroh::node::Builder::default()
             .enable_docs()
-            .secret_key(secret_key)
+            .secret_key(secret_key.clone())
+            .node_discovery(discovery_config)
             .persist(persistence::persistence_file_path())
             .await?
             .spawn()
