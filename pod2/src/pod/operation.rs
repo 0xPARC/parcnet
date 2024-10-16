@@ -1,34 +1,38 @@
-use std::collections::HashMap;
+use std::fmt::Debug;
 
 use anyhow::{anyhow, Result};
-use plonky2::field::types::PrimeField64;
+use plonky2::field::{
+    goldilocks_field::GoldilocksField,
+    types::{Field, PrimeField64},
+};
 
 use super::{
     entry::Entry,
     gadget::GadgetID,
-    statement::{AnchoredKey, Statement},
+    statement::{Statement, StatementOrRef, StatementRef},
     value::ScalarOrVec,
 };
 
 #[derive(Clone, Debug)]
-pub enum Operation {
+pub enum Operation<S: StatementOrRef> {
     None,
     NewEntry(Entry),
-    CopyStatement(Statement),
-    EqualityFromEntries(Statement, Statement),
-    NonequalityFromEntries(Statement, Statement),
-    GtFromEntries(Statement, Statement),
-    TransitiveEqualityFromStatements(Statement, Statement),
-    GtToNonequality(Statement),
-    ContainsFromEntries(Statement, Statement),
-    RenameContainedBy(Statement, Statement),
-    SumOf(Statement, Statement, Statement),
-    ProductOf(Statement, Statement, Statement),
-    MaxOf(Statement, Statement, Statement),
+    CopyStatement(S),
+    EqualityFromEntries(S, S),
+    NonequalityFromEntries(S, S),
+    GtFromEntries(S, S),
+    TransitiveEqualityFromStatements(S, S),
+    GtToNonequality(S),
+    ContainsFromEntries(S, S),
+    RenameContainedBy(S, S),
+    SumOf(S, S, S),
+    ProductOf(S, S, S),
+    MaxOf(S, S, S),
 }
 
-impl Operation {
-    fn eval_with_gadget_id(&self, gadget_id: GadgetID) -> Result<Statement> {
+impl Operation<Statement> {
+    /// Operation evaluation when statements are directly specified.
+    pub fn eval_with_gadget_id(&self, gadget_id: GadgetID) -> Result<Statement> {
         match self {
             Self::None => Ok(Statement::None),
             Self::NewEntry(entry) => Ok(Statement::from_entry(&entry, gadget_id)),
@@ -95,7 +99,86 @@ impl Operation {
                     anchkey3.clone(),
                 ))
             }
-            _ => Err(anyhow!("Invalid arguments.")),
+            _ => Err(anyhow!("Invalid claim.")),
         }
     }
 }
+
+impl<S: StatementOrRef> Operation<S> {
+    /// Resolution of indirect operation specification.
+    pub fn deref_args(&self, table: &S::StatementTable) -> Result<Operation<Statement>> {
+        type Op = Operation<Statement>;
+        match self {
+            Self::None => Ok(Op::None),
+            Self::NewEntry(e) => Ok(Op::NewEntry(e.clone())),
+            Self::CopyStatement(s) => Ok(Op::CopyStatement(s.deref_cloned(table)?)),
+            Self::EqualityFromEntries(s1, s2) => Ok(Op::EqualityFromEntries(
+                s1.deref_cloned(table)?,
+                s2.deref_cloned(table)?,
+            )),
+            Self::NonequalityFromEntries(s1, s2) => Ok(Op::NonequalityFromEntries(
+                s1.deref_cloned(table)?,
+                s2.deref_cloned(table)?,
+            )),
+            Self::GtFromEntries(s1, s2) => Ok(Op::GtFromEntries(
+                s1.deref_cloned(table)?,
+                s2.deref_cloned(table)?,
+            )),
+            Self::TransitiveEqualityFromStatements(s1, s2) => {
+                Ok(Op::TransitiveEqualityFromStatements(
+                    s1.deref_cloned(table)?,
+                    s2.deref_cloned(table)?,
+                ))
+            }
+            Self::GtToNonequality(s) => Ok(Op::GtToNonequality(s.deref_cloned(table)?)),
+            Self::ContainsFromEntries(s1, s2) => Ok(Op::ContainsFromEntries(
+                s1.deref_cloned(table)?,
+                s2.deref_cloned(table)?,
+            )),
+            Self::RenameContainedBy(s1, s2) => Ok(Op::RenameContainedBy(
+                s1.deref_cloned(table)?,
+                s2.deref_cloned(table)?,
+            )),
+            Self::SumOf(s1, s2, s3) => Ok(Op::SumOf(
+                s1.deref_cloned(table)?,
+                s2.deref_cloned(table)?,
+                s3.deref_cloned(table)?,
+            )),
+            Self::ProductOf(s1, s2, s3) => Ok(Op::ProductOf(
+                s1.deref_cloned(table)?,
+                s2.deref_cloned(table)?,
+                s3.deref_cloned(table)?,
+            )),
+            Self::MaxOf(s1, s2, s3) => Ok(Op::MaxOf(
+                s1.deref_cloned(table)?,
+                s2.deref_cloned(table)?,
+                s3.deref_cloned(table)?,
+            )),
+        }
+    }
+    /// Method specifying opcodes.
+    pub fn code(&self) -> GoldilocksField {
+        GoldilocksField::from_canonical_u64(match self {
+            Self::None => 0,
+            Self::NewEntry(_) => 1,
+            Self::CopyStatement(_) => 2,
+            Self::EqualityFromEntries(_, _) => 3,
+            Self::NonequalityFromEntries(_, _) => 4,
+            Self::GtFromEntries(_, _) => 5,
+            Self::TransitiveEqualityFromStatements(_, _) => 6,
+            Self::GtToNonequality(_) => 7,
+            Self::ContainsFromEntries(_, _) => 8,
+            Self::RenameContainedBy(_, _) => 9,
+            Self::SumOf(_, _, _) => 10,
+            Self::ProductOf(_, _, _) => 11,
+            Self::MaxOf(_, _, _) => 12,
+        })
+    }
+    pub fn execute(&self, gadget_id: GadgetID, table: &S::StatementTable) -> Result<Statement> {
+        self.deref_args(table)?.eval_with_gadget_id(gadget_id)
+    }
+}
+
+/// Named operation struct
+#[derive(Clone, Debug)]
+pub struct OperationCmd(pub Operation<StatementRef>, pub String);
