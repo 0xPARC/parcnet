@@ -26,8 +26,6 @@ jobs:
 
       - name: Setup rust
         uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: nightly
 
       - name: Install deps
         run: |
