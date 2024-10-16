@@ -1,6 +1,5 @@
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use tracing::info;
 
 #[derive(Clone)]
 pub struct Message {

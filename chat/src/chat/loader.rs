@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use gpui::{
-    black, bounce, div, ease_in_out, percentage, rgb, svg, white, Animation, AnimationExt,
-    IntoElement, Length, ParentElement, Pixels, Render, Styled, Transformation, ViewContext,
+    black, bounce, div, ease_in_out, percentage, svg, white, Animation, AnimationExt, IntoElement,
+    Length, ParentElement, Pixels, Render, Styled, Transformation, ViewContext,
 };
 
 const ARROW_CIRCLE_SVG: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon/arrow_circle.svg");
