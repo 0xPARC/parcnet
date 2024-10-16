@@ -1,12 +1,13 @@
 [package]
 name = "chat"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 [dependencies]
 anyhow = "1.0.89"
 bytes = "1.7.2"
 chrono = "0.4.38"
+eyre = "0.6.12"
 futures = "0.3.30"
 gpui = { git = "https://github.com/zed-industries/zed" }
 iroh = "0.26.0"
@@ -23,7 +24,11 @@ unicode-segmentation = "1.12.0"
 [package.metadata.bundle]
 name = "chat"
 identifier = "com.0xparc.chat"
-icon = ["chat/assets/icon/32x32.png", "chat/assets/icon/128x128.png", "chat/assets/icon/128x128@2x.png"]
+icon = [
+    "chat/assets/icon/32x32.png",
+    "chat/assets/icon/128x128.png",
+    "chat/assets/icon/128x128@2x.png",
+]
 resources = ["chat/assets"]
 copyright = ""
 category = "Public.App-Category.Productivity"

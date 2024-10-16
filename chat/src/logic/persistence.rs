@@ -10,6 +10,14 @@ fn key_file_path() -> PathBuf {
         .join("user_key.bin")
 }
 
+pub fn persistence_file_path() -> PathBuf {
+    std::env::current_exe()
+        .expect("failed to get executable path")
+        .parent()
+        .expect("failed to get parent directory")
+        .join("iroh_data")
+}
+
 pub fn get_or_create_secret_key() -> SecretKey {
     let path = key_file_path();
     match fs::read(&path) {
