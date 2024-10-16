@@ -8,7 +8,7 @@ use tempfile::TempDir;
 use tokio::process::Command;
 use tracing::{error, info};
 
-const POLL_INTERVAL: Duration = Duration::from_secs(60 * 60);
+const POLL_INTERVAL: Duration = Duration::from_secs(60);
 const RELEASES_URL: &str = "https://api.github.com/repos/0xPARC/parcnet/releases/latest";
 
 pub fn get_current_version() -> SemanticVersion {
