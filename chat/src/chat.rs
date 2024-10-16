@@ -20,13 +20,19 @@ pub struct Chat {
 impl Chat {
     pub fn new(cx: &mut ViewContext<Self>) -> Self {
         let logic = Arc::new(Logic::new());
+        let logic_initialize = logic.clone();
+        cx.spawn(|_view, mut _cx| async move {
+            let _ = logic_initialize.initialize().await;
+        })
+        .detach();
+
         let mut message_watch = logic.get_message_watch();
 
         let logic_quit = logic.clone();
         cx.on_app_quit(move |_| {
             let logic_quit = logic_quit.clone();
             async move {
-                logic_quit.cleanup().await;
+                let _ = logic_quit.cleanup().await;
             }
         })
         .detach();
@@ -59,7 +65,7 @@ impl Chat {
         let message = message_input.read(cx).get_content().to_string();
         let logic = self.logic.clone();
         cx.spawn(|view, mut cx| async move {
-            logic.send_message(&message).await;
+            let _ = logic.send_message(&message).await;
             let _ = cx.update(|cx| {
                 message_input.update(cx, |input, _| input.reset());
                 view.update(cx, |_, cx| {
@@ -100,7 +106,7 @@ impl Render for Chat {
                             .size_full()
                             .text_xs()
                             .text_color(rgba(0x00000030))
-                            .child(format!("chat 2v{}", get_current_version())),
+                            .child(format!("chat v{}", get_current_version())),
                     ),
             )
             .key_context("Chat")
