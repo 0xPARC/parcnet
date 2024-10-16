@@ -7,9 +7,11 @@ use futures::StreamExt;
 use iroh::client::Doc;
 use iroh::docs::DocTicket;
 use iroh::net::discovery::pkarr::dht::DhtDiscovery;
+use iroh::net::endpoint::{TransportConfig, VarInt};
 use iroh::{client::docs::LiveEvent, node::DiscoveryConfig};
 use message::Message;
 use persistence::get_or_create_secret_key;
+use std::time::Duration;
 use std::{
     str::FromStr,
     sync::{Arc, RwLock},
@@ -52,9 +54,15 @@ impl Logic {
         let builder = DhtDiscovery::builder().dht(true).n0_dns_pkarr_relay();
         let discovery = builder.secret_key(secret_key.clone()).build().unwrap();
         let discovery_config = DiscoveryConfig::Custom(Box::new(discovery));
+
+        let mut transport_config = TransportConfig::default();
+        transport_config.keep_alive_interval(Some(Duration::from_millis(500)));
+        transport_config.max_idle_timeout(Some(VarInt::from_u32(500).into()));
+
         let iroh = iroh::node::Builder::default()
             .enable_docs()
             .secret_key(secret_key.clone())
+            .transport_config(transport_config)
             .node_discovery(discovery_config)
             .persist(persistence::persistence_file_path())
             .await?
