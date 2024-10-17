@@ -1,6 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["parcnet-pod", "parcnet", "chat", "pex", "pod2"]
+members = ["parcnet-pod", "parcnet", "chat", "pex", "pod2", "assets"]
 
 [patch.crates-io]
 pathfinder_simd = { git = "https://github.com/theoparis/pathfinder/" }
+
+[workspace.dependencies]
+assets = { path = "assets" }
+anyhow = "1.0.86"
+rust-embed = { version = "8.4", features = ["include-exclude"] }
+gpui = { git = "https://github.com/zed-industries/zed" }
