@@ -5,8 +5,6 @@ use gpui::{
     Length, ParentElement, Pixels, Render, Styled, Transformation, ViewContext,
 };
 
-const ARROW_CIRCLE_SVG: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon/arrow_circle.svg");
-
 pub struct Loader {}
 
 impl Loader {
@@ -28,7 +26,7 @@ impl Render for Loader {
                     .child(
                         svg()
                             .size_8()
-                            .path(ARROW_CIRCLE_SVG)
+                            .path("icon/arrow_circle.svg")
                             .text_color(black())
                             .with_animation(
                                 "image_circle",

@@ -3,13 +3,15 @@ mod message;
 mod persistence;
 
 use auto_update::AutoUpdater;
+pub use auto_update::{get_app_path, get_current_version, is_dev};
 use futures::StreamExt;
 use iroh::client::Doc;
 use iroh::docs::DocTicket;
 use iroh::net::discovery::pkarr::dht::DhtDiscovery;
 use iroh::net::endpoint::{TransportConfig, VarInt};
+use iroh::net::key::{PublicKey, SecretKey};
 use iroh::{client::docs::LiveEvent, node::DiscoveryConfig};
-use message::Message;
+use message::{Message, SignedMessage};
 use persistence::get_or_create_secret_key;
 use std::time::Duration;
 use std::{
@@ -19,14 +21,13 @@ use std::{
 use tokio::sync::watch;
 use tracing::info;
 
-pub use auto_update::{get_app_path, get_current_version, is_dev};
-
 type IrohNode = iroh::node::Node<iroh::blobs::store::fs::Store>;
 
 pub struct Logic {
     iroh: Arc<tokio::sync::RwLock<Option<IrohNode>>>,
+    secret_key: SecretKey,
     doc0: Arc<tokio::sync::RwLock<Option<Doc>>>,
-    messages: RwLock<Vec<Message>>,
+    messages: RwLock<Vec<(PublicKey, Message)>>,
     message_watch: (watch::Sender<()>, watch::Receiver<()>),
     initial_sync: RwLock<bool>,
     initial_sync_watch: (watch::Sender<()>, watch::Receiver<()>),
@@ -39,11 +40,13 @@ const DOC0_TICKET: &str = "docaaacaxeh5eddy2cni7cuu5gail5gaxqqy2loiv6cghg5u45akc
 impl Logic {
     pub fn new() -> Self {
         let message_watch = watch::channel(());
+        let secret_key = get_or_create_secret_key();
         let initial_sync_watch = watch::channel(());
         let auto_updater = AutoUpdater::new();
 
         Self {
             iroh: Arc::new(tokio::sync::RwLock::new(None)),
+            secret_key,
             doc0: Arc::new(tokio::sync::RwLock::new(None)),
             messages: RwLock::new(Vec::new()),
             message_watch,
@@ -55,9 +58,8 @@ impl Logic {
 
     pub async fn initialize(&self) -> anyhow::Result<()> {
         info!("initializing chat logic");
-        let secret_key = get_or_create_secret_key();
         let builder = DhtDiscovery::builder().dht(true).n0_dns_pkarr_relay();
-        let discovery = builder.secret_key(secret_key.clone()).build().unwrap();
+        let discovery = builder.secret_key(self.secret_key.clone()).build().unwrap();
         let discovery_config = DiscoveryConfig::Custom(Box::new(discovery));
 
         let mut transport_config = TransportConfig::default();
@@ -66,7 +68,7 @@ impl Logic {
 
         let iroh = iroh::node::Builder::default()
             .enable_docs()
-            .secret_key(secret_key.clone())
+            .secret_key(self.secret_key.clone())
             .transport_config(transport_config)
             .node_discovery(discovery_config)
             .persist(persistence::persistence_file_path())
@@ -100,13 +102,13 @@ impl Logic {
 
             while let Some(Ok(entry)) = entries.next().await {
                 if let Ok(content) = iroh.blobs().read_to_bytes(entry.content_hash()).await {
-                    if let Some(message) = Message::decode(content) {
-                        initial_messages.push(message);
+                    if let Ok(m) = SignedMessage::verify_and_decode(&content) {
+                        initial_messages.push(m);
                     }
                 }
             }
 
-            initial_messages.sort_by_key(|m| m.timestamp);
+            initial_messages.sort_by_key(|m| *m.1.timestamp());
             *self.messages.write().unwrap() = initial_messages;
             self.message_watch.0.send(()).unwrap();
         }
@@ -126,10 +128,13 @@ impl Logic {
                 match event {
                     LiveEvent::ContentReady { hash } => {
                         if let Ok(content) = iroh.blobs().read_to_bytes(hash).await {
-                            if let Some(message) = Message::decode(content) {
+                            if let Ok(m) = SignedMessage::verify_and_decode(&content) {
                                 info!("inserting message");
-                                self.messages.write().unwrap().push(message);
-                                self.messages.write().unwrap().sort_by_key(|m| m.timestamp);
+                                self.messages.write().unwrap().push(m);
+                                self.messages
+                                    .write()
+                                    .unwrap()
+                                    .sort_by_key(|m| *m.1.timestamp());
                                 self.message_watch.0.send(()).unwrap();
                             }
                         }
@@ -149,17 +154,21 @@ impl Logic {
     pub async fn send_message(&self, message: &str) -> anyhow::Result<()> {
         info!("sending message: {}", message);
 
-        let message = Message {
+        let message = Message::ChatMessage {
             timestamp: chrono::Utc::now(),
             text: message.to_string(),
         };
-        let content = message.encode();
-        let timestamp = message.timestamp;
+
+        let content = SignedMessage::sign_and_encode(&self.secret_key, &message)?;
+        let timestamp = message.timestamp().clone();
 
         let iroh = Arc::clone(&self.iroh);
         let doc0 = Arc::clone(&self.doc0);
 
-        self.messages.write().unwrap().push(message);
+        self.messages
+            .write()
+            .unwrap()
+            .push((self.secret_key.public(), message));
 
         tokio::spawn(async move {
             let iroh = iroh.read().await;
@@ -181,8 +190,22 @@ impl Logic {
         *self.initial_sync.read().unwrap()
     }
 
-    pub fn get_messages(&self) -> Vec<Message> {
-        self.messages.read().map(|msg| msg.clone()).unwrap()
+    pub fn get_messages(&self) -> Vec<(String, String)> {
+        let m: Vec<(String, String)> = self
+            .messages
+            .read()
+            .map(|msg| msg.clone())
+            .unwrap()
+            .into_iter()
+            .filter_map(|m| match m {
+                (public_key, Message::ChatMessage { timestamp: _, text }) => {
+                    let shortened_pkey: String = public_key.to_string().chars().take(4).collect();
+                    Some((shortened_pkey, text))
+                }
+                _ => None,
+            })
+            .collect();
+        m
     }
 
     pub fn get_message_watch(&self) -> watch::Receiver<()> {

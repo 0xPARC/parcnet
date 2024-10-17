@@ -1,7 +1,7 @@
 mod chat;
 mod logic;
 
-use chat::{assets::Assets, Chat};
+use chat::Chat;
 use gpui::{
     actions, point, px, size, App, AppContext, Bounds, KeyBinding, TitlebarOptions, VisualContext,
     WindowBounds, WindowOptions,
@@ -29,7 +29,7 @@ async fn main() {
         .init();
 
     App::new()
-        .with_assets(Assets {})
+        .with_assets(assets::Assets {})
         .run(|cx: &mut AppContext| {
             cx.activate(true);
             cx.on_action(quit);

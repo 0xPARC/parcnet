@@ -1,4 +1,3 @@
-pub mod assets;
 mod input;
 mod loader;
 
@@ -175,7 +174,11 @@ impl Render for Chat {
                             visible_range
                                 .map(|ix| {
                                     div()
-                                        .child(messages.get(ix).unwrap().clone().text)
+                                        .child(format!(
+                                            "{}: {}",
+                                            messages.get(ix).unwrap().clone().0,
+                                            messages.get(ix).unwrap().clone().1,
+                                        ))
                                         .into_any_element()
                                 })
                                 .collect::<Vec<_>>()
