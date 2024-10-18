@@ -71,7 +71,7 @@ impl SchnorrSigner {
         SchnorrPublicKey { pk }
     }
 
-    pub fn hash_insecure(&self, r: &GoldilocksField, msg: &Vec<GoldilocksField>) -> u64 {
+    pub fn hash_insecure(&self, r: &GoldilocksField, msg: &[GoldilocksField]) -> u64 {
         let poseidon_input: Vec<GoldilocksField> =
             std::iter::once(r).chain(msg.iter()).copied().collect();
 
@@ -92,7 +92,7 @@ impl SchnorrSigner {
 
     pub fn sign(
         &self,
-        msg: &Vec<GoldilocksField>,
+        msg: &[GoldilocksField],
         sk: &SchnorrSecretKey,
         rng: &mut rand::rngs::ThreadRng,
     ) -> SchnorrSignature {
