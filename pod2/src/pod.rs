@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::anyhow;
 use anyhow::Result;
-//use circuit::pod2_circuit;
+use circuit::pod2_circuit;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::types::Field;
 use serde::Deserialize;
@@ -23,7 +23,7 @@ pub use operation::OperationCmd as OpCmd;
 
 pub use statement::{AnchoredKey, Statement, StatementRef};
 
-//mod circuit;
+mod circuit;
 mod entry;
 mod gadget;
 mod operation;
@@ -110,8 +110,7 @@ impl POD {
 
         let payload = PODPayload::new(&statement_map);
         let payload_hash = payload.hash_payload();
-        let payload_hash_vec = vec![payload_hash];
-        let proof = protocol.sign(&payload_hash_vec, sk, &mut rng);
+        let proof = protocol.sign(&[payload_hash], sk, &mut rng);
         Self {
             payload,
             proof: PODProof::Schnorr(proof),
@@ -253,6 +252,7 @@ impl GPGInput {
 #[cfg(test)]
 mod tests {
     use operation::Operation as Op;
+    use plonky2::{iop::witness::PartialWitness, plonk::config::{GenericConfig, PoseidonGoldilocksConfig}};
     use statement::StatementRef;
 
     use super::*;
@@ -416,27 +416,36 @@ mod tests {
         // now signature shouldn't verify
         assert!(!(schnorr_pod3.verify()?));
 
-        // // ZK verification of SchnorrPOD 3.
-        // let (builder, targets) = pod2_circuit(1, 2, 0, 0)?;
+            // ZK verification of SchnorrPOD 3.
+    let (builder, targets) = pod2_circuit(1, 2, 0)?;
+    // Assign witnesses
+    const D: usize = 2;
+    type C = PoseidonGoldilocksConfig;
+    type F = <C as GenericConfig<D>>::F;
+    let mut pw: PartialWitness<F> = PartialWitness::new();
+    targets.set_witness(
+        GoldilocksField::ZERO,
+        &mut pw,
+        &[schnorr_pod3],
+        &schnorr_pod1, // TODO
+    )?;
+    let data = builder.build::<C>();
+    let _proof = data.prove(pw)?;
 
-        // // Assign witnesses
-        // const D: usize = 2;
-        // type C = PoseidonGoldilocksConfig;
-        // type F = <C as GenericConfig<D>>::F;
-        // let mut pw: PartialWitness<F> = PartialWitness::new();
-        // pw.set_target(targets.input_is_schnorr[0], GoldilocksField(1))?;
-        // pw.set_target(targets.input_is_gpg[0], GoldilocksField::ZERO)?;
-        // pw.set_target(
-        //     targets.input_payload_hash[0],
-        //     schnorrPOD3.payload.hash_payload(),
-        // )?;
-        // pw.set_target(targets.pk_index[0], GoldilocksField(1))?;
-        // targets.input_proof[0].set_witness(&mut pw, &schnorrPOD3.proof)?;
-        // targets.input_entries[0][0].set_witness(&mut pw, &schnorrPOD3.payload[0])?;
-        // targets.input_entries[0][1].set_witness(&mut pw, &schnorrPOD3.payload[1])?;
-        // let data = builder.build::<C>();
-        // let proof = data.prove(pw)?;
+    // ZK verification of SchnorrPODs 1 & 2.
+    let (builder, targets) = pod2_circuit(2, 3, 0)?;
+    // Assign witnesses
+    let mut pw: PartialWitness<F> = PartialWitness::new();
+    targets.set_witness(
+        GoldilocksField::ZERO,
+        &mut pw,
+        &[schnorr_pod1.clone(), schnorr_pod2],
+        &schnorr_pod1, // TODO
+    )?;
+    let data = builder.build::<C>();
+    let _proof = data.prove(pw)?;
 
+        
         Ok(())
     }
 
