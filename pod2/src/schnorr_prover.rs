@@ -43,8 +43,8 @@ impl MessageTarget {
 }
 
 pub struct SchnorrSignatureTarget {
-    s: Target,
-    e: Target,
+    pub s: Target,
+    pub e: Target,
 }
 
 impl SchnorrSignatureTarget {
@@ -82,7 +82,7 @@ impl SchnorrPublicKeyTarget {
     }
 }
 
-pub struct SchnorrBuilder {}
+pub struct SchnorrBuilder;
 
 pub trait SignatureVerifierBuilder {
     fn constrain_sig<C: GenericConfig<2, F = GoldF>>(
@@ -177,7 +177,7 @@ mod tests {
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(config);
 
-        let sb: SchnorrBuilder = SchnorrBuilder {};
+        let sb: SchnorrBuilder = SchnorrBuilder;
 
         // create keypair, message, signature
         let sk: SchnorrSecretKey = SchnorrSecretKey { sk: 133 };
@@ -214,7 +214,7 @@ mod tests {
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(config);
 
-        let sb: SchnorrBuilder = SchnorrBuilder {};
+        let sb: SchnorrBuilder = SchnorrBuilder;
 
         // create keypair, message, signature
         let sk: SchnorrSecretKey = SchnorrSecretKey { sk: 133 };
@@ -259,7 +259,7 @@ mod tests {
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(config);
 
-        let sb: SchnorrBuilder = SchnorrBuilder {};
+        let sb: SchnorrBuilder = SchnorrBuilder;
 
         // create keypair, message, signature
         let sk: SchnorrSecretKey = SchnorrSecretKey { sk: 133 };

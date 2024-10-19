@@ -1,5 +1,12 @@
 use anyhow::Result;
-use plonky2::{field::{goldilocks_field::GoldilocksField, types::Field}, iop::{target::Target, witness::{PartialWitness, WitnessWrite}}, plonk::circuit_builder::CircuitBuilder};
+use plonky2::{
+    field::{goldilocks_field::GoldilocksField, types::Field},
+    iop::{
+        target::Target,
+        witness::{PartialWitness, WitnessWrite},
+    },
+    plonk::circuit_builder::CircuitBuilder,
+};
 
 use crate::pod::origin::Origin;
 
@@ -20,7 +27,10 @@ impl OriginTarget {
         vec![self.origin_id, self.gadget_id]
     }
     pub fn from_targets(v: &[Target]) -> Self {
-        Self { origin_id: v[0], gadget_id: v[1] }
+        Self {
+            origin_id: v[0],
+            gadget_id: v[1],
+        }
     }
     pub fn set_witness(
         &self,
@@ -35,4 +45,3 @@ impl OriginTarget {
         Ok(())
     }
 }
-
