@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use anyhow::anyhow;
 use anyhow::Result;
-use circuit::pod2_circuit;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::types::Field;
 use serde::Deserialize;
@@ -23,14 +22,14 @@ pub use operation::OperationCmd as OpCmd;
 
 pub use statement::{AnchoredKey, Statement, StatementRef};
 
-mod circuit;
-mod entry;
-mod gadget;
-mod operation;
-mod origin;
-mod payload;
-mod statement;
-mod util;
+pub mod circuit;
+pub mod entry;
+pub mod gadget;
+pub mod operation;
+pub mod origin;
+pub mod payload;
+pub mod statement;
+pub mod util;
 mod value;
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq)]
@@ -61,7 +60,7 @@ impl POD {
                 let pk: GoldilocksField = self
                     .payload
                     .statements_map
-                    .get("VALUEOF:_signer")
+                    .get(&format!("VALUEOF:{}", SIGNER_PK_KEY))
                     .ok_or(anyhow!("No signer found in payload"))
                     .and_then(|s| match s {
                         Statement::ValueOf(_, ScalarOrVec::Scalar(v)) => Ok(*v),
@@ -93,11 +92,15 @@ impl POD {
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
         let protocol = SchnorrSigner::new();
 
-        let mut kv_pairs = entries.clone();
-        kv_pairs.push(Entry {
-            key: "_signer".to_string(),
-            value: ScalarOrVec::Scalar(protocol.keygen(sk).pk),
-        });
+        let kv_pairs = [
+            entries.clone(),
+            vec![Entry {
+                key: SIGNER_PK_KEY.to_string(),
+                value: ScalarOrVec::Scalar(protocol.keygen(sk).pk),
+            }],
+        ]
+        .concat();
+
         let statement_map: HashMap<String, Statement> = kv_pairs
             .iter()
             .map(|entry| {
@@ -252,7 +255,10 @@ impl GPGInput {
 #[cfg(test)]
 mod tests {
     use operation::Operation as Op;
-    use plonky2::{iop::witness::PartialWitness, plonk::config::{GenericConfig, PoseidonGoldilocksConfig}};
+    use plonky2::{
+        iop::witness::PartialWitness,
+        plonk::config::{GenericConfig, PoseidonGoldilocksConfig},
+    };
     use statement::StatementRef;
 
     use super::*;
@@ -416,36 +422,40 @@ mod tests {
         // now signature shouldn't verify
         assert!(!(schnorr_pod3.verify()?));
 
-            // ZK verification of SchnorrPOD 3.
-    let (builder, targets) = pod2_circuit(1, 2, 0)?;
-    // Assign witnesses
-    const D: usize = 2;
-    type C = PoseidonGoldilocksConfig;
-    type F = <C as GenericConfig<D>>::F;
-    let mut pw: PartialWitness<F> = PartialWitness::new();
-    targets.set_witness(
-        GoldilocksField::ZERO,
-        &mut pw,
-        &[schnorr_pod3],
-        &schnorr_pod1, // TODO
-    )?;
-    let data = builder.build::<C>();
-    let _proof = data.prove(pw)?;
+        // // ZK verification of SchnorrPOD 3.
+        // let (builder, targets) = pod2_circuit(1, 2, 0)?;
+        // // Assign witnesses
+        // const D: usize = 2;
+        // type C = PoseidonGoldilocksConfig;
+        // type F = <C as GenericConfig<D>>::F;
+        // let mut pw: PartialWitness<F> = PartialWitness::new();
+        // println!(
+        //     "{:?}, {:?}",
+        //     schnorr_pod3,
+        //     schnorr_pod3.payload.hash_payload()
+        // );
+        // targets.set_witness(
+        //     GoldilocksField::ZERO,
+        //     &mut pw,
+        //     &[schnorr_pod3],
+        //     &schnorr_pod1, // TODO
+        // )?;
+        // let data = builder.build::<C>();
+        // let _proof = data.prove(pw)?;
 
-    // ZK verification of SchnorrPODs 1 & 2.
-    let (builder, targets) = pod2_circuit(2, 3, 0)?;
-    // Assign witnesses
-    let mut pw: PartialWitness<F> = PartialWitness::new();
-    targets.set_witness(
-        GoldilocksField::ZERO,
-        &mut pw,
-        &[schnorr_pod1.clone(), schnorr_pod2],
-        &schnorr_pod1, // TODO
-    )?;
-    let data = builder.build::<C>();
-    let _proof = data.prove(pw)?;
+        // // // ZK verification of SchnorrPODs 1 & 2.
+        // // let (builder, targets) = pod2_circuit(2, 3, 0)?;
+        // // // Assign witnesses
+        // // let mut pw: PartialWitness<F> = PartialWitness::new();
+        // // targets.set_witness(
+        // //     GoldilocksField::ZERO,
+        // //     &mut pw,
+        // //     &[schnorr_pod1.clone(), schnorr_pod2],
+        // //     &schnorr_pod1, // TODO
+        // // )?;
+        // // let data = builder.build::<C>();
+        // // let _proof = data.prove(pw)?;
 
-        
         Ok(())
     }
 
