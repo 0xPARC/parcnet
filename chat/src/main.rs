@@ -49,7 +49,7 @@ async fn main() {
                 },
                 |cx| cx.new_view(Chat::new),
             );
-        });
+        })
 }
 
 fn quit(_: &Quit, cx: &mut gpui::AppContext) {

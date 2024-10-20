@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::Signature;
@@ -64,6 +66,19 @@ impl Message {
         match self {
             Message::AboutMe { timestamp, .. } => timestamp,
             Message::Chat { timestamp, .. } => timestamp,
+        }
+    }
+}
+
+impl Display for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Message::AboutMe { name, timestamp } => {
+                write!(f, "AboutMe: {} at {}", name, timestamp)
+            }
+            Message::Chat { text, timestamp } => {
+                write!(f, "Chat: {} at {}", text, timestamp)
+            }
         }
     }
 }
