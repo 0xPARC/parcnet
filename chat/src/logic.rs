@@ -11,8 +11,10 @@ use iroh::net::discovery::pkarr::dht::DhtDiscovery;
 use iroh::net::endpoint::{TransportConfig, VarInt};
 use iroh::net::key::{PublicKey, SecretKey};
 use iroh::{client::docs::LiveEvent, node::DiscoveryConfig};
-use message::{Message, SignedMessage};
+use message::SignedMessage;
+use name::Names;
 use persistence::get_or_create_secret_key;
+use std::sync::Mutex;
 use std::time::Duration;
 use std::{
     str::FromStr,
@@ -21,6 +23,8 @@ use std::{
 use tokio::sync::watch;
 use tracing::info;
 
+pub use message::Message;
+
 type IrohNode = iroh::node::Node<iroh::blobs::store::fs::Store>;
 
 pub struct Logic {
@@ -28,6 +32,7 @@ pub struct Logic {
     secret_key: SecretKey,
     doc0: Arc<tokio::sync::RwLock<Option<Doc>>>,
     messages: RwLock<Vec<(PublicKey, Message)>>,
+    names: Mutex<Names>,
     message_watch: (watch::Sender<()>, watch::Receiver<()>),
     initial_sync: RwLock<bool>,
     initial_sync_watch: (watch::Sender<()>, watch::Receiver<()>),
@@ -37,8 +42,7 @@ pub struct Logic {
 const _DOC0: &str = "6noafdqcxno4xv4ejf5xpma6gcl4gaw4w2gxsyvlp6kfwq3t6i2q";
 const DOC0_TICKET: &str = "docaaacaxeh5eddy2cni7cuu5gail5gaxqqy2loiv6cghg5u45akcplu4skahswyqlad2rachperq7aesmyhoxycbsn7djsqwrn4m7yd7pkr3rxwaaa";
 
-const _DOC1: &str = "6noafdqcxno4xv4ejf5xpma6gcl4gaw4w2gxsyvlp6kfwq3t6i2q";
-const DOC1_TICKET: &str = "docaaacaxeh5eddy2cni7cuu5gail5gaxqqy2loiv6cghg5u45akcplu4skahswyqlad2rachperq7aesmyhoxycbsn7djsqwrn4m7yd7pkr3rxwaaa";
+mod name;
 
 impl Logic {
     pub fn new() -> Self {
@@ -52,6 +56,7 @@ impl Logic {
             secret_key,
             doc0: Arc::new(tokio::sync::RwLock::new(None)),
             messages: RwLock::new(Vec::new()),
+            names: Mutex::new(Names::new()),
             message_watch,
             initial_sync: RwLock::new(true),
             initial_sync_watch,
@@ -111,9 +116,9 @@ impl Logic {
                 }
             }
 
-            initial_messages.sort_by_key(|m| *m.1.timestamp());
-            *self.messages.write().unwrap() = initial_messages;
-            self.message_watch.0.send(()).unwrap();
+            for (pubkey, message) in &initial_messages {
+                self.add_message(*pubkey, message);
+            }
         }
         info!("initial messages loaded");
         Ok(())
@@ -133,12 +138,7 @@ impl Logic {
                         if let Ok(content) = iroh.blobs().read_to_bytes(hash).await {
                             if let Ok(m) = SignedMessage::verify_and_decode(&content) {
                                 info!("inserting message");
-                                self.messages.write().unwrap().push(m);
-                                self.messages
-                                    .write()
-                                    .unwrap()
-                                    .sort_by_key(|m| *m.1.timestamp());
-                                self.message_watch.0.send(()).unwrap();
+                                self.add_message(m.0, &m.1);
                             }
                         }
                     }
@@ -154,24 +154,16 @@ impl Logic {
         Ok(())
     }
 
-    pub async fn send_message(&self, message: &Message) -> anyhow::Result<()> {
-        info!("sending message: {}", message);
-
-        let message = Message::Chat {
-            timestamp: chrono::Utc::now(),
-            text: message.to_string(),
-        };
+    pub async fn send_message(&self, input: &str) -> anyhow::Result<()> {
+        let message = parse_message_input(input);
 
         let content = SignedMessage::sign_and_encode(&self.secret_key, &message)?;
-        let timestamp = message.timestamp().clone();
+        let timestamp = *message.timestamp();
 
         let iroh = Arc::clone(&self.iroh);
         let doc0 = Arc::clone(&self.doc0);
 
-        self.messages
-            .write()
-            .unwrap()
-            .push((self.secret_key.public(), message));
+        self.add_message(self.secret_key.public(), &message);
 
         tokio::spawn(async move {
             let iroh = iroh.read().await;
@@ -189,22 +181,28 @@ impl Logic {
         Ok(())
     }
 
+    pub fn get_name(&self, pubkey: &PublicKey) -> String {
+        self.names
+            .lock()
+            .unwrap()
+            .get_name(pubkey)
+            .cloned()
+            .unwrap_or_else(|| pubkey.to_string().chars().take(6).collect::<String>())
+    }
+
     pub fn get_initial_sync(&self) -> bool {
         *self.initial_sync.read().unwrap()
     }
 
-    pub fn get_messages(&self) -> Vec<(String, String)> {
-        let m: Vec<(String, String)> = self
+    pub fn get_messages(&self) -> Vec<(PublicKey, String)> {
+        let m: Vec<(PublicKey, String)> = self
             .messages
             .read()
             .map(|msg| msg.clone())
             .unwrap()
             .into_iter()
             .filter_map(|m| match m {
-                (public_key, Message::Chat { timestamp: _, text }) => {
-                    let shortened_pkey: String = public_key.to_string().chars().take(4).collect();
-                    Some((shortened_pkey, text))
-                }
+                (public_key, Message::Chat { timestamp: _, text }) => Some((public_key, text)),
                 _ => None,
             })
             .collect();
@@ -215,7 +213,7 @@ impl Logic {
         self.message_watch.1.clone()
     }
 
-    pub fn get_initial_sync_wach(&self) -> watch::Receiver<()> {
+    pub fn get_initial_sync_watch(&self) -> watch::Receiver<()> {
         self.initial_sync_watch.1.clone()
     }
 
@@ -230,4 +228,31 @@ impl Logic {
             .await?;
         Ok(())
     }
+
+    fn add_message(&self, pubkey: PublicKey, message: &Message) {
+        self.messages
+            .write()
+            .unwrap()
+            .push((pubkey, message.clone()));
+        self.names
+            .lock()
+            .unwrap()
+            .apply_about_message(pubkey, message);
+        self.messages
+            .write()
+            .unwrap()
+            .sort_by_key(|m| *m.1.timestamp());
+        self.message_watch.0.send(()).unwrap();
+    }
+}
+
+pub fn parse_message_input(input: &str) -> Message {
+    input
+        .strip_prefix('/')
+        .and_then(|cmd| cmd.strip_prefix("name"))
+        .filter(|name| !name.trim().is_empty())
+        .map_or_else(
+            || Message::new_chat(input.to_string()),
+            |name| Message::new_about_me(name.trim().to_string()),
+        )
 }

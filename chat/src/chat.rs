@@ -1,5 +1,6 @@
 mod input;
 mod loader;
+mod name;
 
 use crate::logic::{get_current_version, Logic};
 use gpui::{
@@ -9,6 +10,7 @@ use gpui::{
 use gpui::{View, VisualContext};
 use input::TextInput;
 use loader::Loader;
+use name::Name;
 use std::sync::Arc;
 
 actions!(chat, [Enter]);
@@ -30,7 +32,7 @@ impl Chat {
         .detach();
 
         let mut message_watch = logic.get_message_watch();
-        let mut initial_sync_watch = logic.get_initial_sync_wach();
+        let mut initial_sync_watch = logic.get_initial_sync_watch();
 
         let logic_quit = logic.clone();
         cx.on_app_quit(move |_| {
@@ -108,6 +110,13 @@ impl Render for Chat {
         let view = cx.view().clone();
         let messages = self.logic.get_messages();
         let initial_sync = self.logic.get_initial_sync();
+        let logic = self.logic.clone();
+
+        let name_views: Vec<View<Name>> = messages
+            .iter()
+            .map(|(pubkey, _)| cx.new_view(|cx| Name::new(cx, *pubkey, logic.clone())))
+            .collect();
+
         if initial_sync {
             div()
                 .child(
@@ -170,15 +179,18 @@ impl Render for Chat {
                 .bg(gpui::white())
                 .child(
                     uniform_list(view, "messages-list", messages.len(), {
+                        let name_views = name_views.clone();
                         move |_, visible_range, _| {
                             visible_range
                                 .map(|ix| {
+                                    let (_, message) = messages.get(ix).unwrap();
+                                    let name_view = &name_views[ix];
                                     div()
-                                        .child(format!(
-                                            "{}: {}",
-                                            messages.get(ix).unwrap().clone().0,
-                                            messages.get(ix).unwrap().clone().1,
-                                        ))
+                                        .flex()
+                                        .flex_row()
+                                        .gap_1()
+                                        .child(name_view.clone())
+                                        .child(message.clone())
                                         .into_any_element()
                                 })
                                 .collect::<Vec<_>>()
