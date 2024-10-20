@@ -40,16 +40,30 @@ pub enum Message {
         name: String,
         timestamp: DateTime<Utc>,
     },
-    ChatMessage {
+    Chat {
         text: String,
         timestamp: DateTime<Utc>,
     },
 }
 impl Message {
+    pub fn new_about_me(name: String) -> Self {
+        Self::AboutMe {
+            name,
+            timestamp: Utc::now(),
+        }
+    }
+
+    pub fn new_chat(text: String) -> Self {
+        Self::Chat {
+            text,
+            timestamp: Utc::now(),
+        }
+    }
+
     pub fn timestamp(&self) -> &DateTime<Utc> {
         match self {
             Message::AboutMe { timestamp, .. } => timestamp,
-            Message::ChatMessage { timestamp, .. } => timestamp,
+            Message::Chat { timestamp, .. } => timestamp,
         }
     }
 }

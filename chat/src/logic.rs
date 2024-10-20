@@ -37,6 +37,9 @@ pub struct Logic {
 const _DOC0: &str = "6noafdqcxno4xv4ejf5xpma6gcl4gaw4w2gxsyvlp6kfwq3t6i2q";
 const DOC0_TICKET: &str = "docaaacaxeh5eddy2cni7cuu5gail5gaxqqy2loiv6cghg5u45akcplu4skahswyqlad2rachperq7aesmyhoxycbsn7djsqwrn4m7yd7pkr3rxwaaa";
 
+const _DOC1: &str = "6noafdqcxno4xv4ejf5xpma6gcl4gaw4w2gxsyvlp6kfwq3t6i2q";
+const DOC1_TICKET: &str = "docaaacaxeh5eddy2cni7cuu5gail5gaxqqy2loiv6cghg5u45akcplu4skahswyqlad2rachperq7aesmyhoxycbsn7djsqwrn4m7yd7pkr3rxwaaa";
+
 impl Logic {
     pub fn new() -> Self {
         let message_watch = watch::channel(());
@@ -151,10 +154,10 @@ impl Logic {
         Ok(())
     }
 
-    pub async fn send_message(&self, message: &str) -> anyhow::Result<()> {
+    pub async fn send_message(&self, message: &Message) -> anyhow::Result<()> {
         info!("sending message: {}", message);
 
-        let message = Message::ChatMessage {
+        let message = Message::Chat {
             timestamp: chrono::Utc::now(),
             text: message.to_string(),
         };
@@ -198,7 +201,7 @@ impl Logic {
             .unwrap()
             .into_iter()
             .filter_map(|m| match m {
-                (public_key, Message::ChatMessage { timestamp: _, text }) => {
+                (public_key, Message::Chat { timestamp: _, text }) => {
                     let shortened_pkey: String = public_key.to_string().chars().take(4).collect();
                     Some((shortened_pkey, text))
                 }
