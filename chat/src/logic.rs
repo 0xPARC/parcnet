@@ -15,7 +15,8 @@ use iroh::net::key::{PublicKey, SecretKey};
 use iroh::{client::docs::LiveEvent, node::DiscoveryConfig};
 use message::SignedMessage;
 
-use persistence::get_or_create_secret_key;
+use persistence::{get_or_create_schnorr_secret_key, get_or_create_secret_key};
+use pod2::schnorr::SchnorrSecretKey;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::{
@@ -32,6 +33,7 @@ type IrohNode = iroh::node::Node<iroh::blobs::store::fs::Store>;
 pub struct Logic {
     iroh: Arc<tokio::sync::RwLock<Option<IrohNode>>>,
     secret_key: SecretKey,
+    schnorr_secret_key: SchnorrSecretKey,
     doc0: Arc<tokio::sync::RwLock<Option<Doc>>>,
     messages: RwLock<Vec<(PublicKey, Message)>>,
     identities: Mutex<Identities>,
@@ -44,16 +46,121 @@ pub struct Logic {
 const _DOC0: &str = "6noafdqcxno4xv4ejf5xpma6gcl4gaw4w2gxsyvlp6kfwq3t6i2q";
 const DOC0_TICKET: &str = "docaaacaxeh5eddy2cni7cuu5gail5gaxqqy2loiv6cghg5u45akcplu4skahswyqlad2rachperq7aesmyhoxycbsn7djsqwrn4m7yd7pkr3rxwaaa";
 
+mod pods {
+    use anyhow::Result;
+    use chrono::{DateTime, Utc};
+    use iroh::net::key::PublicKey;
+    use pod2::pod::POD;
+    use rusqlite::{params, Connection, OpenFlags};
+    use std::path::Path;
+    use tracing::{error, info};
+
+    pub struct PodStore {
+        conn: Connection,
+    }
+
+    impl PodStore {
+        pub fn new(db_path: &Path) -> Result<Self> {
+            let conn = Connection::open_with_flags(
+                db_path,
+                OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+            )?;
+
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS pods (
+                    uid TEXT PRIMARY KEY,
+                    public_key BLOB NOT NULL,
+                    pod BLOB NOT NULL,
+                    timestamp INTEGER NOT NULL
+                )",
+                [],
+            )?;
+
+            Ok(Self { conn })
+        }
+
+        pub fn add_pod(&self, uid: &str, public_key: &PublicKey, pod: &POD) -> Result<()> {
+            let timestamp = Utc::now();
+            let serialized_pod = postcard::to_stdvec(pod)?;
+
+            self.conn.execute(
+                "INSERT OR REPLACE INTO pods (uid, public_key, pod, timestamp) VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    uid,
+                    public_key.as_bytes(),
+                    serialized_pod,
+                    timestamp.timestamp(),
+                ],
+            )?;
+
+            info!("Added pod with UID: {}", uid);
+            Ok(())
+        }
+
+        pub fn get_pod(&self, uid: &str) -> Result<Option<(PublicKey, POD, DateTime<Utc>)>> {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT public_key, pod, timestamp FROM pods WHERE uid = ?1")?;
+
+            let result = stmt.query_row(params![uid], |row| {
+                let public_key_bytes: Vec<u8> = row.get(0)?;
+                let pod_bytes: Vec<u8> = row.get(1)?;
+                let timestamp: i64 = row.get(2)?;
+
+                let public_key = PublicKey::try_from_bytes(&public_key_bytes).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Blob,
+                        Box::new(e),
+                    )
+                })?;
+
+                let pod: POD = postcard::from_bytes(&pod_bytes).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        1,
+                        rusqlite::types::Type::Blob,
+                        Box::new(e),
+                    )
+                })?;
+
+                let datetime = DateTime::from_timestamp(timestamp, 0).ok_or_else(|| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        2,
+                        rusqlite::types::Type::Integer,
+                        Box::new(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Invalid timestamp",
+                        )),
+                    )
+                })?;
+
+                Ok((public_key, pod, datetime))
+            });
+
+            match result {
+                Ok(pod_data) => Ok(Some(pod_data)),
+                Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                Err(e) => {
+                    error!("Error retrieving pod: {:?}", e);
+                    Err(e.into())
+                }
+            }
+        }
+    }
+}
+
 impl Logic {
     pub fn new() -> Self {
         let message_watch = watch::channel(());
         let secret_key = get_or_create_secret_key();
+        let schnorr_secret_key = get_or_create_schnorr_secret_key();
         let initial_sync_watch = watch::channel(());
         let auto_updater = AutoUpdater::new();
 
         Self {
             iroh: Arc::new(tokio::sync::RwLock::new(None)),
             secret_key,
+            schnorr_secret_key,
             doc0: Arc::new(tokio::sync::RwLock::new(None)),
             messages: RwLock::new(Vec::new()),
             identities: Mutex::new(Identities::new()),
@@ -172,7 +279,7 @@ impl Logic {
                 let author = iroh.authors().default().await?;
                 doc0.set_bytes(author, timestamp.timestamp_micros().to_string(), content)
                     .await?;
-                info!("message sent");
+                info!("message sent, storing pod");
                 Ok::<_, anyhow::Error>(())
             } else {
                 anyhow::bail!("Iroh or Doc not initialized")
