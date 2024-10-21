@@ -12,3 +12,4 @@ plonky2 = { git = "https://github.com/mir-protocol/plonky2" }
 anyhow = "1.0.56"
 rand = "0.8.5"
 log = "0.4.22"
+serde = "1.0.210"
