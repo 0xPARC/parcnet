@@ -1,6 +1,7 @@
 use iroh::net::key::PublicKey;
-use pod2::schnorr::SchnorrPublicKey;
+use pod2::schnorr::{SchnorrPublicKey, SchnorrSigner};
 use std::collections::HashMap;
+use tracing::warn;
 
 use super::Message;
 
@@ -23,8 +24,16 @@ impl Identities {
                 self.names.insert(pubkey, name.clone());
             }
             Message::SchnorrKey {
-                schnorr_public_key, ..
+                schnorr_public_key,
+                signature,
+                ..
             } => {
+                let signer = SchnorrSigner::new();
+                let field_elem = schnorr_public_key.pk;
+                if !signer.verify(signature, &vec![field_elem], schnorr_public_key) {
+                    warn!("invalid schnorr sig, not storing identity");
+                    return;
+                }
                 self.keys.insert(pubkey, schnorr_public_key.clone());
             }
             _ => {}
