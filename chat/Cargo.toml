@@ -15,6 +15,7 @@ gpui.workspace = true
 iroh = "0.26.0"
 pkarr = "2.2.0"
 postcard = "1.0.10"
+pod2 = { path = "../pod2" }
 reqwest = "0.12.8"
 rust-embed.workspace = true
 serde = "1.0.210"
