@@ -5,13 +5,15 @@ use anyhow::Result;
 //use circuit::pod2_circuit;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::types::Field;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::schnorr::SchnorrPublicKey;
 use crate::schnorr::SchnorrSecretKey;
 use crate::schnorr::SchnorrSignature;
 use crate::schnorr::SchnorrSigner;
 
-use entry::Entry;
+pub use entry::Entry;
 use gadget::GadgetID;
 use payload::{HashablePayload, PODPayload};
 use value::ScalarOrVec;
@@ -30,13 +32,13 @@ mod statement;
 mod util;
 mod value;
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum PODProof {
     Schnorr(SchnorrSignature),
     Oracle(SchnorrSignature),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct POD {
     pub payload: PODPayload,
     proof: PODProof,

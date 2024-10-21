@@ -34,7 +34,7 @@ pub struct SchnorrPublicKey {
     pub pk: GoldilocksField,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct SchnorrSignature {
     pub s: u64,
     pub e: u64,
