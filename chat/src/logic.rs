@@ -1,10 +1,12 @@
 mod auto_update;
+mod identity;
 mod message;
 mod persistence;
 
 use auto_update::AutoUpdater;
 pub use auto_update::{get_app_path, get_current_version, is_dev};
 use futures::StreamExt;
+use identity::Identities;
 use iroh::client::Doc;
 use iroh::docs::DocTicket;
 use iroh::net::discovery::pkarr::dht::DhtDiscovery;
@@ -12,7 +14,7 @@ use iroh::net::endpoint::{TransportConfig, VarInt};
 use iroh::net::key::{PublicKey, SecretKey};
 use iroh::{client::docs::LiveEvent, node::DiscoveryConfig};
 use message::SignedMessage;
-use name::Names;
+
 use persistence::get_or_create_secret_key;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -32,7 +34,7 @@ pub struct Logic {
     secret_key: SecretKey,
     doc0: Arc<tokio::sync::RwLock<Option<Doc>>>,
     messages: RwLock<Vec<(PublicKey, Message)>>,
-    names: Mutex<Names>,
+    identities: Mutex<Identities>,
     message_watch: (watch::Sender<()>, watch::Receiver<()>),
     initial_sync: RwLock<bool>,
     initial_sync_watch: (watch::Sender<()>, watch::Receiver<()>),
@@ -41,8 +43,6 @@ pub struct Logic {
 
 const _DOC0: &str = "6noafdqcxno4xv4ejf5xpma6gcl4gaw4w2gxsyvlp6kfwq3t6i2q";
 const DOC0_TICKET: &str = "docaaacaxeh5eddy2cni7cuu5gail5gaxqqy2loiv6cghg5u45akcplu4skahswyqlad2rachperq7aesmyhoxycbsn7djsqwrn4m7yd7pkr3rxwaaa";
-
-mod name;
 
 impl Logic {
     pub fn new() -> Self {
@@ -56,7 +56,7 @@ impl Logic {
             secret_key,
             doc0: Arc::new(tokio::sync::RwLock::new(None)),
             messages: RwLock::new(Vec::new()),
-            names: Mutex::new(Names::new()),
+            identities: Mutex::new(Identities::new()),
             message_watch,
             initial_sync: RwLock::new(true),
             initial_sync_watch,
@@ -182,7 +182,7 @@ impl Logic {
     }
 
     pub fn get_name(&self, pubkey: &PublicKey) -> String {
-        self.names
+        self.identities
             .lock()
             .unwrap()
             .get_name(pubkey)
@@ -234,10 +234,10 @@ impl Logic {
             .write()
             .unwrap()
             .push((pubkey, message.clone()));
-        self.names
+        self.identities
             .lock()
             .unwrap()
-            .apply_about_message(pubkey, message);
+            .apply_message(pubkey, message);
         self.messages
             .write()
             .unwrap()
