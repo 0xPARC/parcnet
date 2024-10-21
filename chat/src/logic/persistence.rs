@@ -31,11 +31,12 @@ impl KeyOperations for SecretKey {
 }
 
 impl KeyOperations for SchnorrSecretKey {
-    const FILENAME: &'static str = "schnorr_key.bin";
+    const FILENAME: &'static str = "user_schnorr_key.bin";
     const EXPECTED_BYTES: usize = 8;
 
     fn generate_new() -> Self {
-        Self { sk: rand::random() }
+        let random = rand::random::<u64>() % ((1 << 16) + 1);
+        Self { sk: random }
     }
 
     fn from_bytes(bytes: &[u8]) -> Option<Self> {
@@ -50,7 +51,7 @@ impl KeyOperations for SchnorrSecretKey {
     }
 }
 
-fn get_exe_parent_dir() -> PathBuf {
+pub fn get_exe_parent_dir() -> PathBuf {
     std::env::current_exe()
         .expect("failed to get executable path")
         .parent()
