@@ -1,6 +1,7 @@
 mod input;
 mod loader;
 mod name;
+mod podcount;
 
 use crate::logic::{get_current_version, Logic};
 use gpui::{
@@ -11,6 +12,7 @@ use gpui::{View, VisualContext};
 use input::TextInput;
 use loader::Loader;
 use name::Name;
+use podcount::Podcount;
 use std::sync::Arc;
 
 actions!(chat, [Enter]);
@@ -19,6 +21,7 @@ pub struct Chat {
     logic: Arc<Logic>,
     message_input: View<TextInput>,
     loader: View<Loader>,
+    podcount: View<Podcount>,
     scroll_handle: UniformListScrollHandle,
 }
 
@@ -69,12 +72,15 @@ impl Chat {
         cx.bind_keys([KeyBinding::new("enter", Enter, None)]);
         let message_input = cx.new_view(TextInput::new);
         let loader = cx.new_view(Loader::new);
+        let logic_pc = logic.clone();
+        let podcount = cx.new_view(|cx| Podcount::new(cx, logic_pc));
         let scroll_handle = UniformListScrollHandle::new();
 
         Self {
             logic,
             message_input,
             loader,
+            podcount,
             scroll_handle,
         }
     }
@@ -84,7 +90,7 @@ impl Chat {
         let message = message_input.read(cx).get_content().to_string();
         let logic = self.logic.clone();
         cx.spawn(|view, mut cx| async move {
-            let _ = logic.send_message(&message).await;
+            let _ = logic.send_message(&message).await.unwrap();
             let _ = cx.update(|cx| {
                 message_input.update(cx, |input, _| input.reset());
                 view.update(cx, |this, cx| {
@@ -166,7 +172,8 @@ impl Render for Chat {
                                 .text_xs()
                                 .text_color(rgba(0x00000030))
                                 .child(format!("chat v{}", get_current_version())),
-                        ),
+                        )
+                        .child(div().absolute().right_0().child(self.podcount.clone())),
                 )
                 .key_context("Chat")
                 .on_action(cx.listener(Self::enter))

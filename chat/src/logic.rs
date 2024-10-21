@@ -236,6 +236,14 @@ impl Logic {
         self.initial_sync_watch.1.clone()
     }
 
+    pub fn get_pod_watch(&self) -> watch::Receiver<()> {
+        self.pod_watch.1.clone()
+    }
+
+    pub fn get_num_pods(&self) -> u64 {
+        self.pod_store.lock().unwrap().get_num_pods().unwrap()
+    }
+
     pub async fn cleanup(&self) -> anyhow::Result<()> {
         self.iroh
             .write()
@@ -276,7 +284,7 @@ fn store_message_pod(
         &vec![Entry::new_from_scalar("message", field_elem)],
         &schnorr_secret_key,
     );
-    pod_store.lock().unwrap().add_pod(&pod)?;
+    pod_store.lock().unwrap().add_pod(&pod).unwrap();
     pod_watch.send(()).unwrap();
     Ok(())
 }
