@@ -23,7 +23,6 @@ impl PodStore {
         conn.execute(
             "CREATE TABLE IF NOT EXISTS pods (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            public_key BLOB NOT NULL,
                             pod BLOB NOT NULL,
                             timestamp INTEGER NOT NULL
                         )",
@@ -37,6 +36,7 @@ impl PodStore {
     pub fn add_pod(&self, pod: &POD) -> Result<()> {
         let timestamp = Utc::now();
         let serialized_pod = postcard::to_stdvec(pod)?;
+
         self.conn.execute(
             "INSERT INTO pods (pod, timestamp) VALUES (?1, ?2)",
             params![serialized_pod, timestamp.timestamp(),],
@@ -64,5 +64,5 @@ pub fn get_string_field_elem(text: &str) -> GoldilocksField {
 }
 
 fn get_default_db_path() -> PathBuf {
-    get_exe_parent_dir().join("pods.db")
+    get_exe_parent_dir().join("podstore.db")
 }
