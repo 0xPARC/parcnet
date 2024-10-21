@@ -86,7 +86,11 @@ impl Display for Message {
                 schnorr_public_key,
                 timestamp,
             } => {
-                write!(f, "SchnorrKey: {} at {}", schnorr_public_key, timestamp)
+                write!(
+                    f,
+                    "SchnorrKey: {} at {}",
+                    schnorr_public_key.pk.0, timestamp
+                )
             }
             Message::Chat { text, timestamp } => {
                 write!(f, "Chat: {} at {}", text, timestamp)
