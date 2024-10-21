@@ -1,3 +1,4 @@
+/// code forked from https://github.com/tideofwords/schnorr
 use log::info;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::types::Field;
@@ -132,7 +133,7 @@ impl Default for SchnorrSigner {
 mod tests {
     use plonky2::field::goldilocks_field::GoldilocksField;
 
-    use crate::schnorr::{SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner};
+    use super::{SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner};
 
     use log::info;
 

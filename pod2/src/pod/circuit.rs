@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::schnorr_prover::{
+use crate::signature::schnorr_prover::{
     MessageTarget, SchnorrBuilder, SchnorrPublicKeyTarget, SchnorrSignatureTarget,
     SignatureVerifierBuilder,
 };
@@ -20,6 +20,7 @@ use statement::StatementTarget;
 use super::util::hash_string_to_field;
 use super::PODProof;
 use super::{HashablePayload, POD};
+use crate::{C, D, F};
 
 pub mod entry;
 pub mod gpg;
@@ -28,8 +29,3 @@ pub mod origin;
 pub mod pod;
 pub mod statement;
 mod util;
-
-pub type F = GoldilocksField;
-pub type C = PoseidonGoldilocksConfig;
-pub const D: usize = 2;
-pub type PlonkyProof = Proof<F, PoseidonGoldilocksConfig, D>;

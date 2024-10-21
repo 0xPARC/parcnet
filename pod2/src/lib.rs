@@ -1,4 +1,11 @@
-pub mod mod65537;
+use plonky2::field::goldilocks_field::GoldilocksField;
+use plonky2::plonk::config::PoseidonGoldilocksConfig;
+use plonky2::plonk::proof::Proof;
+
 pub mod pod;
-pub mod schnorr;
-pub mod schnorr_prover;
+pub mod signature;
+
+pub type F = GoldilocksField;
+pub type C = PoseidonGoldilocksConfig;
+pub const D: usize = 2;
+pub type PlonkyProof = Proof<F, PoseidonGoldilocksConfig, D>;

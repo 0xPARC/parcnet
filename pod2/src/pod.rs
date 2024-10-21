@@ -11,10 +11,9 @@ use serde::Serialize;
 use plonky2::field::types::PrimeField64;
 >>>>>>> 740d329 (Circuit work)
 
-use crate::schnorr::SchnorrPublicKey;
-use crate::schnorr::SchnorrSecretKey;
-use crate::schnorr::SchnorrSignature;
-use crate::schnorr::SchnorrSigner;
+use crate::signature::schnorr::{
+    SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner,
+};
 
 pub use entry::Entry;
 pub use gadget::GadgetID;

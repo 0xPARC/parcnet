@@ -1,3 +1,4 @@
+/// code forked from https://github.com/tideofwords/schnorr
 use anyhow::Result;
 
 use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
@@ -8,7 +9,7 @@ use plonky2::iop::{
 };
 use plonky2::plonk::{circuit_builder::CircuitBuilder, config::GenericConfig};
 
-use crate::{
+use super::{
     mod65537::Mod65537Builder,
     schnorr::{SchnorrPublicKey, SchnorrSignature},
 };
@@ -153,10 +154,12 @@ impl SignatureVerifierBuilder for SchnorrBuilder {
 
 #[cfg(test)]
 mod tests {
-    use crate::schnorr::{SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner};
-    use crate::schnorr_prover::{
+    use super::{
         MessageTarget, SchnorrBuilder, SchnorrPublicKeyTarget, SchnorrSignatureTarget,
         SignatureVerifierBuilder,
+    };
+    use crate::signature::schnorr::{
+        SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner,
     };
     use plonky2::field::goldilocks_field::GoldilocksField;
     use plonky2::iop::witness::PartialWitness;
