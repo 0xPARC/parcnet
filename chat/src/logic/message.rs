@@ -51,6 +51,8 @@ pub enum Message {
         text: String,
         timestamp: DateTime<Utc>,
     },
+    #[serde(other)]
+    Unknown,
 }
 impl Message {
     pub fn new_about_me(name: String) -> Self {
@@ -72,6 +74,9 @@ impl Message {
             Message::AboutMe { timestamp, .. } => timestamp,
             Message::SchnorrKey { timestamp, .. } => timestamp,
             Message::Chat { timestamp, .. } => timestamp,
+            Message::Unknown => {
+                panic!("unknown message type")
+            }
         }
     }
 }
@@ -94,6 +99,9 @@ impl Display for Message {
             }
             Message::Chat { text, timestamp } => {
                 write!(f, "Chat: {} at {}", text, timestamp)
+            }
+            Message::Unknown => {
+                write!(f, "Unknown")
             }
         }
     }
