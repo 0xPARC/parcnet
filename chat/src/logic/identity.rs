@@ -34,8 +34,4 @@ impl Identities {
     pub fn get_name(&self, pubkey: &PublicKey) -> Option<&String> {
         self.names.get(pubkey)
     }
-
-    pub fn get_key(&self, pubkey: &PublicKey) -> Option<&SchnorrPublicKey> {
-        self.keys.get(pubkey)
-    }
 }
