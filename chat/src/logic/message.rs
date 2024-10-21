@@ -4,7 +4,7 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::Signature;
 use iroh::net::key::{PublicKey, SecretKey};
-use pod2::schnorr::SchnorrPublicKey;
+use pod2::schnorr::{SchnorrPublicKey, SchnorrSignature};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -45,6 +45,7 @@ pub enum Message {
     },
     SchnorrKey {
         schnorr_public_key: SchnorrPublicKey,
+        signature: SchnorrSignature,
         timestamp: DateTime<Utc>,
     },
     Chat {
@@ -89,12 +90,13 @@ impl Display for Message {
             }
             Message::SchnorrKey {
                 schnorr_public_key,
+                signature,
                 timestamp,
             } => {
                 write!(
                     f,
-                    "SchnorrKey: {} at {}",
-                    schnorr_public_key.pk.0, timestamp
+                    "SchnorrKey: {} with sig {} {} at {}",
+                    schnorr_public_key.pk.0, signature.e, signature.s, timestamp
                 )
             }
             Message::Chat { text, timestamp } => {
