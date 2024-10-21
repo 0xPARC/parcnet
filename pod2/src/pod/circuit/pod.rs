@@ -11,7 +11,7 @@ use plonky2::{
 
 use crate::{
     pod::{util::hash_string_to_field, PODProof, POD, SIGNER_PK_KEY},
-    schnorr_prover::{
+    signature::schnorr_prover::{
         MessageTarget, SchnorrBuilder, SchnorrPublicKeyTarget, SchnorrSignatureTarget,
         SignatureVerifierBuilder,
     },
@@ -157,7 +157,7 @@ mod tests {
 
     use crate::{
         pod::{circuit::pod::SchnorrPODTarget, entry::Entry, payload::HashablePayload, POD},
-        schnorr::SchnorrSecretKey,
+        signature::schnorr::SchnorrSecretKey,
     };
 
     #[test]

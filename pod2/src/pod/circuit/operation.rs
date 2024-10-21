@@ -24,7 +24,7 @@ use crate::{
         statement::{Statement, StatementRef},
         GPGInput, POD,
     },
-    schnorr::SchnorrSecretKey,
+    signature::schnorr::SchnorrSecretKey,
 };
 
 use super::{
