@@ -2,6 +2,7 @@ use std::{collections::HashMap, fmt::Debug};
 
 use anyhow::{anyhow, Result};
 use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
+use serde::{Deserialize, Serialize};
 
 use super::{
     entry::Entry,
@@ -11,7 +12,7 @@ use super::{
     value::{HashableEntryValue, ScalarOrVec},
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct AnchoredKey(pub Origin, pub String);
 
 impl AnchoredKey {
@@ -34,7 +35,7 @@ impl AnchoredKey {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Statement {
     None,
     ValueOf(AnchoredKey, ScalarOrVec),

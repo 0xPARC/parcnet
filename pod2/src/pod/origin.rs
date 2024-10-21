@@ -1,10 +1,11 @@
 use anyhow::Result;
 use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
+use serde::{Deserialize, Serialize};
 
 use super::gadget::GadgetID;
 
 // An Origin, which represents a reference to an ancestor POD.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Origin {
     pub origin_id: GoldilocksField, // reserve 0 for NONE, 1 for SELF
     pub origin_name: String,

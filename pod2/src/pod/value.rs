@@ -3,6 +3,7 @@ use plonky2::{
     hash::poseidon::PoseidonHash,
     plonk::config::{GenericHashOut, Hasher},
 };
+use serde::{Deserialize, Serialize};
 
 // EntryValue trait, and ScalarOrVec type which implements it.
 // This is a field element or array of field elements.
@@ -22,7 +23,7 @@ impl HashableEntryValue for Vec<GoldilocksField> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum ScalarOrVec {
     Scalar(GoldilocksField),
     Vector(Vec<GoldilocksField>),
