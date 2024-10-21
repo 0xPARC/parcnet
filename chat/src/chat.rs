@@ -170,10 +170,20 @@ impl Render for Chat {
                                 .justify_center()
                                 .size_full()
                                 .text_xs()
-                                .text_color(rgba(0x00000030))
-                                .child(format!("chat v{}", get_current_version())),
-                        )
-                        .child(div().absolute().right_0().child(self.podcount.clone())),
+                                .child(div().w_32())
+                                .child(
+                                    div()
+                                        .text_color(rgba(0x00000030))
+                                        .child(format!("chat v{}", get_current_version())),
+                                )
+                                .child(
+                                    div()
+                                        .w_32()
+                                        .flex()
+                                        .justify_end()
+                                        .child(self.podcount.clone()),
+                                ),
+                        ),
                 )
                 .key_context("Chat")
                 .on_action(cx.listener(Self::enter))
