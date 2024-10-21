@@ -973,7 +973,7 @@ dependencies = [
 
 [[package]]
 name = "chat"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "assets",
@@ -985,6 +985,7 @@ dependencies = [
  "gpui",
  "iroh",
  "pkarr",
+ "pod2",
  "postcard",
  "reqwest",
  "rust-embed",
@@ -5293,6 +5294,7 @@ dependencies = [
  "log",
  "plonky2",
  "rand 0.8.5",
+ "serde",
 ]
 
 [[package]]
