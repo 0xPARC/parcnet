@@ -2,6 +2,7 @@ mod auto_update;
 mod identity;
 mod message;
 mod persistence;
+mod pods;
 
 use auto_update::AutoUpdater;
 pub use auto_update::{get_app_path, get_current_version, is_dev};
@@ -16,8 +17,6 @@ use iroh::{client::docs::LiveEvent, node::DiscoveryConfig};
 use message::SignedMessage;
 
 use persistence::{get_or_create_schnorr_secret_key, get_or_create_secret_key};
-use plonky2::field::goldilocks_field::GoldilocksField;
-use plonky2::field::types::Field;
 use pod2::pod::{Entry, POD};
 use pod2::schnorr::SchnorrSecretKey;
 use pods::{get_string_field_elem, PodStore};
@@ -43,6 +42,7 @@ pub struct Logic {
     identities: Mutex<Identities>,
     pod_store: Arc<Mutex<PodStore>>,
     message_watch: (watch::Sender<()>, watch::Receiver<()>),
+    pod_watch: (watch::Sender<()>, watch::Receiver<()>),
     initial_sync: RwLock<bool>,
     initial_sync_watch: (watch::Sender<()>, watch::Receiver<()>),
     _auto_updater: AutoUpdater,
@@ -51,83 +51,15 @@ pub struct Logic {
 const _DOC0: &str = "6noafdqcxno4xv4ejf5xpma6gcl4gaw4w2gxsyvlp6kfwq3t6i2q";
 const DOC0_TICKET: &str = "docaaacaxeh5eddy2cni7cuu5gail5gaxqqy2loiv6cghg5u45akcplu4skahswyqlad2rachperq7aesmyhoxycbsn7djsqwrn4m7yd7pkr3rxwaaa";
 
-mod pods {
-    use anyhow::Result;
-    use chrono::Utc;
-    use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
-    use pod2::pod::POD;
-    use rusqlite::{params, Connection, OpenFlags};
-    use std::path::PathBuf;
-    use tracing::info;
-
-    use super::persistence::get_exe_parent_dir;
-
-    pub struct PodStore {
-        conn: Connection,
-    }
-
-    impl PodStore {
-        pub fn new() -> Self {
-            let conn = Connection::open_with_flags(
-                get_default_db_path(),
-                OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
-            )
-            .unwrap();
-
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS pods (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            public_key BLOB NOT NULL,
-                            pod BLOB NOT NULL,
-                            timestamp INTEGER NOT NULL
-                        )",
-                [],
-            )
-            .unwrap();
-
-            Self { conn }
-        }
-
-        pub fn add_pod(&self, pod: &POD) -> Result<()> {
-            let timestamp = Utc::now();
-            let serialized_pod = postcard::to_stdvec(pod)?;
-            self.conn.execute(
-                "INSERT INTO pods (pod, timestamp) VALUES (?1, ?2)",
-                params![serialized_pod, timestamp.timestamp(),],
-            )?;
-            info!("added pod");
-            Ok(())
-        }
-
-        pub fn get_num_pods(&self) -> Result<u64> {
-            let count: i64 = self
-                .conn
-                .query_row("SELECT COUNT(*) FROM pods", [], |row| row.get(0))?;
-            Ok(count as u64)
-        }
-    }
-
-    pub fn get_string_field_elem(text: &str) -> GoldilocksField {
-        let hash = blake3::hash(text.to_string().as_bytes());
-        let hash_bytes = hash.as_bytes();
-        let mut n = 0u128;
-        for &byte in hash_bytes.iter().take(16) {
-            n = (n << 8) | (byte as u128);
-        }
-        GoldilocksField::from_noncanonical_u128(n)
-    }
-
-    fn get_default_db_path() -> PathBuf {
-        get_exe_parent_dir().join("pods.db")
-    }
-}
-
 impl Logic {
     pub fn new() -> Self {
-        let message_watch = watch::channel(());
         let secret_key = get_or_create_secret_key();
         let schnorr_secret_key = get_or_create_schnorr_secret_key();
+
+        let message_watch = watch::channel(());
         let initial_sync_watch = watch::channel(());
+        let pod_watch = watch::channel(());
+
         let auto_updater = AutoUpdater::new();
 
         Self {
@@ -141,6 +73,7 @@ impl Logic {
             message_watch,
             initial_sync: RwLock::new(true),
             initial_sync_watch,
+            pod_watch,
             _auto_updater: auto_updater,
         }
     }
@@ -249,6 +182,7 @@ impl Logic {
         let schnorr_secret_key = self.schnorr_secret_key.clone();
         let pod_store = self.pod_store.clone();
         let input = input.to_string();
+        let pod_watch = self.pod_watch.clone();
         tokio::spawn(async move {
             let iroh = iroh.read().await;
             let doc0 = doc0.read().await;
@@ -256,12 +190,7 @@ impl Logic {
                 let author = iroh.authors().default().await?;
                 doc0.set_bytes(author, timestamp.timestamp_micros().to_string(), content)
                     .await?;
-                let field_elem = get_string_field_elem(&input);
-                let pod = POD::execute_schnorr_gadget(
-                    &vec![Entry::new_from_scalar("message", field_elem)],
-                    &schnorr_secret_key,
-                );
-                pod_store.lock().unwrap().add_pod(&pod)?;
+                store_message_pod(pod_store, schnorr_secret_key, pod_watch.0, &input)?;
                 info!("message sent, pod stored");
                 Ok(())
             } else {
@@ -334,6 +263,22 @@ impl Logic {
             .sort_by_key(|m| *m.1.timestamp());
         self.message_watch.0.send(()).unwrap();
     }
+}
+
+fn store_message_pod(
+    pod_store: Arc<Mutex<PodStore>>,
+    schnorr_secret_key: SchnorrSecretKey,
+    pod_watch: watch::Sender<()>,
+    input: &str,
+) -> anyhow::Result<()> {
+    let field_elem = get_string_field_elem(input);
+    let pod = POD::execute_schnorr_gadget(
+        &vec![Entry::new_from_scalar("message", field_elem)],
+        &schnorr_secret_key,
+    );
+    pod_store.lock().unwrap().add_pod(&pod)?;
+    pod_watch.send(()).unwrap();
+    Ok(())
 }
 
 pub fn parse_message_input(input: &str) -> Message {
