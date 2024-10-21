@@ -8,7 +8,12 @@ use plonky2::{
     plonk::circuit_builder::CircuitBuilder,
 };
 
-use crate::pod::origin::Origin;
+use crate::pod::{gadget::GadgetID, origin::Origin};
+
+use super::{
+    util::{matrix_ref, vector_ref},
+    D, F,
+};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct OriginTarget {
@@ -17,7 +22,7 @@ pub struct OriginTarget {
 }
 
 impl OriginTarget {
-    pub fn new_virtual(builder: &mut CircuitBuilder<GoldilocksField, 2>) -> Self {
+    pub fn new_virtual(builder: &mut CircuitBuilder<F, D>) -> Self {
         Self {
             origin_id: builder.add_virtual_target(),
             gadget_id: builder.add_virtual_target(),
@@ -32,16 +37,36 @@ impl OriginTarget {
             gadget_id: v[1],
         }
     }
-    pub fn set_witness(
-        &self,
-        pw: &mut PartialWitness<GoldilocksField>,
-        origin: &Origin,
-    ) -> Result<()> {
+    pub fn set_witness(&self, pw: &mut PartialWitness<F>, origin: &Origin) -> Result<()> {
         pw.set_target(self.origin_id, origin.origin_id)?;
         pw.set_target(
             self.gadget_id,
-            GoldilocksField::from_canonical_u64(origin.gadget_id as usize as u64),
+            F::from_canonical_u64(origin.gadget_id as usize as u64),
         )?;
         Ok(())
+    }
+    pub fn none(builder: &mut CircuitBuilder<F, D>) -> Self {
+        Self {
+            origin_id: builder.zero(),
+            gadget_id: builder.zero(),
+        }
+    }
+    pub fn auto(builder: &mut CircuitBuilder<F, D>, gadget_id: GadgetID) -> Self {
+        Self {
+            origin_id: builder.constant(Origin::SELF.origin_id),
+            gadget_id: builder.constant(GoldilocksField(gadget_id as u64)),
+        }
+    }
+
+    pub fn remap(
+        &self,
+        builder: &mut CircuitBuilder<F, D>,
+        origin_id_map: &[Vec<Target>],
+        pod_index: Target,
+    ) -> Result<Self> {
+        Ok(Self {
+            origin_id: matrix_ref(builder, &origin_id_map, pod_index, self.origin_id)?,
+            gadget_id: self.gadget_id,
+        })
     }
 }

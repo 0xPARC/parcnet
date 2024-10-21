@@ -11,17 +11,21 @@ use super::{
     origin::Origin,
     util::hash_string_to_field,
     value::{HashableEntryValue, ScalarOrVec},
+    POD,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct AnchoredKey(pub Origin, pub String);
 
-impl AnchoredKey {
-    pub fn eq(&self, ak: &AnchoredKey) -> bool {
+impl PartialEq for AnchoredKey {
+    fn eq(&self, ak: &AnchoredKey) -> bool {
         let AnchoredKey(self_origin, self_key) = self;
         let AnchoredKey(other_origin, other_key) = ak;
         (self_origin.origin_id == other_origin.origin_id) && (self_key == other_key)
     }
+}
+
+impl AnchoredKey {
     /// Field representation as a vector of length 3.
     pub fn to_fields(&self) -> Vec<GoldilocksField> {
         let AnchoredKey(origin, key) = self;
@@ -96,8 +100,22 @@ impl Statement {
             Statement::MaxOf(_, _, _) => "MAXOF",
         }
     }
+    pub fn code_to_predicate(code: GoldilocksField) -> &'static str {
+        match code.to_canonical_u64() {
+            0 => "NONE",
+            1 => "VALUEOF",
+            2 => "EQUAL",
+            3 => "NOTEQUAL",
+            4 => "GT",
+            5 => "CONTAINS",
+            6 => "SUMOF",
+            7 => "PRODUCTOF",
+            8 => "MAXOF",
+            _ => "",
+        }
+    }
     pub fn from_entry(entry: &Entry, this_gadget_id: GadgetID) -> Self {
-        Statement::ValueOf(
+        Self::ValueOf(
             AnchoredKey(
                 Origin::auto("_SELF".to_string(), this_gadget_id),
                 entry.key.to_string(),
@@ -105,17 +123,27 @@ impl Statement {
             entry.value.clone(),
         )
     }
+    // Statement codes
+    pub const NONE: GoldilocksField = GoldilocksField::ZERO;
+    pub const VALUE_OF: GoldilocksField = GoldilocksField(1);
+    pub const EQUAL: GoldilocksField = GoldilocksField(2);
+    pub const NOT_EQUAL: GoldilocksField = GoldilocksField(3);
+    pub const GT: GoldilocksField = GoldilocksField(4);
+    pub const CONTAINS: GoldilocksField = GoldilocksField(5);
+    pub const SUM_OF: GoldilocksField = GoldilocksField(6);
+    pub const PRODUCT_OF: GoldilocksField = GoldilocksField(7);
+    pub const MAX_OF: GoldilocksField = GoldilocksField(8);
     pub fn code(&self) -> GoldilocksField {
-        GoldilocksField::from_canonical_u64(match self {
-            Self::None => 0,
-            Self::ValueOf(_, _) => 1,
-            Self::Equal(_, _) => 2,
-            Self::NotEqual(_, _) => 3,
-            Self::Gt(_, _) => 4,
-            Self::Contains(_, _) => 5,
-            Self::SumOf(_, _, _) => 6,
-            Self::ProductOf(_, _, _) => 7,
-            Self::MaxOf(_, _, _) => 8,
+        (match self {
+            Self::None => Self::NONE,
+            Self::ValueOf(_, _) => Self::VALUE_OF,
+            Self::Equal(_, _) => Self::EQUAL,
+            Self::NotEqual(_, _) => Self::NOT_EQUAL,
+            Self::Gt(_, _) => Self::GT,
+            Self::Contains(_, _) => Self::CONTAINS,
+            Self::SumOf(_, _, _) => Self::SUM_OF,
+            Self::ProductOf(_, _, _) => Self::PRODUCT_OF,
+            Self::MaxOf(_, _, _) => Self::MAX_OF,
         })
     }
     /// Field representation as a vector of length 11.
@@ -128,51 +156,51 @@ impl Statement {
             vec![self.code()],
             match self {
                 Self::None => vec![GoldilocksField::ZERO; 10],
-                Self::ValueOf(anchkey, value) => vec![
+                Self::ValueOf(anchkey, value) => [
                     anchkey.to_fields(),
                     vec![GoldilocksField::ZERO; 6],
                     vec![value.hash_or_value()],
                 ]
                 .concat(),
-                Self::Equal(anchkey1, anchkey2) => vec![
+                Self::Equal(anchkey1, anchkey2) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
                     vec![GoldilocksField::ZERO; 4],
                 ]
                 .concat(),
-                Self::NotEqual(anchkey1, anchkey2) => vec![
+                Self::NotEqual(anchkey1, anchkey2) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
                     vec![GoldilocksField::ZERO; 4],
                 ]
                 .concat(),
-                Self::Gt(anchkey1, anchkey2) => vec![
+                Self::Gt(anchkey1, anchkey2) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
                     vec![GoldilocksField::ZERO; 4],
                 ]
                 .concat(),
-                Self::Contains(anchkey1, anchkey2) => vec![
+                Self::Contains(anchkey1, anchkey2) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
                     vec![GoldilocksField::ZERO; 4],
                 ]
                 .concat(),
-                Self::SumOf(anchkey1, anchkey2, anchkey3) => vec![
+                Self::SumOf(anchkey1, anchkey2, anchkey3) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
                     anchkey3.to_fields(),
                     vec![GoldilocksField::ZERO],
                 ]
                 .concat(),
-                Self::ProductOf(anchkey1, anchkey2, anchkey3) => vec![
+                Self::ProductOf(anchkey1, anchkey2, anchkey3) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
                     anchkey3.to_fields(),
                     vec![GoldilocksField::ZERO],
                 ]
                 .concat(),
-                Self::MaxOf(anchkey1, anchkey2, anchkey3) => vec![
+                Self::MaxOf(anchkey1, anchkey2, anchkey3) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
                     anchkey3.to_fields(),
@@ -285,10 +313,10 @@ impl StatementOrRef for Statement {
 }
 
 /// Typical statement ref type.
-#[derive(Clone, Debug)]
-pub struct StatementRef<'a, 'b>(pub &'a str, pub &'b str);
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct StatementRef<'a>(pub &'a str, pub &'a str);
 
-impl<'a, 'b> StatementOrRef for StatementRef<'a, 'b> {
+impl<'a> StatementOrRef for StatementRef<'a> {
     type StatementTable = HashMap<String, HashMap<String, Statement>>;
     fn deref_cloned(&self, table: &Self::StatementTable) -> Result<Statement> {
         let StatementRef(parent_name, statement_name) = self;
@@ -305,5 +333,24 @@ impl<'a, 'b> StatementOrRef for StatementRef<'a, 'b> {
                 parent_name
             ))
             .cloned()
+    }
+}
+
+impl<'a> StatementRef<'a> {
+    pub fn index_map(pods_list: &'a [(String, POD)]) -> HashMap<Self, (usize, usize)> {
+        pods_list
+            .iter()
+            .enumerate()
+            .flat_map(|(pod_num, (pod_name, pod))| {
+                pod.payload.statements_list.iter().enumerate().map(
+                    move |(statement_num, (statement_name, _))| {
+                        (
+                            StatementRef(pod_name, statement_name),
+                            (pod_num, statement_num),
+                        )
+                    },
+                )
+            })
+            .collect()
     }
 }

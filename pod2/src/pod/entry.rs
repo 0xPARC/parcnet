@@ -1,5 +1,7 @@
 use plonky2::field::goldilocks_field::GoldilocksField;
 
+use crate::pod::{util::hash_string_to_field, value::HashableEntryValue};
+
 use super::value::ScalarOrVec;
 
 /// An Entry, which is just a key-value pair.
@@ -22,5 +24,10 @@ impl Entry {
             key: key.to_string(),
             value: ScalarOrVec::Vector(value),
         }
+    }
+
+    /// Representation as field vector of length 2.
+    pub fn to_fields(&self) -> Vec<GoldilocksField> {
+        vec![hash_string_to_field(&self.key), self.value.hash_or_value()]
     }
 }

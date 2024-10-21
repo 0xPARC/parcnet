@@ -4,8 +4,12 @@ use anyhow::anyhow;
 use anyhow::Result;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::types::Field;
+<<<<<<< HEAD
 use serde::Deserialize;
 use serde::Serialize;
+=======
+use plonky2::field::types::PrimeField64;
+>>>>>>> 740d329 (Circuit work)
 
 use crate::schnorr::SchnorrPublicKey;
 use crate::schnorr::SchnorrSecretKey;
@@ -88,12 +92,12 @@ impl POD {
         }
     }
 
-    pub fn execute_schnorr_gadget(entries: &Vec<Entry>, sk: &SchnorrSecretKey) -> Self {
+    pub fn execute_schnorr_gadget(entries: &[Entry], sk: &SchnorrSecretKey) -> Self {
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
         let protocol = SchnorrSigner::new();
 
         let kv_pairs = [
-            entries.clone(),
+            entries.to_vec(),
             vec![Entry {
                 key: SIGNER_PK_KEY.to_string(),
                 value: ScalarOrVec::Scalar(protocol.keygen(sk).pk),
@@ -134,6 +138,7 @@ impl POD {
         }
         let out_statements = statements.get("_SELF").unwrap();
         let out_payload = PODPayload::new(out_statements);
+        println!("{:?}", out_payload);
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
         let protocol = SchnorrSigner::new();
         let payload_hash = out_payload.hash_payload();
@@ -180,29 +185,95 @@ impl GPGInput {
             origin_renaming_map: origin_renaming_map_clone,
         }
     }
+    /// New origin name -> new origin ID map
+    fn origin_name_to_new_id_map(&self) -> HashMap<&String, usize> {
+        // Sorted new origin name list
+        let mut new_origin_name_list = self.origin_renaming_map.values().collect::<Vec<_>>();
+        new_origin_name_list.sort();
+
+        new_origin_name_list
+            .iter()
+            .enumerate()
+            .map(
+                |(idx, new_name)| (*new_name, idx + 2), // 0 reserved for none, 1 reserved for _SELF
+            )
+            .collect::<HashMap<_, _>>()
+    }
+
+    /// Maps a pair of indices consisting of POD index and origin ID to new origin ID
+    fn origin_id_map(&self) -> Result<HashMap<(usize, usize), usize>> {
+        let new_origin_name_to_id_map = self.origin_name_to_new_id_map();
+        self.origin_renaming_map
+            .keys()
+            .map(|(pod_name, origin_name)| {
+                let pod_index = self
+                    .pods_list
+                    .iter()
+                    .position(|(name, _)| name == pod_name)
+                    .ok_or(anyhow!("Error: POD {} missing from list!", pod_name))?;
+                let (_, pod) = &self.pods_list[pod_index];
+                let origin_id = pod
+                    .payload
+                    .statements_list
+                    .iter()
+                    .flat_map(|(_, s)| {
+                        s.anchored_keys()
+                            .iter()
+                            .map(|anchkey| anchkey.clone().0)
+                            .collect::<Vec<_>>()
+                    })
+                    .find(|o| &o.origin_name == origin_name)
+                    .ok_or(anyhow!("Origin {} missing from POD list!", origin_name))?
+                    .origin_id;
+                Ok((
+                    (pod_index, origin_id.to_canonical_u64() as usize),
+                    *new_origin_name_to_id_map
+                        .get(
+                            self.origin_renaming_map
+                                .get(&(pod_name.clone(), origin_name.clone()))
+                                .ok_or(anyhow!(
+                                    "Missing pair {:?} in origin renaming map!",
+                                    (pod_name, origin_name)
+                                ))?,
+                        )
+                        .ok_or(anyhow!("Invalid new origin name to ID map!"))?,
+                ))
+            })
+            .collect::<Result<HashMap<(usize, usize), usize>>>()
+    }
+
+    // TODO
+    /// (POD index, old origin ID) -> new origin ID mapping as a
+    /// num_pods x (num_statements + 2) matrix.
+    fn origin_id_map_fields(&self) -> Result<Vec<Vec<GoldilocksField>>> {
+        let origin_id_map = self.origin_id_map()?;
+        let num_pods = self.pods_list.len();
+        let num_statements = self
+            .pods_list
+            .iter()
+            .map(|(_, p)| p.payload.statements_list.len())
+            .max()
+            .ok_or(anyhow!("POD with empty statement list encountered!"))?;
+        Ok((0..num_pods)
+            .map(|i| {
+                (0..(num_statements + 2))
+                    .map(|j| {
+                        origin_id_map
+                            .get(&(i, j))
+                            .map(|k| GoldilocksField(*k as u64))
+                            .unwrap_or(GoldilocksField::ZERO)
+                    })
+                    .collect()
+            })
+            .collect())
+    }
 
     /// returns a map from input POD name to (map from statement name to statement)
     /// the inner statements have their old origin names and IDs are replaced with
     /// the new origin names as specified by inputs.origin_renaming_map
     /// and with new origin IDs which correspond to the lexicographic order of the new origin names
     fn remap_origin_ids_by_name(&self) -> Result<HashMap<String, HashMap<String, Statement>>> {
-        // Sorted new origin name list
-        let mut new_origin_name_list = self
-            .origin_renaming_map
-            .iter()
-            .map(|(_, new_name)| new_name)
-            .collect::<Vec<_>>();
-        new_origin_name_list.sort();
-
-        // New origin name -> new origin ID map
-        let new_origin_name_to_id_map = new_origin_name_list
-            .iter()
-            .enumerate()
-            .map(
-                |(idx, new_name)| (*new_name, idx + 2), // 0 reserved for none, 1 reserved for _SELF
-            )
-            .collect::<HashMap<&String, usize>>();
-
+        let new_origin_name_to_id_map = self.origin_name_to_new_id_map();
         // Iterate through all statements, leaving parent names intact
         // and replacing statement names with their new names
         // (according to `origin_renaming_map`) and replacing origin

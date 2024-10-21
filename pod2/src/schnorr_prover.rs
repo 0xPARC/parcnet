@@ -32,7 +32,7 @@ impl MessageTarget {
         }
     }
 
-    pub fn set_witness(&self, pw: &mut PartialWitness<GoldF>, msg: &Vec<GoldF>) -> Result<()> {
+    pub fn set_witness(&self, pw: &mut PartialWitness<GoldF>, msg: &[GoldF]) -> Result<()> {
         assert!(msg.len() == self.msg.len());
         for (&t, &x) in self.msg.iter().zip(msg.iter()) {
             pw.set_target(t, x)?;
