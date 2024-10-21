@@ -26,6 +26,8 @@ tracing = "0.1.40"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 unicode-segmentation = "1.12.0"
+rand = "0.8.5"
+rusqlite = { version = "0.32.1", features = ["bundled"] }
 
 [package.metadata.bundle]
 name = "chat"
