@@ -8,18 +8,17 @@ use plonky2::{
     },
     plonk::{circuit_builder::CircuitBuilder, config::PoseidonGoldilocksConfig},
 };
+use std::iter::zip;
 
+use super::{statement::StatementTarget, util::vector_ref, D, F};
 use crate::{
     pod::{util::hash_string_to_field, PODProof, POD, SIGNER_PK_KEY},
+    recursion::{utils::assert_one_if_enabled, InnerCircuit},
     signature::schnorr_prover::{
         MessageTarget, SchnorrBuilder, SchnorrPublicKeyTarget, SchnorrSignatureTarget,
         SignatureVerifierBuilder,
     },
 };
-
-use std::iter::zip;
-
-use super::{statement::StatementTarget, util::vector_ref, D, F};
 
 pub struct SchnorrPODTarget {
     /// Sorted payload.
@@ -91,14 +90,18 @@ impl SchnorrPODTarget {
         // This suggests we are OK.
         Ok(value_target)
     }
+
     /// Computes payload hash target as well as a boolean indicating
     /// whether verification of the POD signature was successful.
     pub fn compute_targets_and_verify(
         &self,
         builder: &mut CircuitBuilder<F, D>,
-    ) -> Result<(Target, SchnorrPublicKeyTarget, BoolTarget)> {
+    ) -> Result<(MessageTarget, SchnorrPublicKeyTarget, BoolTarget)> {
         // Compute payload hash target.
         let payload_hash_target = self.payload_hash_target(builder);
+        let msg_target = MessageTarget {
+            msg: vec![payload_hash_target],
+        };
         // Extract signer's key.
         let pk_target = SchnorrPublicKeyTarget {
             pk: self.signer_pk_target(builder)?,
@@ -108,12 +111,10 @@ impl SchnorrPODTarget {
         let verification_target = sb.verify_sig::<PoseidonGoldilocksConfig>(
             builder,
             &self.proof,
-            &MessageTarget {
-                msg: vec![payload_hash_target],
-            },
+            &msg_target,
             &pk_target,
         );
-        Ok((payload_hash_target, pk_target, verification_target))
+        Ok((msg_target, pk_target, verification_target))
     }
     pub fn set_witness(&self, pw: &mut PartialWitness<GoldilocksField>, pod: &POD) -> Result<()> {
         // Assign payload witness.
@@ -142,23 +143,68 @@ impl SchnorrPODTarget {
     }
 }
 
+/// NS stands for NumStatements, the number of statements checked in the POD.
+pub struct SchnorrPODGadget<const NS: usize> {}
+
+impl<const NS: usize> InnerCircuit for SchnorrPODGadget<NS> {
+    type Input = POD;
+    type Targets = SchnorrPODTarget;
+
+    /// set up the circuit logic
+    fn add_targets(
+        builder: &mut CircuitBuilder<F, D>,
+        selector_booltarg: &BoolTarget,
+        msg_targ: &MessageTarget,
+    ) -> Result<Self::Targets> {
+        let schnorr_pod_target = SchnorrPODTarget::new_virtual(builder, NS);
+
+        // add POD in-circuit verification logic
+        let (message_target, _, verified) =
+            schnorr_pod_target.compute_targets_and_verify(builder)?;
+
+        // if selector_booltarg=0, we check the verified.target (else the recursive tree will check
+        // the plonky2 proof)
+        assert_one_if_enabled(builder, verified.target, &selector_booltarg);
+
+        // ensure that the input `msg_targ` matches the obtained `message_target` at the
+        // `compute_targets_and_verify` call.
+        // The `msg_targ` is an input to this method because is reused by the recursive
+        // verification in the RecursionTree.
+        assert_eq!(message_target.msg.len(), msg_targ.msg.len());
+        let _ = msg_targ
+            .msg
+            .iter()
+            .zip(message_target.msg)
+            .map(|(a, b)| builder.connect(*a, b));
+
+        Ok(schnorr_pod_target)
+    }
+
+    /// set the actual witness values for the current instance of the circuit
+    fn set_targets(
+        pw: &mut PartialWitness<F>,
+        pod_target: &Self::Targets, // targets = schnorr_pod_target
+        pod: &Self::Input,          // input = pod
+    ) -> Result<()> {
+        pod_target.set_witness(pw, pod)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
     use plonky2::{
         field::{goldilocks_field::GoldilocksField, types::Field},
         iop::witness::PartialWitness,
-        plonk::{
-            circuit_builder::CircuitBuilder,
-            circuit_data::CircuitConfig,
-            config::{GenericConfig, PoseidonGoldilocksConfig},
-        },
+        plonk::{circuit_builder::CircuitBuilder, circuit_data::CircuitConfig},
     };
 
+    use super::*;
     use crate::{
-        pod::{circuit::pod::SchnorrPODTarget, entry::Entry, payload::HashablePayload, POD},
+        pod::{entry::Entry, payload::HashablePayload, POD},
         signature::schnorr::SchnorrSecretKey,
     };
+    use crate::{C, D, F};
 
     #[test]
     fn schnorr_pod_test() -> Result<()> {
@@ -167,25 +213,41 @@ mod tests {
         let schnorr_pod3 =
             POD::execute_schnorr_gadget(&vec![entry1.clone()], &SchnorrSecretKey { sk: 25 });
 
-        const D: usize = 2;
-        type C = PoseidonGoldilocksConfig;
-        type F = <C as GenericConfig<D>>::F;
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(config);
-        let schnorr_pod_target = SchnorrPODTarget::new_virtual(&mut builder, 2);
+
+        // NS: NumStatements
+        const NS: usize = 2;
+
+        let selector_targ = builder.add_virtual_target();
+        let selector_booltarg = BoolTarget::new_unsafe(selector_targ);
+
+        let msg_targ = MessageTarget::new_with_size(
+            &mut builder,
+            1, // current impl takes the first element of the hash as msg that is signed
+               // in the future: plonky2::hash::hash_types::NUM_HASH_OUT_ELTS, // len of msg (which is a hash)
+        );
+
+        let schnorr_pod_target =
+            SchnorrPODGadget::<NS>::add_targets(&mut builder, &selector_booltarg, &msg_targ)?;
+
+        // set selector=0, so that the pod is verified in the InnerCircuit
+        let selector = F::ZERO;
 
         // Assign witnesses
         let mut pw: PartialWitness<F> = PartialWitness::new();
-        schnorr_pod_target.set_witness(&mut pw, &schnorr_pod3)?;
-
-        // Verify POD
-        let (_, _, verified) = schnorr_pod_target.compute_targets_and_verify(&mut builder)?;
-        // It should have been successfully verified.
-        builder.assert_one(verified.target);
+        pw.set_target(selector_targ, selector)?;
+        SchnorrPODGadget::<NS>::set_targets(&mut pw, &schnorr_pod_target, &schnorr_pod3)?;
 
         // Build and prove.
         let data = builder.build::<C>();
         let _proof = data.prove(pw)?;
         Ok(())
     }
+
+    // WIP
+    // #[test]
+    // fn test_recursion_tree_with_SchnorrPODGadget() -> Result<()> {
+    //     todo!();
+    // }
 }

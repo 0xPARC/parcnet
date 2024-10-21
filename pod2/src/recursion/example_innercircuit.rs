@@ -8,7 +8,7 @@ use plonky2::plonk::circuit_builder::CircuitBuilder;
 use crate::signature::schnorr::*;
 use crate::signature::schnorr_prover::*;
 
-use super::{selector_gate, InnerCircuit};
+use super::{utils::assert_one_if_enabled, InnerCircuit};
 use super::{C, D, F};
 
 pub struct ExampleGadgetInput {
@@ -46,15 +46,7 @@ impl InnerCircuit for ExampleGadget {
         // if selector==0: verify the signature; else: don't check it. ie:
         //   if selector=0: check that sig_verif==1
         //   if selector=1: check that one==1
-        let one = builder.one();
-        let expected = selector_gate(
-            builder,
-            sig_verif_targ.target,
-            one,
-            selector_booltarg.target,
-        );
-        let one_2 = builder.one();
-        builder.connect(expected, one_2);
+        assert_one_if_enabled(builder, sig_verif_targ.target, &selector_booltarg);
 
         Ok(Self::Targets { pk_targ, sig_targ })
     }

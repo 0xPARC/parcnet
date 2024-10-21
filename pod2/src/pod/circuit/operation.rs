@@ -290,6 +290,8 @@ fn op_test() -> Result<()> {
         .iter()
         .enumerate()
         .map(|(pod_index, (_, pod))| {
+            // QUESTION: this is creating a new target, but does not call
+            // `compute_targets_and_verify`
             let pod_target = SchnorrPODTarget::new_virtual(&mut builder, num_statements);
             let pod_index_target = builder.constant(GoldilocksField(pod_index as u64));
             pod_target.set_witness(&mut pw, pod)?;
