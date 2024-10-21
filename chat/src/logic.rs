@@ -16,7 +16,11 @@ use iroh::{client::docs::LiveEvent, node::DiscoveryConfig};
 use message::SignedMessage;
 
 use persistence::{get_or_create_schnorr_secret_key, get_or_create_secret_key};
+use plonky2::field::goldilocks_field::GoldilocksField;
+use plonky2::field::types::Field;
+use pod2::pod::{Entry, POD};
 use pod2::schnorr::SchnorrSecretKey;
+use pods::{get_string_field_elem, PodStore};
 use std::sync::Mutex;
 use std::time::Duration;
 use std::{
@@ -37,6 +41,7 @@ pub struct Logic {
     doc0: Arc<tokio::sync::RwLock<Option<Doc>>>,
     messages: RwLock<Vec<(PublicKey, Message)>>,
     identities: Mutex<Identities>,
+    pod_store: Arc<Mutex<PodStore>>,
     message_watch: (watch::Sender<()>, watch::Receiver<()>),
     initial_sync: RwLock<bool>,
     initial_sync_watch: (watch::Sender<()>, watch::Receiver<()>),
@@ -48,104 +53,72 @@ const DOC0_TICKET: &str = "docaaacaxeh5eddy2cni7cuu5gail5gaxqqy2loiv6cghg5u45akc
 
 mod pods {
     use anyhow::Result;
-    use chrono::{DateTime, Utc};
-    use iroh::net::key::PublicKey;
+    use chrono::Utc;
+    use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
     use pod2::pod::POD;
     use rusqlite::{params, Connection, OpenFlags};
-    use std::path::Path;
-    use tracing::{error, info};
+    use std::path::PathBuf;
+    use tracing::info;
+
+    use super::persistence::get_exe_parent_dir;
 
     pub struct PodStore {
         conn: Connection,
     }
 
     impl PodStore {
-        pub fn new(db_path: &Path) -> Result<Self> {
+        pub fn new() -> Self {
             let conn = Connection::open_with_flags(
-                db_path,
+                get_default_db_path(),
                 OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
-            )?;
+            )
+            .unwrap();
 
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS pods (
-                    uid TEXT PRIMARY KEY,
-                    public_key BLOB NOT NULL,
-                    pod BLOB NOT NULL,
-                    timestamp INTEGER NOT NULL
-                )",
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            public_key BLOB NOT NULL,
+                            pod BLOB NOT NULL,
+                            timestamp INTEGER NOT NULL
+                        )",
                 [],
-            )?;
+            )
+            .unwrap();
 
-            Ok(Self { conn })
+            Self { conn }
         }
 
-        pub fn add_pod(&self, uid: &str, public_key: &PublicKey, pod: &POD) -> Result<()> {
+        pub fn add_pod(&self, pod: &POD) -> Result<()> {
             let timestamp = Utc::now();
             let serialized_pod = postcard::to_stdvec(pod)?;
-
             self.conn.execute(
-                "INSERT OR REPLACE INTO pods (uid, public_key, pod, timestamp) VALUES (?1, ?2, ?3, ?4)",
-                params![
-                    uid,
-                    public_key.as_bytes(),
-                    serialized_pod,
-                    timestamp.timestamp(),
-                ],
+                "INSERT INTO pods (pod, timestamp) VALUES (?1, ?2)",
+                params![serialized_pod, timestamp.timestamp(),],
             )?;
-
-            info!("Added pod with UID: {}", uid);
+            info!("added pod");
             Ok(())
         }
 
-        pub fn get_pod(&self, uid: &str) -> Result<Option<(PublicKey, POD, DateTime<Utc>)>> {
-            let mut stmt = self
+        pub fn get_num_pods(&self) -> Result<u64> {
+            let count: i64 = self
                 .conn
-                .prepare("SELECT public_key, pod, timestamp FROM pods WHERE uid = ?1")?;
-
-            let result = stmt.query_row(params![uid], |row| {
-                let public_key_bytes: Vec<u8> = row.get(0)?;
-                let pod_bytes: Vec<u8> = row.get(1)?;
-                let timestamp: i64 = row.get(2)?;
-
-                let public_key = PublicKey::try_from_bytes(&public_key_bytes).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        0,
-                        rusqlite::types::Type::Blob,
-                        Box::new(e),
-                    )
-                })?;
-
-                let pod: POD = postcard::from_bytes(&pod_bytes).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        1,
-                        rusqlite::types::Type::Blob,
-                        Box::new(e),
-                    )
-                })?;
-
-                let datetime = DateTime::from_timestamp(timestamp, 0).ok_or_else(|| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        2,
-                        rusqlite::types::Type::Integer,
-                        Box::new(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            "Invalid timestamp",
-                        )),
-                    )
-                })?;
-
-                Ok((public_key, pod, datetime))
-            });
-
-            match result {
-                Ok(pod_data) => Ok(Some(pod_data)),
-                Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-                Err(e) => {
-                    error!("Error retrieving pod: {:?}", e);
-                    Err(e.into())
-                }
-            }
+                .query_row("SELECT COUNT(*) FROM pods", [], |row| row.get(0))?;
+            Ok(count as u64)
         }
+    }
+
+    pub fn get_string_field_elem(text: &str) -> GoldilocksField {
+        let hash = blake3::hash(text.to_string().as_bytes());
+        let hash_bytes = hash.as_bytes();
+        let mut n = 0u128;
+        for &byte in hash_bytes.iter().take(16) {
+            n = (n << 8) | (byte as u128);
+        }
+        GoldilocksField::from_noncanonical_u128(n)
+    }
+
+    fn get_default_db_path() -> PathBuf {
+        get_exe_parent_dir().join("pods.db")
     }
 }
 
@@ -164,6 +137,7 @@ impl Logic {
             doc0: Arc::new(tokio::sync::RwLock::new(None)),
             messages: RwLock::new(Vec::new()),
             identities: Mutex::new(Identities::new()),
+            pod_store: Arc::new(Mutex::new(PodStore::new())),
             message_watch,
             initial_sync: RwLock::new(true),
             initial_sync_watch,
@@ -272,6 +246,9 @@ impl Logic {
 
         self.add_message(self.secret_key.public(), &message);
 
+        let schnorr_secret_key = self.schnorr_secret_key.clone();
+        let pod_store = self.pod_store.clone();
+        let input = input.to_string();
         tokio::spawn(async move {
             let iroh = iroh.read().await;
             let doc0 = doc0.read().await;
@@ -279,8 +256,14 @@ impl Logic {
                 let author = iroh.authors().default().await?;
                 doc0.set_bytes(author, timestamp.timestamp_micros().to_string(), content)
                     .await?;
-                info!("message sent, storing pod");
-                Ok::<_, anyhow::Error>(())
+                let field_elem = get_string_field_elem(&input);
+                let pod = POD::execute_schnorr_gadget(
+                    &vec![Entry::new_from_scalar("message", field_elem)],
+                    &schnorr_secret_key,
+                );
+                pod_store.lock().unwrap().add_pod(&pod)?;
+                info!("message sent, pod stored");
+                Ok(())
             } else {
                 anyhow::bail!("Iroh or Doc not initialized")
             }
