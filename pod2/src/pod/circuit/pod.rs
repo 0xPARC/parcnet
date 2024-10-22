@@ -41,15 +41,6 @@ impl SchnorrPODTarget {
             proof: SchnorrSignatureTarget::new_virtual(builder),
         }
     }
-    // TODO rm?
-    // pub fn payload_hash_target(&self, builder: &mut CircuitBuilder<F, D>) -> HashOutTarget {
-    //     let flattened_statement_targets = self
-    //         .payload
-    //         .iter()
-    //         .flat_map(|s| s.to_targets())
-    //         .collect::<Vec<_>>();
-    //     builder.hash_n_to_hash_no_pad::<PoseidonHash>(flattened_statement_targets)
-    // }
     /// Singles out signer's public key target by index, adding
     /// constraints ensuring that the proper entry has been chosen.
     pub fn signer_pk_target(&self, builder: &mut CircuitBuilder<F, D>) -> Result<Target> {
@@ -98,9 +89,6 @@ impl SchnorrPODTarget {
         builder: &mut CircuitBuilder<F, D>,
         hash_target: &HashOutTarget,
     ) -> Result<(SchnorrPublicKeyTarget, BoolTarget)> {
-        // TODO: rm? Compute payload hash target.
-        // TODO: rm? let payload_hash_target: HashOutTarget = self.payload_hash_target(builder);
-
         // build the msg of the sig, from the given hash
         let msg_target = MessageTarget {
             msg: hash_target.elements.to_vec(),
