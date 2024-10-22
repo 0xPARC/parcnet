@@ -1,6 +1,7 @@
 /// This file contains a simple example implementing the InnerCircuit trait, by a circuit that
 /// checks a signature over the given msg.
 use anyhow::Result;
+use plonky2::hash::hash_types::{HashOut, HashOutTarget};
 use plonky2::iop::target::BoolTarget;
 use plonky2::iop::witness::PartialWitness;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
@@ -35,12 +36,15 @@ impl InnerCircuit for ExampleGadget {
     fn add_targets(
         mut builder: &mut CircuitBuilder<F, D>,
         selector_booltarg: &BoolTarget, // 0==inner circuit check enabled
-        msg_targ: &MessageTarget,
+        hash_targ: &HashOutTarget,
     ) -> Result<Self::Targets> {
         // signature verification:
         let sb: SchnorrBuilder = SchnorrBuilder {};
         let pk_targ = SchnorrPublicKeyTarget::new_virtual(&mut builder);
         let sig_targ = SchnorrSignatureTarget::new_virtual(&mut builder);
+        let msg_targ = MessageTarget {
+            msg: hash_targ.elements.to_vec(),
+        };
         let sig_verif_targ = sb.verify_sig::<C>(&mut builder, &sig_targ, &msg_targ, &pk_targ);
 
         // if selector==0: verify the signature; else: don't check it. ie:
