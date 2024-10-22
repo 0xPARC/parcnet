@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow.workspace = true
 assets.workspace = true
+pod2.workspace = true
 bytes = "1.7.2"
 chrono = { version = "0.4.38", features = ["serde"] }
 ed25519-dalek = "2.1.1"
@@ -15,7 +16,6 @@ gpui.workspace = true
 iroh = "0.26.0"
 pkarr = "2.2.0"
 postcard = "1.0.10"
-pod2 = { path = "../pod2" }
 reqwest = "0.12.8"
 rust-embed.workspace = true
 serde = "1.0.210"
@@ -29,7 +29,7 @@ unicode-segmentation = "1.12.0"
 rand = "0.8.5"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 blake3 = "1.5.4"
-plonky2 = { git = "https://github.com/mir-protocol/plonky2" }
+plonky2.workspace = true
 
 [package.metadata.bundle]
 name = "chat"

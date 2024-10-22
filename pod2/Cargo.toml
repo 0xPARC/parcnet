@@ -8,7 +8,7 @@ name = "pod2"
 path = "src/lib.rs"
 
 [dependencies]
-plonky2 = { git = "https://github.com/mir-protocol/plonky2" }
+plonky2.workspace = true
 anyhow = "1.0.56"
 rand = "0.8.5"
 log = "0.4.22"

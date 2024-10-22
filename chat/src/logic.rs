@@ -172,7 +172,7 @@ impl Logic {
         let message = parse_message_input(input);
 
         let content = SignedMessage::sign_and_encode(&self.secret_key, &message)?;
-        let timestamp = *message.timestamp();
+        let timestamp = *message.timestamp().unwrap();
 
         let iroh = Arc::clone(&self.iroh);
         let doc0 = Arc::clone(&self.doc0);
@@ -268,7 +268,7 @@ impl Logic {
         self.messages
             .write()
             .unwrap()
-            .sort_by_key(|m| *m.1.timestamp());
+            .sort_by_key(|m| *m.1.timestamp().unwrap());
         self.message_watch.0.send(()).unwrap();
     }
 }
