@@ -6,6 +6,7 @@ use ed25519_dalek::Signature;
 use iroh::net::key::{PublicKey, SecretKey};
 use pod2::schnorr::{SchnorrPublicKey, SchnorrSignature};
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SignedMessage {
@@ -70,13 +71,14 @@ impl Message {
         }
     }
 
-    pub fn timestamp(&self) -> &DateTime<Utc> {
+    pub fn timestamp(&self) -> Option<&DateTime<Utc>> {
         match self {
-            Message::AboutMe { timestamp, .. } => timestamp,
-            Message::SchnorrKey { timestamp, .. } => timestamp,
-            Message::Chat { timestamp, .. } => timestamp,
+            Message::AboutMe { timestamp, .. } => Some(timestamp),
+            Message::SchnorrKey { timestamp, .. } => Some(timestamp),
+            Message::Chat { timestamp, .. } => Some(timestamp),
             Message::Unknown => {
-                panic!("unknown message type")
+                warn!("no timestamp for unknown message");
+                None
             }
         }
     }

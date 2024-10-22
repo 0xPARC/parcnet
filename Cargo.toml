@@ -7,6 +7,8 @@ pathfinder_simd = { git = "https://github.com/theoparis/pathfinder/" }
 
 [workspace.dependencies]
 assets = { path = "assets" }
+pod2 = { path = "pod2" }
 anyhow = "1.0.86"
 rust-embed = { version = "8.4", features = ["include-exclude"] }
 gpui = { git = "https://github.com/zed-industries/zed" }
+plonky2 = { git = "https://github.com/mir-protocol/plonky2" }
