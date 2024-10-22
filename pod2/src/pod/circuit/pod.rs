@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use plonky2::{
     field::{goldilocks_field::GoldilocksField, types::Field},
+    hash::hash_types::{HashOut, HashOutTarget, NUM_HASH_OUT_ELTS},
     hash::poseidon::PoseidonHash,
     iop::{
         target::{BoolTarget, Target},
@@ -40,16 +41,15 @@ impl SchnorrPODTarget {
             proof: SchnorrSignatureTarget::new_virtual(builder),
         }
     }
-    pub fn payload_hash_target(&self, builder: &mut CircuitBuilder<F, D>) -> Target {
-        let flattened_statement_targets = self
-            .payload
-            .iter()
-            .flat_map(|s| s.to_targets())
-            .collect::<Vec<_>>();
-        builder
-            .hash_n_to_hash_no_pad::<PoseidonHash>(flattened_statement_targets)
-            .elements[0]
-    }
+    // TODO rm?
+    // pub fn payload_hash_target(&self, builder: &mut CircuitBuilder<F, D>) -> HashOutTarget {
+    //     let flattened_statement_targets = self
+    //         .payload
+    //         .iter()
+    //         .flat_map(|s| s.to_targets())
+    //         .collect::<Vec<_>>();
+    //     builder.hash_n_to_hash_no_pad::<PoseidonHash>(flattened_statement_targets)
+    // }
     /// Singles out signer's public key target by index, adding
     /// constraints ensuring that the proper entry has been chosen.
     pub fn signer_pk_target(&self, builder: &mut CircuitBuilder<F, D>) -> Result<Target> {
@@ -91,16 +91,19 @@ impl SchnorrPODTarget {
         Ok(value_target)
     }
 
-    /// Computes payload hash target as well as a boolean indicating
-    /// whether verification of the POD signature was successful.
+    /// Verifies the signature over the hash_target, and returns a boolean indicating whether
+    /// verification of the POD signature was successful.
     pub fn compute_targets_and_verify(
         &self,
         builder: &mut CircuitBuilder<F, D>,
-    ) -> Result<(MessageTarget, SchnorrPublicKeyTarget, BoolTarget)> {
-        // Compute payload hash target.
-        let payload_hash_target = self.payload_hash_target(builder);
+        hash_target: &HashOutTarget,
+    ) -> Result<(SchnorrPublicKeyTarget, BoolTarget)> {
+        // TODO: rm? Compute payload hash target.
+        // TODO: rm? let payload_hash_target: HashOutTarget = self.payload_hash_target(builder);
+
+        // build the msg of the sig, from the given hash
         let msg_target = MessageTarget {
-            msg: vec![payload_hash_target],
+            msg: hash_target.elements.to_vec(),
         };
         // Extract signer's key.
         let pk_target = SchnorrPublicKeyTarget {
@@ -114,7 +117,7 @@ impl SchnorrPODTarget {
             &msg_target,
             &pk_target,
         );
-        Ok((msg_target, pk_target, verification_target))
+        Ok((pk_target, verification_target))
     }
     pub fn set_witness(&self, pw: &mut PartialWitness<GoldilocksField>, pod: &POD) -> Result<()> {
         // Assign payload witness.
@@ -154,28 +157,16 @@ impl<const NS: usize> InnerCircuit for SchnorrPODGadget<NS> {
     fn add_targets(
         builder: &mut CircuitBuilder<F, D>,
         selector_booltarg: &BoolTarget,
-        msg_targ: &MessageTarget,
+        hash_target: &HashOutTarget,
     ) -> Result<Self::Targets> {
         let schnorr_pod_target = SchnorrPODTarget::new_virtual(builder, NS);
 
         // add POD in-circuit verification logic
-        let (message_target, _, verified) =
-            schnorr_pod_target.compute_targets_and_verify(builder)?;
+        let (_, verified) = schnorr_pod_target.compute_targets_and_verify(builder, hash_target)?;
 
         // if selector_booltarg=0, we check the verified.target (else the recursive tree will check
         // the plonky2 proof)
         assert_one_if_enabled(builder, verified.target, &selector_booltarg);
-
-        // ensure that the input `msg_targ` matches the obtained `message_target` at the
-        // `compute_targets_and_verify` call.
-        // The `msg_targ` is an input to this method because is reused by the recursive
-        // verification in the RecursionTree.
-        assert_eq!(message_target.msg.len(), msg_targ.msg.len());
-        let _ = msg_targ
-            .msg
-            .iter()
-            .zip(message_target.msg)
-            .map(|(a, b)| builder.connect(*a, b));
 
         Ok(schnorr_pod_target)
     }
@@ -212,24 +203,20 @@ mod tests {
         let entry1 = Entry::new_from_scalar("some key", scalar1);
         let schnorr_pod3 =
             POD::execute_schnorr_gadget(&vec![entry1.clone()], &SchnorrSecretKey { sk: 25 });
+        let payload_hash = schnorr_pod3.payload.hash_payload();
 
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(config);
 
-        // NS: NumStatements
-        const NS: usize = 2;
+        const NS: usize = 2; // NS: NumStatements
 
         let selector_targ = builder.add_virtual_target();
         let selector_booltarg = BoolTarget::new_unsafe(selector_targ);
 
-        let msg_targ = MessageTarget::new_with_size(
-            &mut builder,
-            1, // current impl takes the first element of the hash as msg that is signed
-               // in the future: plonky2::hash::hash_types::NUM_HASH_OUT_ELTS, // len of msg (which is a hash)
-        );
+        let hash_target = builder.add_virtual_hash_public_input();
 
         let schnorr_pod_target =
-            SchnorrPODGadget::<NS>::add_targets(&mut builder, &selector_booltarg, &msg_targ)?;
+            SchnorrPODGadget::<NS>::add_targets(&mut builder, &selector_booltarg, &hash_target)?;
 
         // set selector=0, so that the pod is verified in the InnerCircuit
         let selector = F::ZERO;
@@ -237,6 +224,7 @@ mod tests {
         // Assign witnesses
         let mut pw: PartialWitness<F> = PartialWitness::new();
         pw.set_target(selector_targ, selector)?;
+        pw.set_hash_target(hash_target, payload_hash)?;
         SchnorrPODGadget::<NS>::set_targets(&mut pw, &schnorr_pod_target, &schnorr_pod3)?;
 
         // Build and prove.
@@ -244,10 +232,4 @@ mod tests {
         let _proof = data.prove(pw)?;
         Ok(())
     }
-
-    // WIP
-    // #[test]
-    // fn test_recursion_tree_with_SchnorrPODGadget() -> Result<()> {
-    //     todo!();
-    // }
 }
