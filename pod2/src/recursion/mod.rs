@@ -98,6 +98,7 @@
 use anyhow::{anyhow, Result};
 use plonky2::field::types::Field;
 use plonky2::gates::noop::NoopGate;
+use plonky2::hash::hash_types::{HashOut, HashOutTarget, NUM_HASH_OUT_ELTS};
 use plonky2::iop::target::{BoolTarget, Target};
 use plonky2::iop::witness::{PartialWitness, WitnessWrite};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
@@ -108,7 +109,6 @@ use plonky2::plonk::proof::{ProofWithPublicInputs, ProofWithPublicInputsTarget};
 use std::marker::PhantomData;
 use std::time::Instant;
 
-use crate::signature::schnorr_prover::MessageTarget;
 use crate::{PlonkyProof, C, D, F};
 use utils::*;
 
@@ -130,7 +130,7 @@ pub trait InnerCircuit {
     fn add_targets(
         builder: &mut CircuitBuilder<F, D>,
         selector_booltarg: &BoolTarget,
-        msg_targ: &MessageTarget,
+        hash_targ: &HashOutTarget,
     ) -> Result<Self::Targets>;
 
     /// set the actual witness values for the current instance of the circuit
@@ -149,11 +149,10 @@ pub trait InnerCircuit {
 /// and `set_targets` (ie. set the specific values to be used for the previously created targets).
 ///
 /// I: InnerCircuit
-/// M: msg length. The upper-bound of the msg length.
 /// N: arity of the recursion tree, ie. how many `(InnerCircuit OR recursive-proof-verify)` each
 /// node of the recursion tree is checking.
-pub struct RecursiveCircuit<I: InnerCircuit, const M: usize, const N: usize> {
-    msgs_targ: Vec<MessageTarget>,
+pub struct RecursiveCircuit<I: InnerCircuit, const N: usize> {
+    hashes_targ: Vec<HashOutTarget>,
     selectors_targ: Vec<Target>,
     inner_circuit_targ: Vec<I::Targets>,
     proofs_targ: Vec<ProofWithPublicInputsTarget<D>>,
@@ -163,13 +162,13 @@ pub struct RecursiveCircuit<I: InnerCircuit, const M: usize, const N: usize> {
     verifier_data: VerifierCircuitData<F, C, D>,
 }
 
-impl<I: InnerCircuit, const M: usize, const N: usize> RecursiveCircuit<I, M, N> {
+impl<I: InnerCircuit, const N: usize> RecursiveCircuit<I, N> {
     pub fn prepare_public_inputs(
         verifier_data: VerifierCircuitData<F, C, D>,
-        msgs: Vec<Vec<F>>,
+        hashes: Vec<HashOut<F>>,
     ) -> Vec<F> {
         [
-            msgs.into_iter().flatten().collect(),
+            hashes.into_iter().flat_map(|h| h.elements).collect(),
             // add verifier_data as public inputs:
             verifier_data.verifier_only.circuit_digest.elements.to_vec(),
             verifier_data
@@ -189,12 +188,11 @@ impl<I: InnerCircuit, const M: usize, const N: usize> RecursiveCircuit<I, M, N> 
         builder: &mut CircuitBuilder<F, D>,
         verifier_data: VerifierCircuitData<F, C, D>,
     ) -> Result<Self> {
-        let mut msgs_targ: Vec<MessageTarget> = vec![];
+        let mut hashes_targ: Vec<HashOutTarget> = vec![];
         for _ in 0..N {
-            let msg_targ = MessageTarget::new_with_size(builder, M);
-            // set msg as public input
-            builder.register_public_inputs(&msg_targ.msg);
-            msgs_targ.push(msg_targ);
+            // register new target of hash, and set it as public input
+            let hash_targ = builder.add_virtual_hash_public_input();
+            hashes_targ.push(hash_targ);
         }
 
         // build the InnerCircuit logic. Also set the selectors, used both by the InnerCircuit and
@@ -213,7 +211,7 @@ impl<I: InnerCircuit, const M: usize, const N: usize> RecursiveCircuit<I, M, N> 
 
             // inner circuits:
             let inner_circuit_targets =
-                I::add_targets(builder, &selector_bool_targ, &msgs_targ[i])?;
+                I::add_targets(builder, &selector_bool_targ, &hashes_targ[i])?;
             inner_circuit_targ.push(inner_circuit_targets);
         }
 
@@ -234,7 +232,7 @@ impl<I: InnerCircuit, const M: usize, const N: usize> RecursiveCircuit<I, M, N> 
         }
 
         Ok(Self {
-            msgs_targ,
+            hashes_targ,
             selectors_targ,
             inner_circuit_targ,
             proofs_targ,
@@ -246,7 +244,7 @@ impl<I: InnerCircuit, const M: usize, const N: usize> RecursiveCircuit<I, M, N> 
     pub fn set_targets(
         &mut self,
         pw: &mut PartialWitness<F>,
-        msgs: &Vec<Vec<F>>,
+        hashes: &Vec<HashOut<F>>,
         // if selectors[i]==0: verify InnerCircuit. if selectors[i]==1: verify recursive_proof[i]
         selectors: Vec<F>,
         inner_circuit_input: Vec<I::Input>,
@@ -254,7 +252,7 @@ impl<I: InnerCircuit, const M: usize, const N: usize> RecursiveCircuit<I, M, N> 
     ) -> Result<()> {
         // set the msgs values
         for i in 0..N {
-            self.msgs_targ[i].set_witness(pw, &msgs[i]).unwrap();
+            pw.set_hash_target(self.hashes_targ[i], hashes[i])?;
         }
 
         // set the InnerCircuit related values
@@ -269,9 +267,9 @@ impl<I: InnerCircuit, const M: usize, const N: usize> RecursiveCircuit<I, M, N> 
         // recursive proofs verification
         pw.set_verifier_data_target(&self.verifier_data_targ, &self.verifier_data.verifier_only)?;
 
-        let public_inputs = RecursiveCircuit::<I, M, N>::prepare_public_inputs(
+        let public_inputs = RecursiveCircuit::<I, N>::prepare_public_inputs(
             self.verifier_data.clone(),
-            msgs.clone(),
+            hashes.clone(),
         );
         for i in 0..N {
             pw.set_proof_with_pis_target(
@@ -287,8 +285,8 @@ impl<I: InnerCircuit, const M: usize, const N: usize> RecursiveCircuit<I, M, N> 
     }
 }
 
-pub fn common_data_for_recursion<I: InnerCircuit, const M: usize, const N: usize>(
-) -> Result<CircuitData<F, C, D>> {
+pub fn common_data_for_recursion<I: InnerCircuit, const N: usize>() -> Result<CircuitData<F, C, D>>
+{
     // 1st
     let config = CircuitConfig::standard_recursion_config();
     let builder = CircuitBuilder::<F, D>::new(config);
@@ -309,11 +307,10 @@ pub fn common_data_for_recursion<I: InnerCircuit, const M: usize, const N: usize
     // 3rd
     let config = CircuitConfig::standard_recursion_config();
     let mut builder = CircuitBuilder::<F, D>::new(config.clone());
-    let mut msgs_targ: Vec<MessageTarget> = vec![];
+    let mut hashes_targ: Vec<HashOutTarget> = vec![];
     for _ in 0..N {
-        let msg_targ = MessageTarget::new_with_size(&mut builder, M);
-        builder.register_public_inputs(&msg_targ.msg);
-        msgs_targ.push(msg_targ);
+        let hash_targ = builder.add_virtual_hash_public_input();
+        hashes_targ.push(hash_targ);
     }
 
     builder.add_gate(
@@ -330,7 +327,7 @@ pub fn common_data_for_recursion<I: InnerCircuit, const M: usize, const N: usize
         let selector_F_targ = builder.add_virtual_target();
         binary_check(&mut builder, selector_F_targ);
         let b = BoolTarget::new_unsafe(selector_F_targ);
-        let _ = I::add_targets(&mut builder, &b, &msgs_targ[i]).unwrap();
+        let _ = I::add_targets(&mut builder, &b, &hashes_targ[i]).unwrap();
     }
 
     // proofs verify
@@ -370,19 +367,19 @@ fn compute_num_gates<const N: usize>() -> Result<usize> {
 }
 
 #[derive(Debug, Clone)]
-pub struct RecursionTree<I: InnerCircuit, const M: usize, const N: usize> {
+pub struct RecursionTree<I: InnerCircuit, const N: usize> {
     _i: PhantomData<I>,
 }
 
-impl<I: InnerCircuit, const M: usize, const N: usize> RecursionTree<I, M, N> {
+impl<I: InnerCircuit, const N: usize> RecursionTree<I, N> {
     /// returns the full-recursive CircuitData
     pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
-        let mut data = common_data_for_recursion::<I, M, N>()?;
+        let mut data = common_data_for_recursion::<I, N>()?;
 
         // build the actual RecursiveCircuit circuit data
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::new(config);
-        let _ = RecursiveCircuit::<I, M, N>::add_targets(&mut builder, data.verifier_data())?;
+        let _ = RecursiveCircuit::<I, N>::add_targets(&mut builder, data.verifier_data())?;
         dbg!(builder.num_gates());
         data = builder.build::<C>();
 
@@ -391,7 +388,7 @@ impl<I: InnerCircuit, const M: usize, const N: usize> RecursionTree<I, M, N> {
 
     pub fn prove_node(
         verifier_data: VerifierCircuitData<F, C, D>,
-        msgs: &Vec<Vec<F>>,
+        hashes: &Vec<HashOut<F>>,
         // if selectors[i]==0: verify InnerCircuit. if selectors[i]==1: verify recursive_proof[i]
         selectors: Vec<F>,
         inner_circuits_input: Vec<I::Input>,
@@ -412,7 +409,7 @@ impl<I: InnerCircuit, const M: usize, const N: usize> RecursionTree<I, M, N> {
         // assign the targets
         let start = Instant::now();
         let mut circuit =
-            RecursiveCircuit::<I, M, N>::add_targets(&mut builder, verifier_data.clone())?;
+            RecursiveCircuit::<I, N>::add_targets(&mut builder, verifier_data.clone())?;
         println!("RecursiveCircuit::add_targets(): {:?}", start.elapsed());
 
         // fill the targets
@@ -420,7 +417,7 @@ impl<I: InnerCircuit, const M: usize, const N: usize> RecursionTree<I, M, N> {
         let start = Instant::now();
         circuit.set_targets(
             &mut pw,
-            msgs,
+            hashes,
             selectors,
             inner_circuits_input,
             recursive_proofs,
@@ -510,15 +507,10 @@ mod tests {
 
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
         let schnorr = SchnorrSigner::new();
-        const MSG_LEN: usize = 5;
-        // generate N random msgs
-        let msgs: Vec<Vec<F>> = (0..N)
+        // generate N random hashes
+        let hashes: Vec<HashOut<F>> = (0..N)
             .into_iter()
-            .map(|_| {
-                std::iter::repeat_with(|| F::sample(&mut rng))
-                    .take(MSG_LEN)
-                    .collect()
-            })
+            .map(|_| HashOut::<F>::sample(&mut rng))
             .collect();
 
         // generate k key pairs
@@ -526,16 +518,16 @@ mod tests {
             (0..k).map(|i| SchnorrSecretKey { sk: i as u64 }).collect();
         let pk_vec: Vec<SchnorrPublicKey> = sk_vec.iter().map(|&sk| schnorr.keygen(&sk)).collect();
 
-        // sign
+        // sign the hashes
         let sig_vec: Vec<SchnorrSignature> = sk_vec
             .iter()
-            .zip(msgs.iter().cycle())
-            .map(|(&sk, msg)| schnorr.sign(&msg, &sk, &mut rng))
+            .zip(hashes.iter().map(|h| h.elements).cycle())
+            .map(|(&sk, msg)| schnorr.sign(&msg.to_vec(), &sk, &mut rng))
             .collect();
         assert_eq!(sig_vec.len(), k);
 
         // build the circuit_data & verifier_data for the recursive circuit
-        let circuit_data = RecursionTree::<ExampleGadget, MSG_LEN, N>::circuit_data()?;
+        let circuit_data = RecursionTree::<ExampleGadget, N>::circuit_data()?;
         let verifier_data = circuit_data.verifier_data();
 
         let dummy_proof_pis = cyclic_base_proof(
@@ -590,9 +582,9 @@ mod tests {
 
                 // do the recursive step
                 let start = Instant::now();
-                let new_proof = RecursionTree::<ExampleGadget, MSG_LEN, N>::prove_node(
+                let new_proof = RecursionTree::<ExampleGadget, N>::prove_node(
                     verifier_data.clone(),
-                    &msgs,
+                    &hashes,
                     selectors,
                     innercircuits_input,
                     &proofs,
@@ -605,11 +597,10 @@ mod tests {
                 );
 
                 // verify the recursive proof
-                let public_inputs =
-                    RecursiveCircuit::<ExampleGadget, MSG_LEN, N>::prepare_public_inputs(
-                        verifier_data.clone(),
-                        msgs.clone(),
-                    );
+                let public_inputs = RecursiveCircuit::<ExampleGadget, N>::prepare_public_inputs(
+                    verifier_data.clone(),
+                    hashes.clone(),
+                );
                 verifier_data.clone().verify(ProofWithPublicInputs {
                     proof: new_proof.clone(),
                     public_inputs: public_inputs.clone(),
@@ -624,9 +615,9 @@ mod tests {
         let last_proof = proofs_at_level_i[0].clone();
 
         // verify the last proof
-        let public_inputs = RecursiveCircuit::<ExampleGadget, MSG_LEN, N>::prepare_public_inputs(
+        let public_inputs = RecursiveCircuit::<ExampleGadget, N>::prepare_public_inputs(
             verifier_data.clone(),
-            msgs.clone(),
+            hashes.clone(),
         );
         verifier_data.clone().verify(ProofWithPublicInputs {
             proof: last_proof.clone(),
