@@ -9,21 +9,21 @@
          ▲ ▲    ▲       ▲   ▲
   ┌──────┘┌┘    │       │   │
   │       │     │       │   └──┐
-c'_1...c'_m     │p''_1  │      │p''_n
+c''_1...c''_M   │p''_1  │      │p''_N
             ┌───┴────┐  │  ┌───┴────┐
             │   F    │(...)│   F    │
             └────────┘     └────────┘
             ▲ ▲ ▲  ▲          ▲ ▲ ▲  ▲
         ┌───┘┌┘ └┐ └──┐    ┌──┘┌┘ └─┐└───┐
         │    │   │    │    │   │    └┐   │
-       c_1..c_m p_1..p_n c'_1..c'_m p'_1..p'_n
+       c_1..c_M p_1..p_N c'_1..c'_M p'_1..p'_N
 
  where
  - each c_i is an InnerCircuit
  - each p_i is a plonky2 proof
  and each of them is enabled/disabled by a selector s_i.
 
- Current version has m+n selectors, but we could make them shared between c's and p's.
+ Current version has M+N selectors, but we could make them shared between c's and p's.
 
  To run the tests that checks this logic:
  cargo test --release test_recursion -- --nocapture
@@ -425,9 +425,8 @@ mod tests {
         let hashes: [HashOut<F>; M + N] = array::from_fn(|_| HashOut::<F>::sample(&mut rng));
 
         // generate M*N key pairs (M for each of the N recursive nodes at the base level)
-        let sk_vec: Vec<SchnorrSecretKey> = (0..(M))
-            .map(|i| SchnorrSecretKey { sk: i as u64 })
-            .collect();
+        let sk_vec: Vec<SchnorrSecretKey> =
+            (0..M).map(|i| SchnorrSecretKey { sk: i as u64 }).collect();
         let pk_vec: Vec<SchnorrPublicKey> = sk_vec.iter().map(|&sk| schnorr.keygen(&sk)).collect();
 
         // sign the hashes
@@ -469,7 +468,6 @@ mod tests {
                     i, j
                 );
 
-                // let proof_enabled = if i == 0 { F::ZERO } else { F::ONE };
                 // prepare the inputs for the `RecursionTree::prove_node` call
                 let mut selectors: [F; M + N] = [F::ZERO; M + N];
                 if i > 0 {
