@@ -10,7 +10,7 @@ use plonky2::{
 
 use crate::pod::statement::{StatementOrRef, StatementRef};
 
-use super::{D, F};
+use super::{statement::StatementTarget, D, F};
 
 const NUM_BITS: usize = 32;
 
@@ -36,13 +36,11 @@ pub fn vector_ref(builder: &mut CircuitBuilder<F, D>, v: &[Target], i: Target) -
         GoldilocksField::from_canonical_u64(v.len() as u64 - 1),
     );
     builder.range_check(expr_target, NUM_BITS);
-    // Use the inner product trick, i.e. v[i] = <v, e_i>.
-    // TODO: Make a custom gate for this.
-    Ok(v.iter().enumerate().fold(builder.zero(), |sum, (j, x)| {
-        let j_target = builder.constant(GoldilocksField(j as u64));
-        let i_is_j = builder.is_equal(i, j_target);
-        builder.mul_add(i_is_j.target, *x, sum)
-    }))
+    Ok(
+        builder.random_access(
+            i, pad_to_power_of_two(v)?
+            )
+        )
 }
 
 /// Helper for matrix element access, where a 'matrix' is a slice of
@@ -69,18 +67,31 @@ pub fn matrix_ref(
     vector_ref(builder, &v, index)
 }
 
-/// Helper for random access, where we access a slice of a vector
-/// of given constant size.
-pub fn vector_slice(
+/// Helper for random access of a statement in a matrix of statements.
+pub fn statement_matrix_ref(
     builder: &mut CircuitBuilder<F, D>,
-    v: &[Target],
+    statement_matrix: &[Vec<StatementTarget>],
     i: Target,
-    len: usize,
-) -> Result<Vec<Target>> {
-    (0..len)
-        .map(|offset| {
-            let index_target = builder.add_const(i, GoldilocksField(offset as u64));
-            vector_ref(builder, v, index_target)
-        })
-        .collect()
+    j: Target
+) -> Result<StatementTarget> {
+    // Separate the statement matrix into a vector (of length 11) of
+    // matrices of targets.
+    let transposed_target_matrices =
+        statement_matrix.iter().map(
+            |s_vec| s_vec.iter().map(
+                |s|
+                s.to_targets()
+                ).collect()
+        ).collect::<Vec<Vec<Vec<Target>>>>();
+    let target_matrices:Vec<Vec<Vec<Target>>> = (0..11).map( |i|
+        transposed_target_matrices.iter().map(
+            |m| m.iter().map( |v| v[i]
+                ).collect()
+            ).collect()
+    ).collect();
+    Ok(StatementTarget::from_targets(
+        target_matrices.iter().map(
+            |a| matrix_ref(builder, a, i, j)
+            ).collect::<Result<Vec<Target>>>()?.as_ref()
+    ))
 }
