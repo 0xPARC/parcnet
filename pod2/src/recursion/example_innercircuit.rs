@@ -10,7 +10,7 @@ use crate::signature::schnorr::*;
 use crate::signature::schnorr_prover::*;
 
 use super::{utils::assert_one_if_enabled, InnerCircuit};
-use super::{C, D, F};
+use crate::{C, D, F};
 
 pub struct ExampleGadgetInput {
     pub pk: SchnorrPublicKey,
