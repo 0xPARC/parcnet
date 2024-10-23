@@ -17,7 +17,7 @@
      ▲ ▲  ▲  ▲            ▲ ▲  ▲  ▲
    ┌─┘ │  └┐ └─┐        ┌─┘┌┘  └┐ └┐
    │   │   │   │        │  │    │  │
-  p_1 p_2 ... p_n     p'_1 p'_2... p'_n
+  p_1 p_2 ... p_N     p'_1 p'_2... p'_N
 
 
  where each each p_i is checking `(InnerCircuit OR recursive proof verify)`.

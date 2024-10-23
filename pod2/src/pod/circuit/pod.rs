@@ -156,6 +156,22 @@ impl<const NS: usize> InnerCircuit for SchnorrPODGadget<NS> {
         // the plonky2 proof)
         assert_one_if_enabled(builder, verified.target, &selector_booltarg);
 
+        // WIP
+        // let msg_targ = MessageTarget {
+        //     msg: hash_target.elements.to_vec(),
+        // };
+        //
+        // ensure that the input `msg_targ` matches the obtained `message_target` at the
+        // `compute_targets_and_verify` call.
+        // The `msg_targ` is an input to this method because is reused by the recursive
+        // verification in the RecursionTree.
+        // assert_eq!(message_target.msg.len(), msg_targ.msg.len());
+        // let _ = msg_targ
+        //     .msg
+        //     .iter()
+        //     .zip(message_target.msg)
+        //     .map(|(a, b)| builder.connect(*a, b));
+
         Ok(schnorr_pod_target)
     }
 
@@ -174,6 +190,7 @@ mod tests {
     use anyhow::Result;
     use plonky2::{
         field::{goldilocks_field::GoldilocksField, types::Field},
+        hash::hash_types::HashOut,
         iop::witness::PartialWitness,
         plonk::{circuit_builder::CircuitBuilder, circuit_data::CircuitConfig},
     };
@@ -218,6 +235,126 @@ mod tests {
         // Build and prove.
         let data = builder.build::<C>();
         let _proof = data.prove(pw)?;
+        Ok(())
+    }
+
+    use crate::recursion::recursion_framework::{RecursionTree, RecursiveCircuit};
+    use crate::PlonkyProof;
+    use hashbrown::HashMap;
+    use plonky2::plonk::proof::ProofWithPublicInputs;
+    use plonky2::recursion::dummy_circuit::cyclic_base_proof;
+    use std::array;
+    use std::time::Instant;
+
+    #[test]
+    fn test_recursion_framework_with_SchnorrPODGadget() -> Result<()> {
+        const NS: usize = 2; // NS: NumStatements
+        const M: usize = 2; // number of InnerCircuits at each recursive node
+        const N: usize = 2; // arity of the recursion tree
+        let l: usize = 2; // levels of the recursion (binary) tree
+
+        // build the pods, one for each leaf of the recursion tree
+        let pods: Vec<POD> = (0..M + N)
+            .into_iter()
+            .map(|i| {
+                let scalar1 = GoldilocksField(36 + (i as u64));
+                let entry1 = Entry::new_from_scalar("some key", scalar1);
+                POD::execute_schnorr_gadget(&vec![entry1.clone()], &SchnorrSecretKey { sk: 25 })
+            })
+            .collect();
+
+        // build the circuit_data & verifier_data for the recursive circuit
+        let circuit_data = RecursionTree::<SchnorrPODGadget<NS>, M, N>::circuit_data()?;
+        let verifier_data = circuit_data.verifier_data();
+
+        // prepare k dummy proofs
+        let dummy_proof_pis = cyclic_base_proof(
+            &circuit_data.common,
+            &verifier_data.verifier_only,
+            HashMap::new(),
+        );
+        let dummy_proof = dummy_proof_pis.proof;
+        let mut proofs_at_level_i: Vec<PlonkyProof> = (0..(N * N))
+            .into_iter()
+            .map(|_| dummy_proof.clone())
+            .collect();
+
+        // loop over the recursion levels
+        for i in 0..l {
+            println!("\n--- recursion level i={}", i);
+            let mut next_level_proofs: Vec<PlonkyProof> = vec![];
+
+            // loop over the nodes of each recursion tree level
+            for j in (0..proofs_at_level_i.len()).into_iter().step_by(N) {
+                println!(
+                    "\n------ recursion node: (level) i={}, (node in level) j={}",
+                    i, j
+                );
+
+                // base level: enable InnerCircuit, rest: enable recursive proof verification
+                let mut selectors: [F; M + N] = [F::ZERO; M + N];
+                if i > 0 {
+                    // if we're not at the base-level, enable the N selectors of the proofs
+                    // verifications
+                    selectors[M..N].fill(F::ONE);
+                }
+
+                // prepare the inputs for the `RecursionTree::prove_node` call
+                let proofs: [PlonkyProof; N] = array::from_fn(|k| proofs_at_level_i[k].clone());
+                let pods_for_node: [POD; N] = array::from_fn(|k| pods[k].clone());
+
+                // set the 'hashes' used as public input
+                // note: this will be different once we add the layer of hashes logic to the POD.
+                let hashes: [HashOut<F>; M + N] =
+                    array::from_fn(|k| pods[k].payload.hash_payload());
+
+                // do the recursive step
+                let start = Instant::now();
+                let new_proof = RecursionTree::<SchnorrPODGadget<NS>, M, N>::prove_node(
+                    verifier_data.clone(),
+                    &hashes,
+                    selectors,
+                    pods_for_node,
+                    &proofs,
+                )?;
+                println!(
+                    "RecursionTree::prove_node (level: i={}, node: j={}) took: {:?}",
+                    i,
+                    j,
+                    start.elapsed()
+                );
+
+                // verify the recursive proof
+                let public_inputs =
+                    RecursiveCircuit::<SchnorrPODGadget<NS>, M, N>::prepare_public_inputs(
+                        verifier_data.clone(),
+                        hashes.clone(),
+                    );
+                verifier_data.clone().verify(ProofWithPublicInputs {
+                    proof: new_proof.clone(),
+                    public_inputs: public_inputs.clone(),
+                })?;
+
+                // set new_proof for next iteration
+                next_level_proofs.push(new_proof);
+            }
+            proofs_at_level_i = next_level_proofs.clone();
+        }
+
+        assert_eq!(proofs_at_level_i.len(), 1);
+        let last_proof = proofs_at_level_i[0].clone();
+
+        // verify the last proof
+        let hashes: [HashOut<F>; M + N] = array::from_fn(|k| pods[k].payload.hash_payload());
+        let public_inputs = RecursiveCircuit::<SchnorrPODGadget<NS>, M, N>::prepare_public_inputs(
+            verifier_data.clone(),
+            hashes,
+        );
+        verifier_data.clone().verify(ProofWithPublicInputs {
+            proof: last_proof.clone(),
+            public_inputs: public_inputs.clone(),
+        })?;
+
         Ok(())
     }
 }
