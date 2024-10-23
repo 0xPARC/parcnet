@@ -6,6 +6,7 @@ use std::{
 use eyre::{eyre, Result};
 use pex::{self, Entry, Env, MyPods, Pod, User, Value};
 
+use plonky2::field::goldilocks_field::GoldilocksField;
 #[tokio::main]
 async fn main() -> Result<()> {
     let script = r#"[add

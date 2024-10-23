@@ -10,6 +10,7 @@ use std::{
 
 use async_recursion::async_recursion;
 use eyre::{eyre, Context, OptionExt, Result};
+use plonky2::field::{goldilocks_field::GoldilocksField, types::PrimeField64};
 
 #[derive(Default)]
 pub struct MyPods {
@@ -81,7 +82,7 @@ impl Pod {
 #[derive(Clone, Debug, Eq)]
 pub enum Value {
     String(String),
-    Uint64(u64),
+    Scalar(GoldilocksField),
 }
 
 impl TryFrom<Value> for String {
@@ -106,9 +107,9 @@ impl Ord for Value {
     fn cmp(&self, other: &Self) -> Ordering {
         match self {
             Value::String(..) => todo!(),
-            Value::Uint64(a) => match other {
+            Value::Scalar(a) => match other {
                 Value::String(..) => todo!(),
-                Value::Uint64(b) => a.cmp(b),
+                Value::Scalar(b) => a.to_canonical_u64().cmp(&b.to_canonical_u64()),
             },
         }
     }
@@ -119,11 +120,11 @@ impl PartialEq for Value {
         match self {
             Self::String(a) => match other {
                 Self::String(b) => a.eq(b),
-                Self::Uint64(b) => a.eq(&b.to_string()),
+                Self::Scalar(b) => a.eq(&b.to_string()),
             },
-            Self::Uint64(a) => match other {
-                Self::String(b) => a.eq(&b.parse().unwrap()),
-                Self::Uint64(b) => a.eq(b),
+            Self::Scalar(a) => match other {
+                Self::String(..) => todo!(),
+                Self::Scalar(b) => a.eq(b),
             },
         }
     }
@@ -134,8 +135,8 @@ impl Add for Value {
 
     fn add(self, other: Self) -> Self {
         match self {
-            Value::Uint64(a) => match other {
-                Value::Uint64(b) => Value::Uint64(a + b),
+            Value::Scalar(a) => match other {
+                Value::Scalar(b) => Value::Scalar(a + b),
                 _ => todo!(),
             },
             _ => todo!(),
@@ -235,7 +236,7 @@ impl Expr {
             },
             Expr::Atom(_, a) => {
                 if let Ok(a) = a.parse::<u64>() {
-                    Ok(Value::Uint64(a))
+                    Ok(Value::Scalar(GoldilocksField(a)))
                 } else {
                     Err(eyre!("Not an u64"))
                 }
@@ -283,7 +284,7 @@ mod tests {
             eval("[add 1 [add 1 [max 42 1]]]", Env::default())
                 .await
                 .unwrap(),
-            Value::Uint64(44)
+            Value::Scalar(GoldilocksField(44))
         )
     }
 }

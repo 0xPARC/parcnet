@@ -9,7 +9,7 @@ macro_rules! my_pods {
                             $(
                                 Entry {
                                     key: String::from($key),
-                                    value: Value::Uint64($value),
+                                    value: Value::Scalar(GoldilocksField($value)),
                                 },
                             )*
                         ],
