@@ -3,7 +3,7 @@ mod macros;
 use std::{
     cmp::Ordering,
     collections::HashMap,
-    ops::{Add, BitXor},
+    ops::Add,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -78,15 +78,8 @@ impl Pod {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum ValueDesc {
-    Bool,
-    Uint64,
-}
-
 #[derive(Clone, Debug, Eq)]
 pub enum Value {
-    Bool(bool),
     String(String),
     Uint64(u64),
 }
@@ -112,19 +105,9 @@ impl PartialOrd for Value {
 impl Ord for Value {
     fn cmp(&self, other: &Self) -> Ordering {
         match self {
-            Value::Bool(a) => match other {
-                Value::Bool(b) => a.cmp(b),
-                Value::String(b) => a.cmp(&string_to_bool(b)),
-                Value::Uint64(b) => a.cmp(&uint64_to_bool(*b)),
-            },
-            Value::String(a) => match other {
-                Value::Bool(b) => string_to_bool(a).cmp(b),
-                Value::String(b) => a.cmp(b),
-                Value::Uint64(b) => a.parse::<u64>().unwrap().cmp(b),
-            },
+            Value::String(..) => todo!(),
             Value::Uint64(a) => match other {
-                Value::Bool(b) => a.cmp(&bool_to_uint64(*b)),
-                Value::String(b) => a.cmp(&b.parse().unwrap()),
+                Value::String(..) => todo!(),
                 Value::Uint64(b) => a.cmp(b),
             },
         }
@@ -134,18 +117,11 @@ impl Ord for Value {
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match self {
-            Self::Bool(a) => match other {
-                Self::Bool(b) => a.eq(b),
-                Self::String(b) => a.eq(&string_to_bool(b)),
-                Self::Uint64(b) => a.eq(&uint64_to_bool(*b)),
-            },
             Self::String(a) => match other {
-                Self::Bool(b) => string_to_bool(a).eq(b),
                 Self::String(b) => a.eq(b),
                 Self::Uint64(b) => a.eq(&b.to_string()),
             },
             Self::Uint64(a) => match other {
-                Self::Bool(b) => a.eq(&bool_to_uint64(*b)),
                 Self::String(b) => a.eq(&b.parse().unwrap()),
                 Self::Uint64(b) => a.eq(b),
             },
@@ -163,42 +139,6 @@ impl Add for Value {
                 _ => todo!(),
             },
             _ => todo!(),
-        }
-    }
-}
-
-fn uint64_to_bool(i: u64) -> bool {
-    i == 0
-}
-
-fn bool_to_uint64(b: bool) -> u64 {
-    if b {
-        1
-    } else {
-        0
-    }
-}
-
-fn string_to_bool(s: &str) -> bool {
-    s == "true"
-}
-
-impl BitXor for Value {
-    type Output = Self;
-
-    fn bitxor(self, other: Self) -> Self::Output {
-        match self {
-            Value::Bool(a) => match other {
-                Value::Bool(b) => Value::Bool(a ^ b),
-                Value::String(b) => Value::Bool(a ^ string_to_bool(&b)),
-                Value::Uint64(b) => Value::Bool(a ^ uint64_to_bool(b)),
-            },
-            Value::Uint64(a) => match other {
-                Value::Bool(b) => Value::Uint64(a ^ bool_to_uint64(b)),
-                Value::String(b) => Value::Uint64(a ^ b.parse::<u64>().unwrap()),
-                Value::Uint64(b) => Value::Uint64(a ^ b),
-            },
-            Value::String(_) => todo!(),
         }
     }
 }
@@ -267,10 +207,6 @@ impl Expr {
                         .eval(env.clone())
                         .await?
                         .add(exprs[2].eval(env.clone()).await?)),
-                    "xor" => Ok(exprs[1]
-                        .eval(env.clone())
-                        .await?
-                        .bitxor(exprs[2].eval(env.clone()).await?)),
                     "min" => Ok(exprs[1]
                         .eval(env.clone())
                         .await?
@@ -279,30 +215,6 @@ impl Expr {
                         .eval(env.clone())
                         .await?
                         .max(exprs[2].eval(env.clone()).await?)),
-                    "eq" => Ok(Value::Bool(
-                        exprs[1]
-                            .eval(env.clone())
-                            .await?
-                            .eq(&exprs[2].eval(env.clone()).await?),
-                    )),
-                    "ne" => Ok(Value::Bool(
-                        exprs[1]
-                            .eval(env.clone())
-                            .await?
-                            .ne(&exprs[2].eval(env.clone()).await?),
-                    )),
-                    "gt" => Ok(Value::Bool(
-                        exprs[1]
-                            .eval(env.clone())
-                            .await?
-                            .gt(&exprs[2].eval(env.clone()).await?),
-                    )),
-                    "lt" => Ok(Value::Bool(
-                        exprs[1]
-                            .eval(env.clone())
-                            .await?
-                            .lt(&exprs[2].eval(env.clone()).await?),
-                    )),
                     "from" => {
                         let user: String = exprs[1]
                             .eval(env.clone())
@@ -317,15 +229,6 @@ impl Expr {
                             env.get(*aid).await.ok_or_eyre("missing remote value")
                         }
                     }
-                    "to" => todo!(),
-                    "pod" => todo!(),
-                    "pod?" => exprs[1]
-                        .eval(env.clone())
-                        .await?
-                        .try_into()
-                        .ok()
-                        .and_then(|key: String| env.local(&key))
-                        .ok_or_eyre("missing pod"),
                     _ => todo!(),
                 },
                 _ => Err(eyre!("first item must be an atom")),
@@ -334,7 +237,7 @@ impl Expr {
                 if let Ok(a) = a.parse::<u64>() {
                     Ok(Value::Uint64(a))
                 } else {
-                    Ok(Value::String(a.clone()))
+                    Err(eyre!("Not an u64"))
                 }
             }
         }
