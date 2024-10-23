@@ -1,4 +1,5 @@
 #![feature(array_try_from_fn)]
+#![feature(generic_const_exprs)]
 #![allow(clippy::new_without_default)]
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
