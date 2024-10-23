@@ -13,7 +13,7 @@ use plonky2::{
     plonk::{circuit_builder::CircuitBuilder, circuit_data::CircuitConfig},
 };
 
-use super::{pod::SchnorrPODTarget, C, D, F};
+use super::{pod::SchnorrPODTarget, util::statement_matrix_ref, C, D, F};
 
 use crate::{
     pod::{
@@ -30,7 +30,6 @@ use crate::{
 use super::{
     entry::EntryTarget,
     statement::{StatementRefTarget, StatementTarget},
-    util::vector_slice,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -104,55 +103,25 @@ impl OperationTarget {
             .collect::<Vec<_>>();
         // Statement N is the slice of length 11 starting at
         // pod_index*num_statements*11 + statement_index*11.
-        let statement1_target = {
-            let i = builder.arithmetic(
-                num_statements,
-                StatementTarget::len(),
-                self.operand1.pod_index,
-                statement_len_target,
-                self.operand1.statement_index,
-            );
-            vector_slice(
-                builder,
-                &flattened_statement_targets[..64],
-                i,
-                StatementTarget::len().to_canonical_u64() as usize,
-            )
-            .map(|v| StatementTarget::from_targets(&v))
-        }?;
-        let statement2_target = {
-            let i = builder.arithmetic(
-                num_statements,
-                StatementTarget::len(),
-                self.operand2.pod_index,
-                statement_len_target,
-                self.operand2.statement_index,
-            );
-            vector_slice(
-                builder,
-                &flattened_statement_targets,
-                i,
-                StatementTarget::len().to_canonical_u64() as usize,
-            )
-            .map(|v| StatementTarget::from_targets(&v))
-        }?;
-        let _statement3_target = {
-            let i = builder.arithmetic(
-                num_statements,
-                StatementTarget::len(),
-                self.operand3.pod_index,
-                statement_len_target,
-                self.operand3.statement_index,
-            );
-            vector_slice(
-                builder,
-                &flattened_statement_targets,
-                i,
-                StatementTarget::len().to_canonical_u64() as usize,
-            )
-            .map(|v| StatementTarget::from_targets(&v))
-        }?;
-        let entry_target = self.entry;
+        let statement1_target = statement_matrix_ref(
+            builder,
+            statement_targets,
+            self.operand1.pod_index,
+            self.operand1.statement_index
+            )?;
+        let statement2_target = statement_matrix_ref(
+            builder,
+            statement_targets,
+            self.operand2.pod_index,
+            self.operand2.statement_index
+        )?;
+        let _statement3_target = statement_matrix_ref(
+            builder,
+            statement_targets,
+            self.operand3.pod_index,
+            self.operand3.statement_index
+        )?;
+       let entry_target = self.entry;
 
         // StatementTarget outputs of each of these ops.
         let op_out = [
