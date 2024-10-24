@@ -4,7 +4,7 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::Signature;
 use iroh::net::key::{PublicKey, SecretKey};
-use pod2::schnorr::{SchnorrPublicKey, SchnorrSignature};
+use pod2::signature::schnorr::{SchnorrPublicKey, SchnorrSignature};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
