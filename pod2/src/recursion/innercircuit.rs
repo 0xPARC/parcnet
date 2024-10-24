@@ -1,10 +1,10 @@
 use anyhow::Result;
-use plonky2::hash::hash_types::{HashOut, HashOutTarget, NUM_HASH_OUT_ELTS};
-use plonky2::iop::target::{BoolTarget, Target};
-use plonky2::iop::witness::{PartialWitness, WitnessWrite};
+use plonky2::hash::hash_types::HashOutTarget;
+use plonky2::iop::target::BoolTarget;
+use plonky2::iop::witness::PartialWitness;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 
-use crate::{C, D, F};
+use crate::{D, F};
 
 /// InnerCircuit is the trait that is used to define the logic of the circuit that is used at each
 /// node of the recursive tree.

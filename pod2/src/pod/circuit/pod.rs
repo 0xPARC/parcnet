@@ -156,22 +156,6 @@ impl<const NS: usize> InnerCircuit for SchnorrPODGadget<NS> {
         // the plonky2 proof)
         assert_one_if_enabled(builder, verified.target, &selector_booltarg);
 
-        // WIP
-        // let msg_targ = MessageTarget {
-        //     msg: hash_target.elements.to_vec(),
-        // };
-        //
-        // ensure that the input `msg_targ` matches the obtained `message_target` at the
-        // `compute_targets_and_verify` call.
-        // The `msg_targ` is an input to this method because is reused by the recursive
-        // verification in the RecursionTree.
-        // assert_eq!(message_target.msg.len(), msg_targ.msg.len());
-        // let _ = msg_targ
-        //     .msg
-        //     .iter()
-        //     .zip(message_target.msg)
-        //     .map(|(a, b)| builder.connect(*a, b));
-
         Ok(schnorr_pod_target)
     }
 
@@ -238,7 +222,7 @@ mod tests {
         Ok(())
     }
 
-    use crate::recursion::recursion_framework::{RecursionTree, RecursiveCircuit};
+    use crate::recursion::{RecursionCircuit, RecursionTree};
     use crate::PlonkyProof;
     use hashbrown::HashMap;
     use plonky2::plonk::proof::ProofWithPublicInputs;
@@ -326,7 +310,7 @@ mod tests {
 
                 // verify the recursive proof
                 let public_inputs =
-                    RecursiveCircuit::<SchnorrPODGadget<NS>, M, N>::prepare_public_inputs(
+                    RecursionCircuit::<SchnorrPODGadget<NS>, M, N>::prepare_public_inputs(
                         verifier_data.clone(),
                         hashes.clone(),
                     );
@@ -346,7 +330,7 @@ mod tests {
 
         // verify the last proof
         let hashes: [HashOut<F>; M + N] = array::from_fn(|k| pods[k].payload.hash_payload());
-        let public_inputs = RecursiveCircuit::<SchnorrPODGadget<NS>, M, N>::prepare_public_inputs(
+        let public_inputs = RecursionCircuit::<SchnorrPODGadget<NS>, M, N>::prepare_public_inputs(
             verifier_data.clone(),
             hashes,
         );
