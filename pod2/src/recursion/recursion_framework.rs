@@ -77,7 +77,7 @@ where
 {
     pub fn prepare_public_inputs(
         verifier_data: VerifierCircuitData<F, C, D>,
-        // hashese contains (in this order) M hashes corresponding to the M InnerCircuits, and N
+        // `hashes` contains (in this order) M hashes corresponding to the M InnerCircuits, and N
         // hashes corresponding to the plonky2 proofs
         hashes: [HashOut<F>; M + N],
     ) -> Vec<F> {
