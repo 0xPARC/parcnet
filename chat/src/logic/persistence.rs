@@ -1,5 +1,5 @@
 use iroh::net::key::SecretKey;
-use pod2::schnorr::SchnorrSecretKey;
+use pod2::signature::schnorr::SchnorrSecretKey;
 use std::{fs, path::PathBuf};
 use tracing::info;
 
