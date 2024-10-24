@@ -499,40 +499,6 @@ mod tests {
         // now signature shouldn't verify
         assert!(!(schnorr_pod3.verify()?));
 
-        // // ZK verification of SchnorrPOD 3.
-        // let (builder, targets) = pod2_circuit(1, 2, 0)?;
-        // // Assign witnesses
-        // const D: usize = 2;
-        // type C = PoseidonGoldilocksConfig;
-        // type F = <C as GenericConfig<D>>::F;
-        // let mut pw: PartialWitness<F> = PartialWitness::new();
-        // println!(
-        //     "{:?}, {:?}",
-        //     schnorr_pod3,
-        //     schnorr_pod3.payload.hash_payload()
-        // );
-        // targets.set_witness(
-        //     GoldilocksField::ZERO,
-        //     &mut pw,
-        //     &[schnorr_pod3],
-        //     &schnorr_pod1, // TODO
-        // )?;
-        // let data = builder.build::<C>();
-        // let _proof = data.prove(pw)?;
-
-        // // // ZK verification of SchnorrPODs 1 & 2.
-        // // let (builder, targets) = pod2_circuit(2, 3, 0)?;
-        // // // Assign witnesses
-        // // let mut pw: PartialWitness<F> = PartialWitness::new();
-        // // targets.set_witness(
-        // //     GoldilocksField::ZERO,
-        // //     &mut pw,
-        // //     &[schnorr_pod1.clone(), schnorr_pod2],
-        // //     &schnorr_pod1, // TODO
-        // // )?;
-        // // let data = builder.build::<C>();
-        // // let _proof = data.prove(pw)?;
-
         Ok(())
     }
 
