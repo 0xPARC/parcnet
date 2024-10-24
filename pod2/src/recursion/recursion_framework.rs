@@ -149,7 +149,7 @@ where
     pub fn set_targets(
         &mut self,
         pw: &mut PartialWitness<F>,
-        // hashese contains (in this order) M hashes corresponding to the M InnerCircuits, and N
+        // `hashes` contains (in this order) M hashes corresponding to the M InnerCircuits, and N
         // hashes corresponding to the plonky2 proofs
         hashes: &[HashOut<F>; M + N],
         // if selectors[i]==0: verify InnerCircuit. if selectors[i]==1: verify recursive_proof[i]
