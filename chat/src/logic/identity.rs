@@ -1,5 +1,5 @@
 use iroh::net::key::PublicKey;
-use pod2::schnorr::{SchnorrPublicKey, SchnorrSigner};
+use pod2::signature::schnorr::{SchnorrPublicKey, SchnorrSigner};
 use std::collections::HashMap;
 use tracing::warn;
 

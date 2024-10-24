@@ -1,36 +1,39 @@
-use std::collections::HashMap;
-
 use anyhow::anyhow;
 use anyhow::Result;
-//use circuit::pod2_circuit;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::types::Field;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::schnorr::SchnorrPublicKey;
-use crate::schnorr::SchnorrSecretKey;
-use crate::schnorr::SchnorrSignature;
-use crate::schnorr::SchnorrSigner;
+use plonky2::field::types::PrimeField64;
+use std::collections::HashMap;
 
-pub use entry::Entry;
-use gadget::GadgetID;
-use payload::{HashablePayload, PODPayload};
-use value::ScalarOrVec;
+use crate::pod::{
+    entry::Entry,
+    gadget::GadgetID,
+    payload::{HashablePayload, PODPayload},
+    value::ScalarOrVec,
+};
+use crate::signature::schnorr::{
+    SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner,
+};
 
 use operation::OperationCmd as OpCmd;
-
 use statement::Statement;
 
-//mod circuit;
-mod entry;
-mod gadget;
-mod operation;
-mod origin;
-mod payload;
-mod statement;
-mod util;
-mod value;
+pub mod entry;
+pub mod gadget;
+pub mod operation;
+pub mod origin;
+pub mod payload;
+pub mod statement;
+pub mod util;
+pub mod value;
+
+// submodule
+pub mod circuit;
+
+pub const SIGNER_PK_KEY: &str = "_signer";
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum PODProof {
@@ -54,20 +57,23 @@ impl POD {
                 }
 
                 let payload_hash = self.payload.hash_payload();
-                let payload_hash_vec = vec![payload_hash];
                 let protocol = SchnorrSigner::new();
 
                 let pk: GoldilocksField = self
                     .payload
                     .statements_map
-                    .get("VALUEOF:_signer")
+                    .get(&format!("VALUEOF:{}", SIGNER_PK_KEY))
                     .ok_or(anyhow!("No signer found in payload"))
                     .and_then(|s| match s {
                         Statement::ValueOf(_, ScalarOrVec::Scalar(v)) => Ok(*v),
                         _ => Err(anyhow!("Invalid signer entry in payload")),
                     })?;
 
-                Ok(protocol.verify(&p, &payload_hash_vec, &SchnorrPublicKey { pk }))
+                Ok(protocol.verify(
+                    &p,
+                    &payload_hash.elements.to_vec(),
+                    &SchnorrPublicKey { pk },
+                ))
             }
 
             PODProof::Oracle(p) => {
@@ -76,27 +82,30 @@ impl POD {
                 }
 
                 let payload_hash = self.payload.hash_payload();
-                let payload_hash_vec = vec![payload_hash];
                 let protocol = SchnorrSigner::new();
 
                 Ok(protocol.verify(
                     &p,
-                    &payload_hash_vec,
+                    &payload_hash.elements.to_vec(),
                     &protocol.keygen(&SchnorrSecretKey { sk: 0 }), // hardcoded secret key
                 ))
             }
         }
     }
 
-    pub fn execute_schnorr_gadget(entries: &Vec<Entry>, sk: &SchnorrSecretKey) -> Self {
+    pub fn execute_schnorr_gadget(entries: &[Entry], sk: &SchnorrSecretKey) -> Self {
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
         let protocol = SchnorrSigner::new();
 
-        let mut kv_pairs = entries.clone();
-        kv_pairs.push(Entry {
-            key: "_signer".to_string(),
-            value: ScalarOrVec::Scalar(protocol.keygen(sk).pk),
-        });
+        let kv_pairs = [
+            entries.to_vec(),
+            vec![Entry {
+                key: SIGNER_PK_KEY.to_string(),
+                value: ScalarOrVec::Scalar(protocol.keygen(sk).pk),
+            }],
+        ]
+        .concat();
+
         let statement_map: HashMap<String, Statement> = kv_pairs
             .iter()
             .map(|entry| {
@@ -109,8 +118,7 @@ impl POD {
 
         let payload = PODPayload::new(&statement_map);
         let payload_hash = payload.hash_payload();
-        let payload_hash_vec = vec![payload_hash];
-        let proof = protocol.sign(&payload_hash_vec, sk, &mut rng);
+        let proof = protocol.sign(&payload_hash.elements.to_vec(), sk, &mut rng);
         Self {
             payload,
             proof: PODProof::Schnorr(proof),
@@ -131,17 +139,21 @@ impl POD {
         }
         let out_statements = statements.get("_SELF").unwrap();
         let out_payload = PODPayload::new(out_statements);
+        println!("{:?}", out_payload);
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
         let protocol = SchnorrSigner::new();
         let payload_hash = out_payload.hash_payload();
-        let payload_hash_vec = vec![payload_hash];
 
         // signature is a hardcoded skey (currently 0)
         // todo is to build a limited version of this with a ZKP
         // would start by making it so that the ZKP only allows
         // a max number of input PODs, max number of entries/statements per input POD,
         // max number of statements for output POD, and some max number of each type of operation
-        let proof = protocol.sign(&payload_hash_vec, &SchnorrSecretKey { sk: 0 }, &mut rng);
+        let proof = protocol.sign(
+            &payload_hash.elements.to_vec(),
+            &SchnorrSecretKey { sk: 0 },
+            &mut rng,
+        );
         Ok(Self {
             payload: out_payload,
             proof: PODProof::Oracle(proof),
@@ -177,29 +189,95 @@ impl GPGInput {
             origin_renaming_map: origin_renaming_map_clone,
         }
     }
+    /// New origin name -> new origin ID map
+    fn origin_name_to_new_id_map(&self) -> HashMap<&String, usize> {
+        // Sorted new origin name list
+        let mut new_origin_name_list = self.origin_renaming_map.values().collect::<Vec<_>>();
+        new_origin_name_list.sort();
+
+        new_origin_name_list
+            .iter()
+            .enumerate()
+            .map(
+                |(idx, new_name)| (*new_name, idx + 2), // 0 reserved for none, 1 reserved for _SELF
+            )
+            .collect::<HashMap<_, _>>()
+    }
+
+    /// Maps a pair of indices consisting of POD index and origin ID to new origin ID
+    fn origin_id_map(&self) -> Result<HashMap<(usize, usize), usize>> {
+        let new_origin_name_to_id_map = self.origin_name_to_new_id_map();
+        self.origin_renaming_map
+            .keys()
+            .map(|(pod_name, origin_name)| {
+                let pod_index = self
+                    .pods_list
+                    .iter()
+                    .position(|(name, _)| name == pod_name)
+                    .ok_or(anyhow!("Error: POD {} missing from list!", pod_name))?;
+                let (_, pod) = &self.pods_list[pod_index];
+                let origin_id = pod
+                    .payload
+                    .statements_list
+                    .iter()
+                    .flat_map(|(_, s)| {
+                        s.anchored_keys()
+                            .iter()
+                            .map(|anchkey| anchkey.clone().0)
+                            .collect::<Vec<_>>()
+                    })
+                    .find(|o| &o.origin_name == origin_name)
+                    .ok_or(anyhow!("Origin {} missing from POD list!", origin_name))?
+                    .origin_id;
+                Ok((
+                    (pod_index, origin_id.to_canonical_u64() as usize),
+                    *new_origin_name_to_id_map
+                        .get(
+                            self.origin_renaming_map
+                                .get(&(pod_name.clone(), origin_name.clone()))
+                                .ok_or(anyhow!(
+                                    "Missing pair {:?} in origin renaming map!",
+                                    (pod_name, origin_name)
+                                ))?,
+                        )
+                        .ok_or(anyhow!("Invalid new origin name to ID map!"))?,
+                ))
+            })
+            .collect::<Result<HashMap<(usize, usize), usize>>>()
+    }
+
+    // TODO
+    /// (POD index, old origin ID) -> new origin ID mapping as a
+    /// num_pods x (num_statements + 2) matrix.
+    fn origin_id_map_fields(&self) -> Result<Vec<Vec<GoldilocksField>>> {
+        let origin_id_map = self.origin_id_map()?;
+        let num_pods = self.pods_list.len();
+        let num_statements = self
+            .pods_list
+            .iter()
+            .map(|(_, p)| p.payload.statements_list.len())
+            .max()
+            .ok_or(anyhow!("POD with empty statement list encountered!"))?;
+        Ok((0..num_pods)
+            .map(|i| {
+                (0..(num_statements + 2))
+                    .map(|j| {
+                        origin_id_map
+                            .get(&(i, j))
+                            .map(|k| GoldilocksField(*k as u64))
+                            .unwrap_or(GoldilocksField::ZERO)
+                    })
+                    .collect()
+            })
+            .collect())
+    }
 
     /// returns a map from input POD name to (map from statement name to statement)
     /// the inner statements have their old origin names and IDs are replaced with
     /// the new origin names as specified by inputs.origin_renaming_map
     /// and with new origin IDs which correspond to the lexicographic order of the new origin names
     fn remap_origin_ids_by_name(&self) -> Result<HashMap<String, HashMap<String, Statement>>> {
-        // Sorted new origin name list
-        let mut new_origin_name_list = self
-            .origin_renaming_map
-            .iter()
-            .map(|(_, new_name)| new_name)
-            .collect::<Vec<_>>();
-        new_origin_name_list.sort();
-
-        // New origin name -> new origin ID map
-        let new_origin_name_to_id_map = new_origin_name_list
-            .iter()
-            .enumerate()
-            .map(
-                |(idx, new_name)| (*new_name, idx + 2), // 0 reserved for none, 1 reserved for _SELF
-            )
-            .collect::<HashMap<&String, usize>>();
-
+        let new_origin_name_to_id_map = self.origin_name_to_new_id_map();
         // Iterate through all statements, leaving parent names intact
         // and replacing statement names with their new names
         // (according to `origin_renaming_map`) and replacing origin
@@ -414,27 +492,6 @@ mod tests {
 
         // now signature shouldn't verify
         assert!(!(schnorr_pod3.verify()?));
-
-        // // ZK verification of SchnorrPOD 3.
-        // let (builder, targets) = pod2_circuit(1, 2, 0, 0)?;
-
-        // // Assign witnesses
-        // const D: usize = 2;
-        // type C = PoseidonGoldilocksConfig;
-        // type F = <C as GenericConfig<D>>::F;
-        // let mut pw: PartialWitness<F> = PartialWitness::new();
-        // pw.set_target(targets.input_is_schnorr[0], GoldilocksField(1))?;
-        // pw.set_target(targets.input_is_gpg[0], GoldilocksField::ZERO)?;
-        // pw.set_target(
-        //     targets.input_payload_hash[0],
-        //     schnorrPOD3.payload.hash_payload(),
-        // )?;
-        // pw.set_target(targets.pk_index[0], GoldilocksField(1))?;
-        // targets.input_proof[0].set_witness(&mut pw, &schnorrPOD3.proof)?;
-        // targets.input_entries[0][0].set_witness(&mut pw, &schnorrPOD3.payload[0])?;
-        // targets.input_entries[0][1].set_witness(&mut pw, &schnorrPOD3.payload[1])?;
-        // let data = builder.build::<C>();
-        // let proof = data.prove(pw)?;
 
         Ok(())
     }

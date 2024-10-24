@@ -1,3 +1,4 @@
+/// code forked from https://github.com/tideofwords/schnorr
 use anyhow::Result;
 
 use plonky2::field::{
@@ -124,7 +125,7 @@ impl Mod65537Builder {
 
 #[cfg(test)]
 mod tests {
-    use crate::mod65537::Mod65537Builder;
+    use super::Mod65537Builder;
     use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
     use plonky2::iop::{target::Target, witness::PartialWitness};
     use plonky2::plonk::{

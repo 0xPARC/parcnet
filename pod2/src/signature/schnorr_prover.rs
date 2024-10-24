@@ -1,3 +1,4 @@
+/// code forked from https://github.com/tideofwords/schnorr
 use anyhow::Result;
 
 use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
@@ -8,7 +9,7 @@ use plonky2::iop::{
 };
 use plonky2::plonk::{circuit_builder::CircuitBuilder, config::GenericConfig};
 
-use crate::{
+use super::{
     mod65537::Mod65537Builder,
     schnorr::{SchnorrPublicKey, SchnorrSignature},
 };
@@ -32,7 +33,7 @@ impl MessageTarget {
         }
     }
 
-    pub fn set_witness(&self, pw: &mut PartialWitness<GoldF>, msg: &Vec<GoldF>) -> Result<()> {
+    pub fn set_witness(&self, pw: &mut PartialWitness<GoldF>, msg: &[GoldF]) -> Result<()> {
         assert!(msg.len() == self.msg.len());
         for (&t, &x) in self.msg.iter().zip(msg.iter()) {
             pw.set_target(t, x)?;
@@ -43,8 +44,8 @@ impl MessageTarget {
 }
 
 pub struct SchnorrSignatureTarget {
-    s: Target,
-    e: Target,
+    pub s: Target,
+    pub e: Target,
 }
 
 impl SchnorrSignatureTarget {
@@ -82,7 +83,7 @@ impl SchnorrPublicKeyTarget {
     }
 }
 
-pub struct SchnorrBuilder {}
+pub struct SchnorrBuilder;
 
 pub trait SignatureVerifierBuilder {
     fn constrain_sig<C: GenericConfig<2, F = GoldF>>(
@@ -153,10 +154,12 @@ impl SignatureVerifierBuilder for SchnorrBuilder {
 
 #[cfg(test)]
 mod tests {
-    use crate::schnorr::{SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner};
-    use crate::schnorr_prover::{
+    use super::{
         MessageTarget, SchnorrBuilder, SchnorrPublicKeyTarget, SchnorrSignatureTarget,
         SignatureVerifierBuilder,
+    };
+    use crate::signature::schnorr::{
+        SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner,
     };
     use plonky2::field::goldilocks_field::GoldilocksField;
     use plonky2::iop::witness::PartialWitness;
@@ -177,7 +180,7 @@ mod tests {
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(config);
 
-        let sb: SchnorrBuilder = SchnorrBuilder {};
+        let sb: SchnorrBuilder = SchnorrBuilder;
 
         // create keypair, message, signature
         let sk: SchnorrSecretKey = SchnorrSecretKey { sk: 133 };
@@ -214,7 +217,7 @@ mod tests {
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(config);
 
-        let sb: SchnorrBuilder = SchnorrBuilder {};
+        let sb: SchnorrBuilder = SchnorrBuilder;
 
         // create keypair, message, signature
         let sk: SchnorrSecretKey = SchnorrSecretKey { sk: 133 };
@@ -259,7 +262,7 @@ mod tests {
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(config);
 
-        let sb: SchnorrBuilder = SchnorrBuilder {};
+        let sb: SchnorrBuilder = SchnorrBuilder;
 
         // create keypair, message, signature
         let sk: SchnorrSecretKey = SchnorrSecretKey { sk: 133 };

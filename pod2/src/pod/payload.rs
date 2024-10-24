@@ -1,21 +1,21 @@
-use std::collections::HashMap;
-
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
-    hash::poseidon::PoseidonHash,
-    plonk::config::{GenericHashOut, Hasher},
+    hash::{hash_types::HashOut, poseidon::PoseidonHash},
+    plonk::config::Hasher,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use super::statement::Statement;
+use crate::F;
 
 // HashablePayload trait, and PODPayload which implements it.
 pub trait HashablePayload: Clone + PartialEq {
     fn to_field_vec(&self) -> Vec<GoldilocksField>;
 
-    fn hash_payload(&self) -> GoldilocksField {
+    fn hash_payload(&self) -> HashOut<F> {
         let ins = self.to_field_vec();
-        PoseidonHash::hash_no_pad(&ins).to_vec()[0]
+        PoseidonHash::hash_no_pad(&ins)
     }
 }
 

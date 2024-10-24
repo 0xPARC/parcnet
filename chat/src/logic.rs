@@ -17,8 +17,9 @@ use iroh::{client::docs::LiveEvent, node::DiscoveryConfig};
 use message::SignedMessage;
 
 use persistence::{get_or_create_schnorr_secret_key, get_or_create_secret_key};
-use pod2::pod::{Entry, POD};
-use pod2::schnorr::SchnorrSecretKey;
+use pod2::pod::entry::Entry;
+use pod2::pod::POD;
+use pod2::signature::schnorr::SchnorrSecretKey;
 use pods::{get_string_field_elem, PodStore};
 use std::sync::Mutex;
 use std::time::Duration;

@@ -1,3 +1,4 @@
+/// code forked from https://github.com/tideofwords/schnorr
 use log::info;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::types::Field;
@@ -71,7 +72,7 @@ impl SchnorrSigner {
         SchnorrPublicKey { pk }
     }
 
-    pub fn hash_insecure(&self, r: &GoldilocksField, msg: &Vec<GoldilocksField>) -> u64 {
+    pub fn hash_insecure(&self, r: &GoldilocksField, msg: &[GoldilocksField]) -> u64 {
         let poseidon_input: Vec<GoldilocksField> =
             std::iter::once(r).chain(msg.iter()).copied().collect();
 
@@ -92,7 +93,7 @@ impl SchnorrSigner {
 
     pub fn sign(
         &self,
-        msg: &Vec<GoldilocksField>,
+        msg: &[GoldilocksField],
         sk: &SchnorrSecretKey,
         rng: &mut rand::rngs::ThreadRng,
     ) -> SchnorrSignature {
@@ -122,11 +123,17 @@ impl SchnorrSigner {
     }
 }
 
+impl Default for SchnorrSigner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use plonky2::field::goldilocks_field::GoldilocksField;
 
-    use crate::schnorr::{SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner};
+    use super::{SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner};
 
     use log::info;
 
