@@ -1,13 +1,17 @@
 mod macros;
 
 use std::{
-    cmp::Ordering,
     collections::HashMap,
-    fmt::format,
-    ops::Add,
     sync::{Arc, Mutex},
     time::Duration,
 };
+
+// Some thoughts on StatementRef
+// I technically do not need them. I can refer to statement by bundling the pod payload hash which I use
+// to track my input pods and the statement i am referring to
+// when constructing my ops, i can create these annoying OP CMD by figuring out which origin I am about to refer to
+// which I can do via replacing it with my convention for pod_id -> origin_id (I could keep a mapping)
+// With the origin and the statement name, I have a statement ref (and if the API was better I could get a ref to the statement directly)
 
 use tracing::info;
 
@@ -18,6 +22,43 @@ use plonky2::field::{goldilocks_field::GoldilocksField, types::PrimeField64};
 use pod2::pod::{
     Entry, GPGInput, HashablePayload, Op, OpCmd, ScalarOrVec, Statement, StatementRef, POD,
 };
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ORef {
+    S,
+    P(String),
+}
+
+impl ORef {
+    fn as_str(&self) -> &str {
+        match self {
+            ORef::S => "_SELF",
+            ORef::P(s) => s,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SRef(pub ORef, pub String);
+
+impl SRef {
+    pub fn new(pod_id: impl Into<String>, statement_id: impl Into<String>) -> Self {
+        Self(ORef::P(pod_id.into()), statement_id.into())
+    }
+
+    pub fn self_ref(statement_id: impl Into<String>) -> Self {
+        Self(ORef::S, statement_id.into())
+    }
+}
+
+impl From<SRef> for StatementRef<'static, 'static> {
+    fn from(sref: SRef) -> StatementRef<'static, 'static> {
+        StatementRef(
+            Box::leak(sref.0.as_str().to_string().into_boxed_str()),
+            Box::leak(sref.1.into_boxed_str()),
+        )
+    }
+}
 
 #[derive(Default)]
 pub struct MyPods {
@@ -59,7 +100,25 @@ pub enum Value {
     String(String),
     Scalar(GoldilocksField),
     PodRef(POD),
-    StatementRef(StatementRef<'static, 'static>),
+    SRef(SRef),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum OpType {
+    Add,
+    Multiply,
+    Max,
+}
+
+impl OpType {
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "+" => Ok(OpType::Add),
+            "*" => Ok(OpType::Multiply),
+            "max" => Ok(OpType::Max),
+            _ => Err(anyhow!("Unknown operation type: {}", s)),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -70,30 +129,69 @@ pub enum Operation {
 }
 
 impl Operation {
-    fn eval(&self) -> GoldilocksField {
+    fn from_op_type(op_type: OpType, op1: Value, op2: Value) -> Self {
+        match op_type {
+            OpType::Add => Operation::Sum(op1, op2),
+            OpType::Multiply => Operation::Product(op1, op2),
+            OpType::Max => Operation::Max(op1, op2),
+        }
+    }
+    fn eval_with_env(&self, env: &Env) -> Result<GoldilocksField> {
         match self {
-            Operation::Sum(Value::Scalar(a), Value::Scalar(b)) => *a + *b,
-            Operation::Product(Value::Scalar(a), Value::Scalar(b)) => *a * *b,
+            Operation::Sum(a, b) | Operation::Product(a, b) | Operation::Max(a, b) => {
+                let value1 = match a {
+                    Value::Scalar(s) => *s,
+                    Value::SRef(r) => get_value_from_ref(r, env)?,
+                    _ => return Err(anyhow!("Invalid operand type")),
+                };
+                let value2 = match b {
+                    Value::Scalar(s) => *s,
+                    Value::SRef(r) => get_value_from_ref(r, env)?,
+                    _ => return Err(anyhow!("Invalid operand type")),
+                };
+
+                Ok(match self {
+                    Operation::Sum(_, _) => value1 + value2,
+                    Operation::Product(_, _) => value1 * value2,
+                    Operation::Max(_, _) => {
+                        if value1.to_canonical_u64() > value2.to_canonical_u64() {
+                            value1
+                        } else {
+                            value2
+                        }
+                    }
+                })
+            }
+        }
+    }
+
+    // Keep the simple eval for when we know we have scalars
+    fn eval(&self) -> Result<GoldilocksField> {
+        match self {
+            Operation::Sum(Value::Scalar(a), Value::Scalar(b)) => Ok(*a + *b),
+            Operation::Product(Value::Scalar(a), Value::Scalar(b)) => Ok(*a * *b),
             Operation::Max(Value::Scalar(a), Value::Scalar(b)) => {
-                if a.to_canonical_u64() > b.to_canonical_u64() {
+                Ok(if a.to_canonical_u64() > b.to_canonical_u64() {
                     *a
                 } else {
                     *b
-                }
+                })
             }
-            _ => unreachable!("Should only eval scalar values"),
+            _ => Err(anyhow!(
+                "Cannot eval operation with non-scalar values directly"
+            )),
         }
     }
     fn into_pod_op(
-        &self,
-        result_ref: StatementRef<'static, 'static>,
-        op1: StatementRef<'static, 'static>,
-        op2: StatementRef<'static, 'static>,
-    ) -> Op<StatementRef> {
-        match self {
-            Operation::Sum(..) => Op::SumOf(result_ref, op1, op2),
-            Operation::Product(..) => Op::ProductOf(result_ref, op1, op2),
-            Operation::Max(..) => Op::MaxOf(result_ref, op1, op2),
+        op_type: OpType,
+        result_ref: SRef,
+        op1: SRef,
+        op2: SRef,
+    ) -> Op<StatementRef<'static, 'static>> {
+        match op_type {
+            OpType::Add => Op::SumOf(result_ref.into(), op1.into(), op2.into()),
+            OpType::Multiply => Op::ProductOf(result_ref.into(), op1.into(), op2.into()),
+            OpType::Max => Op::MaxOf(result_ref.into(), op1.into(), op2.into()),
         }
     }
 }
@@ -131,31 +229,6 @@ impl PodBuilder {
     pub fn add_operation(&mut self, op: Op<StatementRef<'static, 'static>>, output_name: String) {
         let static_str = Box::leak(output_name.to_owned().into_boxed_str());
         self.pending_operations.push(OpCmd(op, static_str));
-    }
-
-    pub fn add_operation_with_result(
-        &mut self,
-        operation: Op<StatementRef<'static, 'static>>,
-        result_value: GoldilocksField,
-    ) -> StatementRef<'static, 'static> {
-        let result_key = self.next_result_key();
-        self.add_operation(
-            Op::NewEntry(Entry {
-                key: result_key.clone(),
-                value: ScalarOrVec::Scalar(result_value),
-            }),
-            result_key.clone(),
-        );
-
-        self.add_operation(operation, result_key.clone());
-        StatementRef(
-            "_SELF",
-            Box::leak(
-                format!("VALUEOF:{}", result_key)
-                    .to_owned()
-                    .into_boxed_str(),
-            ),
-        )
     }
 
     pub fn finalize(self) -> Result<POD> {
@@ -266,63 +339,70 @@ impl Expr {
                     return Err(anyhow!("Empty expression"));
                 }
                 match &exprs[0] {
-                    Expr::Atom(_, op) => match op.as_str() {
-                        "createpod" => {
-                            if exprs.len() < 2 {
-                                return Err(anyhow!("createpod requires a body"));
-                            }
-                            let mut pod_env = env.extend();
-                            let pod_name = if let Expr::Atom(_, op) = &exprs[1] {
-                                Some(op)
-                            } else {
-                                None
-                            };
-                            info!("creating pod {}", pod_name.expect("No pod name"));
-                            pod_env.current_builder = Some(Arc::new(Mutex::new(PodBuilder::new())));
-                            for chunk in exprs[2..].chunks(2) {
-                                if chunk.len() != 2 {
-                                    return Err(anyhow!("Odd number of key-value pairs"));
+                    Expr::Atom(_, op) => {
+                        if let Ok(op_type) = OpType::from_str(op) {
+                            return self.eval_operation(op_type, &exprs[1..], env).await;
+                        }
+                        match op.as_str() {
+                            "createpod" => {
+                                if exprs.len() < 2 {
+                                    return Err(anyhow!("createpod requires a body"));
                                 }
+                                let mut pod_env = env.extend();
+                                let pod_name = if let Expr::Atom(_, op) = &exprs[1] {
+                                    Some(op)
+                                } else {
+                                    None
+                                };
+                                info!("creating pod {}", pod_name.expect("No pod name"));
+                                pod_env.current_builder =
+                                    Some(Arc::new(Mutex::new(PodBuilder::new())));
+                                for chunk in exprs[2..].chunks(2) {
+                                    if chunk.len() != 2 {
+                                        return Err(anyhow!("Odd number of key-value pairs"));
+                                    }
 
-                                let (key_expr, value_expr) = (&chunk[0], &chunk[1]);
-                                match key_expr {
-                                    Expr::Atom(_, key) => {
-                                        let value = value_expr.eval(pod_env.clone()).await?;
-                                        if let Some(ref builder) = pod_env.current_builder {
-                                            let mut builder = builder.lock().unwrap();
-                                            match value {
-                                                Value::Scalar(s) => {
-                                                    let entry = Entry {
-                                                        key: key.clone(),
-                                                        value: ScalarOrVec::Scalar(s),
-                                                    };
-                                                    builder.add_operation(
-                                                        Op::NewEntry(entry),
-                                                        key.clone(),
-                                                    );
-                                                }
-                                                _ => {
-                                                    return Err(anyhow!(
-                                                        "Can't assign a non scalar to pod entry"
-                                                    ))
+                                    let (key_expr, value_expr) = (&chunk[0], &chunk[1]);
+                                    match key_expr {
+                                        Expr::Atom(_, key) => {
+                                            let value = value_expr.eval(pod_env.clone()).await?;
+                                            if let Some(ref builder) = pod_env.current_builder {
+                                                let mut builder = builder.lock().unwrap();
+                                                match value {
+                                                    Value::Scalar(s) => {
+                                                        let entry = Entry {
+                                                            key: key.clone(),
+                                                            value: ScalarOrVec::Scalar(s),
+                                                        };
+                                                        builder.add_operation(
+                                                            Op::NewEntry(entry),
+                                                            key.clone(),
+                                                        );
+                                                    }
+                                                    _ => {
+                                                        return Err(anyhow!(
+                                                            "Can't assign a non scalar to pod entry"
+                                                        ))
+                                                    }
                                                 }
                                             }
                                         }
+                                        _ => return Err(anyhow!("Expected key-value pair")),
                                     }
-                                    _ => return Err(anyhow!("Expected key-value pair")),
+                                }
+                                // Finalize pod
+                                if let Some(ref builder) = pod_env.current_builder {
+                                    let builder = builder.lock().unwrap().clone();
+                                    let pod = builder.finalize()?;
+                                    Ok(Value::PodRef(pod)) // empty string as we don't have a specific entry
+                                } else {
+                                    Err(anyhow!("No pod builder in context"))
                                 }
                             }
-                            // Finalize pod
-                            if let Some(ref builder) = pod_env.current_builder {
-                                let builder = builder.lock().unwrap().clone();
-                                let pod = builder.finalize()?;
-                                Ok(Value::PodRef(pod)) // empty string as we don't have a specific entry
-                            } else {
-                                Err(anyhow!("No pod builder in context"))
-                            }
+
+                            op => Err(anyhow!("Unknown operation: {}", op)),
                         }
-                        _ => todo!(),
-                    },
+                    }
                     _ => Err(anyhow!("First item must be an atom")),
                 }
             }
@@ -335,6 +415,115 @@ impl Expr {
             }
         }
     }
+    async fn eval_operation(&self, op_type: OpType, operands: &[Expr], env: Env) -> Result<Value> {
+        if operands.len() != 2 {
+            return Err(anyhow!("Operations require exactly two operands"));
+        }
+        let op1 = operands[0].eval(env.clone()).await?;
+        let op2 = operands[1].eval(env.clone()).await?;
+
+        let operation = Operation::from_op_type(op_type, op1.clone(), op2.clone());
+
+        if let Some(ref builder) = env.current_builder {
+            let mut builder = builder.lock().unwrap();
+            let result_value = operation.eval_with_env(&env)?;
+
+            // Create refs for any values that need tracking
+            match (&op1, &op2) {
+                (Value::SRef(_), _) | (_, Value::SRef(_)) => {
+                    // We need to create a new entry for the result, and also for any operand if it's a new scalar
+                    let result_key = builder.next_result_key();
+                    let result_sref = SRef::self_ref(format!("VALUEOF:{}", result_key));
+
+                    // Convert operands to SRefs if they're scalars
+                    let op1_sref = match op1 {
+                        Value::Scalar(s) => {
+                            let key = s.to_string();
+                            builder.add_operation(
+                                Op::NewEntry(Entry {
+                                    key: key.clone(),
+                                    value: ScalarOrVec::Scalar(s),
+                                }),
+                                key.clone(),
+                            );
+                            SRef::self_ref(format!("VALUEOF:{}", key))
+                        }
+                        Value::SRef(r) => r,
+                        _ => return Err(anyhow!("Invalid operand type")),
+                    };
+
+                    let op2_sref = match op2 {
+                        Value::Scalar(s) => {
+                            let key = s.to_string();
+                            builder.add_operation(
+                                Op::NewEntry(Entry {
+                                    key: key.clone(),
+                                    value: ScalarOrVec::Scalar(s),
+                                }),
+                                key.clone(),
+                            );
+                            SRef::self_ref(format!("VALUEOF:{}", key))
+                        }
+                        Value::SRef(r) => r,
+                        _ => return Err(anyhow!("Invalid operand type")),
+                    };
+
+                    let pod_op =
+                        Operation::into_pod_op(op_type, result_sref.clone(), op1_sref, op2_sref);
+
+                    // Create the result entry. We use our result_key which was also used in creating the operation
+                    // TODO: we need to name our key the same as the binding we create in case this is top of the computation tree, not named result_key
+                    builder.add_operation(
+                        Op::NewEntry(Entry {
+                            key: result_key.clone(),
+                            value: ScalarOrVec::Scalar(result_value),
+                        }),
+                        result_key.clone(),
+                    );
+
+                    // Then add the operation
+                    builder.add_operation(pod_op, result_key);
+
+                    Ok(Value::SRef(result_sref))
+                }
+                _ => Ok(Value::Scalar(result_value)),
+            }
+        } else {
+            // Direct evaluation
+            // TODO: In the future we might want to evaluate with env in case we allow computation on statement ref outside of create pod
+            // as an example if createpod returns a list of statementref (like pod?) that enables to then do further computation on it
+            Ok(Value::Scalar(operation.eval()?))
+        }
+    }
+}
+
+fn get_value_from_ref(sref: &SRef, env: &Env) -> Result<GoldilocksField> {
+    if let Some(ref builder) = env.current_builder {
+        let builder = builder.lock().unwrap();
+        if sref.0.eq(&ORef::S) {
+            // TODO: we might want to enable this in case we support doing stuff with our ValueOf statement right after having defined them
+            // eg:
+            // [createpod test
+            //     x 10
+            //     y [+ x 20]
+            //  ]
+            return Err(anyhow!("Cannot get value from a SELF statement"));
+        }
+        // Look up value in input pods using origin mapping
+        if let Some(pod) = builder.input_pods.get(sref.0.as_str()) {
+            if let Some(Statement::ValueOf(_, ScalarOrVec::Scalar(value))) =
+                pod.payload.statements_map.get(&sref.1)
+            {
+                Ok(*value)
+            } else {
+                Err(anyhow!("Value not found or not scalar"))
+            }
+        } else {
+            Err(anyhow!("Pod not found for ref"))
+        }
+    } else {
+        Err(anyhow!("No active pod builder"))
+    }
 }
 
 #[cfg(test)]
@@ -344,15 +533,15 @@ mod tests {
     #[test]
     fn test_parse() {
         assert_eq!(
-            parse(&mut scan("[add [add 20 20] [add 1 [1]]]")).unwrap(),
+            parse(&mut scan("[+ [+ 20 20] [+ 1 [1]]]")).unwrap(),
             Expr::List(
                 0,
                 vec![
-                    Expr::Atom(1, String::from("add")),
+                    Expr::Atom(1, String::from("+")),
                     Expr::List(
                         2,
                         vec![
-                            Expr::Atom(3, String::from("add")),
+                            Expr::Atom(3, String::from("+")),
                             Expr::Atom(4, String::from("20")),
                             Expr::Atom(5, String::from("20")),
                         ]
@@ -360,7 +549,7 @@ mod tests {
                     Expr::List(
                         7,
                         vec![
-                            Expr::Atom(8, String::from("add")),
+                            Expr::Atom(8, String::from("+")),
                             Expr::Atom(9, String::from("1")),
                             Expr::List(10, vec![Expr::Atom(11, String::from("1")),]),
                         ]
@@ -377,12 +566,12 @@ mod tests {
         let env = Env::new("test_user".to_string(), shared, pod_store);
 
         // Create a pod with two scalar values
-        let result = eval("[createpod test_pod x 42 y 123]", env).await?;
+        let result = eval("[createpod test_pod x [+ 40 2] y 123]", env).await?;
 
         // Verify we got a PodRef back
         match result {
             Value::PodRef(pod) => {
-                dbg!("{:?}", pod.payload.statements_map.clone());
+                dbg!(&pod);
                 // Check that the pod contains our entries
                 assert_eq!(
                     pod.payload

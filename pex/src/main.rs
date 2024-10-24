@@ -1,12 +1,5 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use eyre::Result;
 
-use eyre::{eyre, Result};
-use pex::{self, Env, MyPods, User, Value};
-
-use plonky2::field::goldilocks_field::GoldilocksField;
 #[tokio::main]
 async fn main() -> Result<()> {
     // let script = r#"[add
@@ -45,10 +38,10 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn flatten<T>(handle: tokio::task::JoinHandle<Result<T>>) -> Result<T> {
-    match handle.await {
-        Ok(Ok(result)) => Ok(result),
-        Ok(Err(err)) => Err(err),
-        Err(err) => Err(eyre!("handle error: {}", err)),
-    }
-}
+// async fn flatten<T>(handle: tokio::task::JoinHandle<Result<T>>) -> Result<T> {
+//     match handle.await {
+//         Ok(Ok(result)) => Ok(result),
+//         Ok(Err(err)) => Err(err),
+//         Err(err) => Err(eyre!("handle error: {}", err)),
+//     }
+// }
