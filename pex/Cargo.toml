@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 plonky2.workspace = true
+pod2.workspace = true
+anyhow.workspace = true
 async-recursion = "1.1.1"
 eyre = "0.6.12"
 tokio = { version = "1", features = [
@@ -14,3 +16,4 @@ tokio = { version = "1", features = [
     "signal",
     "fs",
 ] }
+tracing = "0.1.40"
