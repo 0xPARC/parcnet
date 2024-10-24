@@ -1,15 +1,20 @@
 /// This file contains a simple example implementing the InnerCircuit trait, by a circuit that
 /// checks a signature over the given msg.
 use anyhow::Result;
-use plonky2::hash::hash_types::HashOutTarget;
-use plonky2::iop::target::BoolTarget;
-use plonky2::iop::witness::PartialWitness;
+use hashbrown::HashMap;
+use plonky2::hash::hash_types::{HashOut, HashOutTarget, NUM_HASH_OUT_ELTS};
+use plonky2::iop::target::{BoolTarget, Target};
+use plonky2::iop::witness::{PartialWitness, WitnessWrite};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 
+use crate::pod::{
+    circuit::operation::OperationTarget, circuit::statement::StatementTarget, gadget::GadgetID,
+    operation::Operation as Op, statement::StatementRef,
+};
 use crate::signature::schnorr::*;
 use crate::signature::schnorr_prover::*;
 
-use super::{utils::assert_one_if_enabled, InnerCircuit};
+use super::{utils::assert_one_if_enabled, InnerCircuitTrait, OpsExecutorTrait};
 use crate::{C, D, F};
 
 pub struct ExampleGadgetInput {
@@ -29,9 +34,9 @@ pub struct ExampleGadgetTargets {
 /// used for the previously created targets).
 pub struct ExampleGadget {}
 
-impl InnerCircuit for ExampleGadget {
-    type Input = ExampleGadgetInput;
+impl InnerCircuitTrait for ExampleGadget {
     type Targets = ExampleGadgetTargets;
+    type Input = ExampleGadgetInput;
 
     fn add_targets(
         mut builder: &mut CircuitBuilder<F, D>,
@@ -64,6 +69,35 @@ impl InnerCircuit for ExampleGadget {
         targets.pk_targ.set_witness(pw, &pod.pk).unwrap();
         targets.sig_targ.set_witness(pw, &pod.sig).unwrap();
 
+        Ok(())
+    }
+}
+
+pub struct ExampleOpsExecutor<const M: usize, const N: usize> {}
+
+impl<const M: usize, const N: usize> OpsExecutorTrait<M, N> for ExampleOpsExecutor<M, N>
+where
+    [(); M + N]:,
+{
+    // in this case, Targets only contains the computed new hash
+    type Targets = HashOutTarget;
+    type Input = HashOut<F>;
+
+    fn add_targets(
+        builder: &mut CircuitBuilder<F, D>,
+        hashes: [HashOutTarget; M + N],
+    ) -> Result<Self::Targets> {
+        // here we would do some logic combining the `hashes` to obtain the new hash (using
+        // `hashes[0]` for the moment
+        Ok(hashes[0])
+    }
+
+    fn set_targets(
+        pw: &mut PartialWitness<F>,
+        targets: &Self::Targets,
+        input: &Self::Input,
+    ) -> Result<()> {
+        pw.set_hash_target(*targets, *input)?;
         Ok(())
     }
 }
