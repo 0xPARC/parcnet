@@ -1,0 +1,6 @@
+[ ] pod? with an operation tree for a key
+[ ] recursive pod? (pod? within pod?)
+[ ] create schnorr pod when there are only K/V
+[ ] expose _signer on shcnorr pod
+[ ] [asserts] in query and in createpod body
+[ ] [keep] for keeping entries from source pods
