@@ -281,6 +281,35 @@ impl PodBuilder {
             .push((statement_id.clone(), OpCmd(op, static_str)));
     }
 
+    fn get_or_create_constant_ref(&mut self, value: GoldilocksField) -> SRef {
+        let key = value.to_string();
+
+        // Only match against other constants (statements starting with "constant_")
+        if let Some((statement_id, _)) =
+            self.pending_operations.iter().find(|(statement_id, op)| {
+                statement_id.starts_with("constant_")
+                    && if let Op::NewEntry(entry) = &op.0 {
+                        entry.key == key && entry.value == ScalarOrVec::Scalar(value)
+                    } else {
+                        false
+                    }
+            })
+        {
+            return SRef::self_ref(format!("VALUEOF:{}", statement_id));
+        }
+
+        // Create new constant if it doesn't exist
+        let statement_name = format!("constant_{}", key);
+        self.add_operation(
+            Op::NewEntry(Entry {
+                key: key.clone(),
+                value: ScalarOrVec::Scalar(value),
+            }),
+            statement_name.clone(),
+        );
+        SRef::self_ref(format!("VALUEOF:{}", statement_name))
+    }
+
     pub fn finalize(&self) -> Result<POD> {
         let gpg_input = GPGInput::new(self.input_pods.clone(), HashMap::new());
         let pending_ops: &[OpCmd] = &self
@@ -569,39 +598,13 @@ impl Expr {
                 (Value::SRef(_), _) | (_, Value::SRef(_)) => {
                     // Convert operands to SRefs if they're scalars
                     let op1_sref = match op1 {
-                        Value::Scalar(s) => {
-                            let key = s.to_string();
-                            // TODO: Check if that constant already exist, and if it does, don't add a new operation
-                            let statement_name = format!("constant_{}", key);
-                            builder.add_operation(
-                                Op::NewEntry(Entry {
-                                    // the entry name is the same as the constant (eg: "42" for 42)
-                                    key: key.clone(),
-                                    value: ScalarOrVec::Scalar(s),
-                                }),
-                                statement_name.clone(),
-                            );
-                            SRef::self_ref(format!("VALUEOF:{}", statement_name))
-                        }
+                        Value::Scalar(s) => builder.get_or_create_constant_ref(s),
                         Value::SRef(r) => r,
                         _ => return Err(anyhow!("Invalid operand type")),
                     };
 
                     let op2_sref = match op2 {
-                        Value::Scalar(s) => {
-                            let key = s.to_string();
-                            // TODO: Check if that constant already exist, and if it does, don't add a new operation
-                            let statement_name = format!("constant_{}", key);
-                            builder.add_operation(
-                                Op::NewEntry(Entry {
-                                    // the entry name is the same as the constant (eg: "42" for 42)
-                                    key: key.clone(),
-                                    value: ScalarOrVec::Scalar(s),
-                                }),
-                                statement_name.clone(),
-                            );
-                            SRef::self_ref(format!("VALUEOF:{}", statement_name))
-                        }
+                        Value::Scalar(s) => builder.get_or_create_constant_ref(s),
                         Value::SRef(r) => r,
                         _ => return Err(anyhow!("Invalid operand type")),
                     };
@@ -757,7 +760,7 @@ mod tests {
         pod_store.lock().unwrap().add_pod(second_pod);
 
         let result = eval(
-            "[createpod final x [+ 40 2] y [+ [pod? x] 66]]",
+            "[createpod final x [+ 40 2] y [+ [pod? x] 66] z [+ [pod? x] 66]]",
             env.clone(),
         )
         .await?;
