@@ -640,6 +640,17 @@ impl Expr {
     async fn eval_pod_query(&self, parts: &[Expr], env: Env) -> Result<Value> {
         let store = env.pod_store.lock().unwrap();
         'outer: for pod in store.pods.iter() {
+            let pod_hash = pod.payload.hash_payload().to_string();
+            let pod_id = format!("{}{}", POD_PREFIX, pod_hash);
+
+            // Skip if this pod has already been used as an input pod
+            if let Some(ref builder) = env.current_builder {
+                let builder = builder.lock().unwrap();
+                if builder.input_pods.contains_key(&pod_id) {
+                    continue 'outer;
+                }
+            }
+
             let mut matched_refs = Vec::new();
             for part in parts {
                 match part {
@@ -888,7 +899,7 @@ mod tests {
         }
     }
     #[tokio::test]
-    async fn test_nest_pod() -> Result<()> {
+    async fn test_nested_pod() -> Result<()> {
         let shared = Arc::new(Mutex::new(HashMap::new()));
         let pod_store = Arc::new(Mutex::new(MyPods::default()));
         let env = Env::new("test_user".to_string(), shared, pod_store.clone());
@@ -917,6 +928,59 @@ mod tests {
                 Ok(())
             }
             _ => Err(anyhow!("Expected PodRef, got something else")),
+        }
+    }
+    #[tokio::test]
+    async fn test_pod_query_unique_matching() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+
+        // Create two identical pods
+        let pod1 = eval("[createpod test_pod1 x 10]", env.clone()).await?;
+        let pod2 = eval("[createpod test_pod2 x 12]", env.clone()).await?;
+
+        if let (Value::PodRef(pod1), Value::PodRef(pod2)) = (pod1, pod2) {
+            pod_store.lock().unwrap().add_pod(pod1);
+            pod_store.lock().unwrap().add_pod(pod2);
+
+            // This should succeed because it uses two different pods
+            eval(
+                "[createpod final a [+ [pod? x] 1] b [+ [pod? x] 2]]",
+                env.clone(),
+            )
+            .await?;
+            Ok(())
+        } else {
+            Err(anyhow!("Failed to create test pods"))
+        }
+    }
+    #[tokio::test]
+    async fn test_pod_query_fails_on_reuse() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+
+        let pod1 = eval("[createpod test_pod1 x 10]", env.clone()).await?;
+        if let Value::PodRef(pod1) = pod1 {
+            pod_store.lock().unwrap().add_pod(pod1);
+
+            // This should fail because there's only one pod with x=10,
+            // but we're trying to match it twice
+            let result = eval(
+                "[createpod final a [+ [pod? x] 1] b [+ [pod? x] 2]]",
+                env.clone(),
+            )
+            .await;
+
+            // Verify that the operation failed
+            assert!(result.is_err());
+            if let Err(e) = result {
+                assert!(e.to_string().contains("No pod found matching statements"));
+            }
+            Ok(())
+        } else {
+            Err(anyhow!("Failed to create test pod"))
         }
     }
     #[tokio::test]
