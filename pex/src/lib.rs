@@ -134,13 +134,6 @@ impl Operation {
             OpType::Max => Operation::Max(op1, op2),
         }
     }
-    fn to_op_type(&self) -> OpType {
-        match self {
-            Operation::Sum(_, _) => OpType::Add,
-            Operation::Product(_, _) => OpType::Multiply,
-            Operation::Max(_, _) => OpType::Max,
-        }
-    }
     fn eval(&self) -> Result<GoldilocksField> {
         match self {
             Operation::Sum(Value::Scalar(a), Value::Scalar(b)) => Ok(*a + *b),
@@ -185,46 +178,6 @@ impl Operation {
             }
         }
     }
-    fn eval_pattern(&self) -> Result<Value> {
-        match self {
-            Operation::Sum(a, b) | Operation::Product(a, b) | Operation::Max(a, b) => {
-                let eval_a = match a {
-                    Value::Operation(nested_op) => nested_op.eval_pattern()?,
-                    Value::Scalar(_) | Value::String(_) => a.clone(),
-                    _ => return Err(anyhow!("Invalid pattern operand")),
-                };
-
-                let eval_b = match b {
-                    Value::Operation(nested_op) => nested_op.eval_pattern()?,
-                    Value::Scalar(_) | Value::String(_) => b.clone(),
-                    _ => return Err(anyhow!("Invalid pattern operand")),
-                };
-
-                match (&eval_a, &eval_b) {
-                    (Value::Scalar(s1), Value::Scalar(s2)) => {
-                        let result = match self {
-                            Operation::Sum(_, _) => *s1 + *s2,
-                            Operation::Product(_, _) => *s1 * *s2,
-                            Operation::Max(_, _) => {
-                                if s1.to_canonical_u64() > s2.to_canonical_u64() {
-                                    *s1
-                                } else {
-                                    *s2
-                                }
-                            }
-                        };
-                        Ok(Value::Scalar(result))
-                    }
-                    _ => Ok(Value::Operation(Box::new(Operation::from_op_type(
-                        self.to_op_type(),
-                        eval_a,
-                        eval_b,
-                    )))),
-                }
-            }
-        }
-    }
-
     fn into_pod_op(
         op_type: OpType,
         result_ref: SRef,
@@ -559,7 +512,7 @@ impl Expr {
                                     }
                                 }
                             }
-                            SRef(ORef::P(pod_id), statement) => {
+                            SRef(ORef::P(_pod_id), _statement) => {
                                 todo!();
                             }
                         },
@@ -606,7 +559,7 @@ impl Expr {
                             continue 'outer;
                         }
                     }
-                    Expr::List(_, pattern) => todo!(),
+                    Expr::List(_, _pattern) => todo!(),
                 }
             }
             if let Some(ref builder) = env.current_builder {
