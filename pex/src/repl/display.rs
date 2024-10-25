@@ -13,7 +13,7 @@ pub fn get_pod_info(pod: &POD) -> HashMap<String, Vec<String>> {
             Statement::SumOf(_, op1, op2)
             | Statement::ProductOf(_, op1, op2)
             | Statement::MaxOf(_, op1, op2)
-            | Statement::Equal(op1, op2) => vec![op1, op2] // Added Equal here
+            | Statement::Equal(op1, op2) => vec![op1, op2]
                 .into_iter()
                 .filter(|r| !r.0.is_self())
                 .map(|r| (statement_id.clone(), r))
@@ -141,7 +141,6 @@ pub fn print_pod_details(pod: &POD, pod_store: &MyPods) {
     let origin_refs = get_pod_info(pod);
 
     if !origin_refs.is_empty() {
-        // Print matched pods
         print_section_header("Matched PODs", None);
 
         for (origin, _) in origin_refs.iter() {
@@ -159,7 +158,6 @@ pub fn print_pod_details(pod: &POD, pod_store: &MyPods) {
                     matched_pod.proof_type.to_string().bright_cyan()
                 );
 
-                // Print all statements in the matched pod
                 for (stmt_id, stmt) in matched_pod.payload.statements_map.iter() {
                     print_statement(stmt_id, stmt, "    ");
                 }
@@ -167,7 +165,6 @@ pub fn print_pod_details(pod: &POD, pod_store: &MyPods) {
             }
         }
 
-        // Print dependencies
         print_section_header("Dependencies", None);
         for (origin, statements) in origin_refs.iter() {
             let gadget_id = pod_store
@@ -227,7 +224,6 @@ pub fn print_pod_details(pod: &POD, pod_store: &MyPods) {
         }
     }
 
-    // Print new pod's statements
     print_section_header("POD Statements", Some(&pod.proof_type.to_string()));
     for (statement_id, statement) in pod.payload.statements_map.iter() {
         print_statement(statement_id, statement, "  ");

@@ -650,15 +650,11 @@ impl Expr {
                                 // Given we don't copy entries from previous PODs unless explicitly instructed with 'keep' (TODO: this doesn't exit yet)
                                 let mut builder_guard = builder.lock().unwrap();
 
-                                // First ensure the referenced pod is registered as an input pod
                                 if let Some(source_pod) = builder_guard.input_pods.get(&pod_id) {
-                                    // Check if statement exists in source pod
                                     if let Some(statement_value) =
                                         source_pod.payload.statements_map.get(&statement)
                                     {
-                                        // Create a new entry with the target key
                                         if let Ok(value_of) = statement_value.value() {
-                                            // Create an entry with the new key and same value
                                             let new_entry = Entry {
                                                 key: key.clone(),
                                                 value: value_of,
@@ -666,13 +662,11 @@ impl Expr {
 
                                             let new_statement_id =
                                                 builder_guard.next_statement_id();
-                                            // Add NewEntry operation
                                             builder_guard.add_operation(
                                                 Op::NewEntry(new_entry),
                                                 new_statement_id.clone(),
                                             );
 
-                                            // Add EqualityFromEntries operation using SRef
                                             let next_statement_id =
                                                 builder_guard.next_statement_id();
                                             builder_guard.add_operation(
@@ -709,7 +703,6 @@ impl Expr {
                 _ => return Err(anyhow!("Expected key-value pair")),
             }
         }
-        // Finalize pod
         let pod = builder.lock().unwrap().finalize()?;
         Ok(Value::PodRef(pod))
     }
@@ -920,7 +913,6 @@ mod tests {
         let pod_store = Arc::new(Mutex::new(MyPods::default()));
         let env = Env::new("test_user".to_string(), shared, pod_store);
 
-        // Create a pod with two scalar values
         let result = eval("[createpod test_pod x [+ 40 2] y 123]", env).await?;
 
         match result {
@@ -1054,7 +1046,6 @@ mod tests {
             )
             .await;
 
-            // Verify that the operation failed
             assert!(result.is_err());
             if let Err(e) = result {
                 assert!(e.to_string().contains("No pod found matching statements"));

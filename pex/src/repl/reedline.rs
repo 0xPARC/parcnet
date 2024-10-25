@@ -172,7 +172,7 @@ impl Completer for LispCompleter {
             .filter(|cmd| cmd.starts_with(&current_word))
             .map(|cmd| Suggestion {
                 value: cmd.clone(),
-                description: None, // We could add descriptions for commands here
+                description: None,
                 extra: None,
                 span: Span::new(start, pos),
                 style: None,

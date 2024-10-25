@@ -17,7 +17,6 @@ use reedline::{
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize environment
     let shared = Arc::new(Mutex::new(HashMap::new()));
     let pod_store = Arc::new(Mutex::new(MyPods::default()));
     let env = Env::new("repl_user".to_string(), shared, pod_store.clone());
@@ -40,7 +39,6 @@ async fn main() -> Result<()> {
     let completer = Box::new(LispCompleter::new(commands.clone()));
     let completion_menu = Box::new(ColumnarMenu::default().with_name("completion_menu"));
 
-    // Set up keybindings
     let mut keybindings = default_emacs_keybindings();
     keybindings.add_binding(
         KeyModifiers::NONE,
@@ -53,7 +51,6 @@ async fn main() -> Result<()> {
 
     let edit_mode = Box::new(Emacs::new(keybindings));
 
-    // Create line editor with both highlighting and completion
     let mut line_editor = Reedline::create()
         .with_highlighter(Box::new(LispHighlighter::new(commands.clone())))
         .with_completer(completer)
