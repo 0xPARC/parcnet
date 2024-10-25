@@ -14,13 +14,14 @@ use crate::schnorr::SchnorrSignature;
 use crate::schnorr::SchnorrSigner;
 
 pub use entry::Entry;
-use gadget::GadgetID;
-use payload::{HashablePayload, PODPayload};
-use value::ScalarOrVec;
+pub use gadget::GadgetID;
+pub use payload::{HashablePayload, PODPayload};
+pub use value::ScalarOrVec;
 
-use operation::OperationCmd as OpCmd;
+pub use operation::Operation as Op;
+pub use operation::OperationCmd as OpCmd;
 
-use statement::Statement;
+pub use statement::{AnchoredKey, Statement, StatementRef};
 
 //mod circuit;
 mod entry;
