@@ -4,3 +4,7 @@
 [ ] expose _signer on shcnorr pod
 [ ] [asserts] in query and in createpod body
 [ ] [keep] for keeping entries from source pods
+[ ] support [from @user] so we can receive pods across the network. check that the pod received matches the query
+[ ] support [to @user] so we can send pods across the network
+[ ] support reading and saving pods from a SQLite database that has the same schema as the chat app
+[ ] turn the shared HashMap into something that works over the network (an Iroh doc?)
