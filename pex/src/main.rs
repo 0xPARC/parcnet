@@ -85,7 +85,7 @@ fn print_pod_details(pod: &POD, pod_store: &MyPods) {
                                         false
                                     }
                                 })
-                                .map(|(_stmt_id, stmt)| format!("    {} = {:?}", s, stmt))
+                                .map(|(_stmt_id, stmt)| format!("    in {} = {:?}", s, stmt))
                         })
                         .collect::<Vec<_>>()
                 })
@@ -104,14 +104,14 @@ fn print_pod_details(pod: &POD, pod_store: &MyPods) {
         println!();
     }
 
-    // Print operations and statements
+    // Print statements
     for (statement_id, statement) in pod.payload.statements_map.iter() {
         match statement {
             Statement::SumOf(result, op1, op2) => {
                 println!(
                     "{}: {} {} + {} -> {}",
                     statement_id,
-                    "Sum Operation:".red(),
+                    "SumOf Statement:".red(),
                     format_ref(op1).yellow(),
                     format_ref(op2).yellow(),
                     format_ref(result).bright_green()
@@ -121,7 +121,7 @@ fn print_pod_details(pod: &POD, pod_store: &MyPods) {
                 println!(
                     "{}: {} {} * {} -> {}",
                     statement_id,
-                    "Product Operation:".red(),
+                    "ProductOf Statement:".red(),
                     format_ref(op1).yellow(),
                     format_ref(op2).yellow(),
                     format_ref(result).bright_green()
@@ -131,7 +131,7 @@ fn print_pod_details(pod: &POD, pod_store: &MyPods) {
                 println!(
                     "{}: {} max({}, {}) -> {}",
                     statement_id,
-                    "Max Operation:".red(),
+                    "MaxOf Statement:".red(),
                     format_ref(op1).yellow(),
                     format_ref(op2).yellow(),
                     format_ref(result).bright_green()
@@ -141,7 +141,7 @@ fn print_pod_details(pod: &POD, pod_store: &MyPods) {
                 println!(
                     "{}: {} {} = {}",
                     statement_id,
-                    "Equality:".red(),
+                    "Equal Statement:".red(),
                     format_ref(op1).yellow(),
                     format_ref(op2).yellow(),
                 );
