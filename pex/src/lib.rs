@@ -1,5 +1,6 @@
 mod constants;
 mod macros;
+pub mod repl;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -983,7 +984,7 @@ mod tests {
         let shared = Arc::new(Mutex::new(HashMap::new()));
         let pod_store = Arc::new(Mutex::new(MyPods::default()));
         let env = Env::new("test_user".to_string(), shared, pod_store.clone());
-        let first_pod_eval = eval("[createpod test_pod x 10", env.clone()).await?;
+        let first_pod_eval = eval("[createpod test_pod x 10]", env.clone()).await?;
         let first_pod = match first_pod_eval {
             Value::PodRef(pod) => pod,
             _ => panic!("Expected PodRef"),
