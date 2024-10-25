@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{collections::HashMap, fmt::Debug};
 
 use anyhow::{anyhow, Result};
@@ -32,6 +33,39 @@ impl AnchoredKey {
     ) -> Result<Self> {
         let AnchoredKey(origin, key) = self;
         Ok(AnchoredKey(origin.remap(f)?, key.clone()))
+    }
+}
+
+impl fmt::Display for AnchoredKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let AnchoredKey(origin, key) = self;
+        if origin.origin_name == "_SELF" {
+            write!(f, "{}", key)
+        } else {
+            write!(f, "{}:{}", origin.origin_name, key)
+        }
+    }
+}
+
+impl fmt::Display for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Statement::None => write!(f, "None"),
+            Statement::ValueOf(key, value) => write!(f, "ValueOf({} = {:?})", key, value),
+            Statement::Equal(op1, op2) => write!(f, "Equal({} = {})", op1, op2),
+            Statement::NotEqual(op1, op2) => write!(f, "NotEqual({} ≠ {})", op1, op2),
+            Statement::Gt(op1, op2) => write!(f, "Gt({} > {})", op1, op2),
+            Statement::Contains(op1, op2) => write!(f, "Contains({} ∈ {})", op1, op2),
+            Statement::SumOf(result, op1, op2) => {
+                write!(f, "SumOf({} = {} + {})", result, op1, op2)
+            }
+            Statement::ProductOf(result, op1, op2) => {
+                write!(f, "ProductOf({} = {} × {})", result, op1, op2)
+            }
+            Statement::MaxOf(result, op1, op2) => {
+                write!(f, "MaxOf({} = max({}, {}))", result, op1, op2)
+            }
+        }
     }
 }
 
