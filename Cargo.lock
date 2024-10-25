@@ -5077,9 +5077,13 @@ dependencies = [
 name = "pex"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-recursion",
  "eyre",
+ "plonky2",
+ "pod2",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

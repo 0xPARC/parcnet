@@ -215,6 +215,35 @@ impl Statement {
             }
         }
     }
+    //TODO: cover all
+    pub fn matches_key(&self, key: &str) -> bool {
+        match self {
+            Statement::ValueOf(anchored_key, _) => anchored_key.1 == key,
+            Statement::SumOf(result, _, _)
+            | Statement::ProductOf(result, _, _)
+            | Statement::MaxOf(result, _, _) => result.1 == key,
+            _ => false,
+        }
+    }
+    // Helper to get the value key
+    //TODO: cover all
+    pub fn value_of_key(&self) -> Option<AnchoredKey> {
+        match self {
+            Statement::ValueOf(key, _) => Some(key.clone()),
+            _ => None,
+        }
+    }
+    // Helper to get the result key if it's a computation statement
+    //TODO: cover all
+    pub fn result_key(&self) -> Option<AnchoredKey> {
+        match self {
+            Statement::SumOf(result, _, _)
+            | Statement::ProductOf(result, _, _)
+            | Statement::MaxOf(result, _, _) => Some(result.clone()),
+            Statement::ValueOf(key, _) => Some(key.clone()),
+            _ => None,
+        }
+    }
 }
 
 // Statements in operations may either be specified directly or as 'references', where

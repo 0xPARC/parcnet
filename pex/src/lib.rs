@@ -6,13 +6,6 @@ use std::{
     time::Duration,
 };
 
-// Some thoughts on StatementRef
-// I technically do not need them. I can refer to statement by bundling the pod payload hash which I use
-// to track my input pods and the statement i am referring to
-// when constructing my ops, i can create these annoying OP CMD by figuring out which origin I am about to refer to
-// which I can do via replacing it with my convention for pod_id -> origin_id (I could keep a mapping)
-// With the origin and the statement name, I have a statement ref (and if the API was better I could get a ref to the statement directly)
-
 use tracing::info;
 
 use anyhow::{anyhow, Result};
@@ -74,6 +67,9 @@ impl MyPods {
         }
         None
     }
+    pub fn add_pod(&mut self, pod: POD) {
+        self.pods.push(pod);
+    }
 }
 
 pub type User = String;
@@ -81,18 +77,18 @@ pub type User = String;
 #[derive(Clone, Default)]
 pub struct Env {
     user: User,
-    pub pod_store: Arc<MyPods>,
+    pub pod_store: Arc<Mutex<MyPods>>,
     pub current_builder: Option<Arc<Mutex<PodBuilder>>>,
     shared: Arc<Mutex<HashMap<u64, Value>>>,
 }
 
 #[derive(Clone, Debug)]
 pub struct PodBuilder {
-    pub pending_operations: Vec<OpCmd<'static, 'static, 'static>>,
+    pub pending_operations: HashMap<String, OpCmd<'static, 'static, 'static>>,
     pub input_pods: HashMap<String, POD>,
-    // pub origin_mapping: HashMap<String, String>,
     pub next_origin_id: usize,
-    pub next_result_id: usize,
+    pub next_result_key_id: usize,
+    pub next_statement_id: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -101,6 +97,7 @@ pub enum Value {
     Scalar(GoldilocksField),
     PodRef(POD),
     SRef(SRef),
+    Operation(Box<Operation>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -136,6 +133,29 @@ impl Operation {
             OpType::Max => Operation::Max(op1, op2),
         }
     }
+    fn to_op_type(&self) -> OpType {
+        match self {
+            Operation::Sum(_, _) => OpType::Add,
+            Operation::Product(_, _) => OpType::Multiply,
+            Operation::Max(_, _) => OpType::Max,
+        }
+    }
+    fn eval(&self) -> Result<GoldilocksField> {
+        match self {
+            Operation::Sum(Value::Scalar(a), Value::Scalar(b)) => Ok(*a + *b),
+            Operation::Product(Value::Scalar(a), Value::Scalar(b)) => Ok(*a * *b),
+            Operation::Max(Value::Scalar(a), Value::Scalar(b)) => {
+                Ok(if a.to_canonical_u64() > b.to_canonical_u64() {
+                    *a
+                } else {
+                    *b
+                })
+            }
+            _ => Err(anyhow!(
+                "Cannot eval operation with non-scalar values directly"
+            )),
+        }
+    }
     fn eval_with_env(&self, env: &Env) -> Result<GoldilocksField> {
         match self {
             Operation::Sum(a, b) | Operation::Product(a, b) | Operation::Max(a, b) => {
@@ -164,24 +184,46 @@ impl Operation {
             }
         }
     }
-
-    // Keep the simple eval for when we know we have scalars
-    fn eval(&self) -> Result<GoldilocksField> {
+    fn eval_pattern(&self) -> Result<Value> {
         match self {
-            Operation::Sum(Value::Scalar(a), Value::Scalar(b)) => Ok(*a + *b),
-            Operation::Product(Value::Scalar(a), Value::Scalar(b)) => Ok(*a * *b),
-            Operation::Max(Value::Scalar(a), Value::Scalar(b)) => {
-                Ok(if a.to_canonical_u64() > b.to_canonical_u64() {
-                    *a
-                } else {
-                    *b
-                })
+            Operation::Sum(a, b) | Operation::Product(a, b) | Operation::Max(a, b) => {
+                let eval_a = match a {
+                    Value::Operation(nested_op) => nested_op.eval_pattern()?,
+                    Value::Scalar(_) | Value::String(_) => a.clone(),
+                    _ => return Err(anyhow!("Invalid pattern operand")),
+                };
+
+                let eval_b = match b {
+                    Value::Operation(nested_op) => nested_op.eval_pattern()?,
+                    Value::Scalar(_) | Value::String(_) => b.clone(),
+                    _ => return Err(anyhow!("Invalid pattern operand")),
+                };
+
+                match (&eval_a, &eval_b) {
+                    (Value::Scalar(s1), Value::Scalar(s2)) => {
+                        let result = match self {
+                            Operation::Sum(_, _) => *s1 + *s2,
+                            Operation::Product(_, _) => *s1 * *s2,
+                            Operation::Max(_, _) => {
+                                if s1.to_canonical_u64() > s2.to_canonical_u64() {
+                                    *s1
+                                } else {
+                                    *s2
+                                }
+                            }
+                        };
+                        Ok(Value::Scalar(result))
+                    }
+                    _ => Ok(Value::Operation(Box::new(Operation::from_op_type(
+                        self.to_op_type(),
+                        eval_a,
+                        eval_b,
+                    )))),
+                }
             }
-            _ => Err(anyhow!(
-                "Cannot eval operation with non-scalar values directly"
-            )),
         }
     }
+
     fn into_pod_op(
         op_type: OpType,
         result_ref: SRef,
@@ -199,41 +241,54 @@ impl Operation {
 impl PodBuilder {
     pub fn new() -> Self {
         Self {
-            pending_operations: Vec::new(),
+            pending_operations: HashMap::new(),
             input_pods: HashMap::new(),
-            // origin_mapping: HashMap::new(),
             next_origin_id: 2,
-            next_result_id: 0,
+            next_result_key_id: 0,
+            next_statement_id: 0,
         }
     }
-    pub fn register_input_pod(&mut self, pod: &POD) -> String {
+    pub fn pod_id(pod: &POD) -> String {
         let pod_hash = pod.payload.hash_payload();
         let name = format!("pod_{}", pod_hash);
+        name
+    }
+    pub fn register_input_pod(&mut self, pod: &POD) -> String {
+        let name = PodBuilder::pod_id(pod);
         if let Some(_) = self.input_pods.get(&name) {
             name.clone()
         } else {
-            // let origin = format!("origin_{}", self.next_origin_id);
-            // self.next_origin_id += 1;
-            // self.origin_mapping.insert(name.clone(), origin.clone());
             self.input_pods.insert(name.clone(), pod.clone());
             name.clone()
         }
     }
 
-    pub fn next_result_key(&mut self) -> String {
-        let key = format!("result_{}", self.next_result_id);
-        self.next_result_id += 1;
+    pub fn next_result_key_id(&mut self) -> String {
+        let key = format!("result_{}", self.next_result_key_id);
+        self.next_result_key_id += 1;
         key
     }
 
-    pub fn add_operation(&mut self, op: Op<StatementRef<'static, 'static>>, output_name: String) {
-        let static_str = Box::leak(output_name.to_owned().into_boxed_str());
-        self.pending_operations.push(OpCmd(op, static_str));
+    pub fn next_statement_id(&mut self) -> String {
+        let id = format!("statement_{}", self.next_statement_id);
+        self.next_statement_id += 1;
+        id
     }
 
-    pub fn finalize(self) -> Result<POD> {
-        let gpg_input = GPGInput::new(self.input_pods, HashMap::new());
-        POD::execute_oracle_gadget(&gpg_input, &self.pending_operations)
+    pub fn add_operation(&mut self, op: Op<StatementRef<'static, 'static>>, statement_id: String) {
+        let static_str = Box::leak(statement_id.to_owned().into_boxed_str());
+        self.pending_operations
+            .insert(statement_id.clone(), OpCmd(op, static_str));
+    }
+
+    pub fn finalize(&self) -> Result<POD> {
+        let gpg_input = GPGInput::new(self.input_pods.clone(), HashMap::new());
+        let pending_ops: &[OpCmd] = &self
+            .pending_operations
+            .values()
+            .cloned()
+            .collect::<Vec<OpCmd>>()[..];
+        POD::execute_oracle_gadget(&gpg_input, pending_ops)
     }
 }
 
@@ -241,7 +296,7 @@ impl Env {
     pub fn new(
         user: User,
         shared: Arc<Mutex<HashMap<u64, Value>>>,
-        pod_store: Arc<MyPods>,
+        pod_store: Arc<Mutex<MyPods>>,
     ) -> Self {
         Self {
             user,
@@ -340,6 +395,13 @@ impl Expr {
                 }
                 match &exprs[0] {
                     Expr::Atom(_, op) => {
+                        // Handle pod? query
+                        if op == "pod?" {
+                            if exprs.len() < 2 {
+                                return Err(anyhow!("pod? requires at least one argument"));
+                            }
+                            return self.eval_pod_query(&exprs[1..], env).await;
+                        }
                         if let Ok(op_type) = OpType::from_str(op) {
                             return self.eval_operation(op_type, &exprs[1..], env).await;
                         }
@@ -348,58 +410,8 @@ impl Expr {
                                 if exprs.len() < 2 {
                                     return Err(anyhow!("createpod requires a body"));
                                 }
-                                let mut pod_env = env.extend();
-                                let pod_name = if let Expr::Atom(_, op) = &exprs[1] {
-                                    Some(op)
-                                } else {
-                                    None
-                                };
-                                info!("creating pod {}", pod_name.expect("No pod name"));
-                                pod_env.current_builder =
-                                    Some(Arc::new(Mutex::new(PodBuilder::new())));
-                                for chunk in exprs[2..].chunks(2) {
-                                    if chunk.len() != 2 {
-                                        return Err(anyhow!("Odd number of key-value pairs"));
-                                    }
-
-                                    let (key_expr, value_expr) = (&chunk[0], &chunk[1]);
-                                    match key_expr {
-                                        Expr::Atom(_, key) => {
-                                            let value = value_expr.eval(pod_env.clone()).await?;
-                                            if let Some(ref builder) = pod_env.current_builder {
-                                                let mut builder = builder.lock().unwrap();
-                                                match value {
-                                                    Value::Scalar(s) => {
-                                                        let entry = Entry {
-                                                            key: key.clone(),
-                                                            value: ScalarOrVec::Scalar(s),
-                                                        };
-                                                        builder.add_operation(
-                                                            Op::NewEntry(entry),
-                                                            key.clone(),
-                                                        );
-                                                    }
-                                                    _ => {
-                                                        return Err(anyhow!(
-                                                            "Can't assign a non scalar to pod entry"
-                                                        ))
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        _ => return Err(anyhow!("Expected key-value pair")),
-                                    }
-                                }
-                                // Finalize pod
-                                if let Some(ref builder) = pod_env.current_builder {
-                                    let builder = builder.lock().unwrap().clone();
-                                    let pod = builder.finalize()?;
-                                    Ok(Value::PodRef(pod)) // empty string as we don't have a specific entry
-                                } else {
-                                    Err(anyhow!("No pod builder in context"))
-                                }
+                                return self.eval_create_pod(&exprs[1..], env).await;
                             }
-
                             op => Err(anyhow!("Unknown operation: {}", op)),
                         }
                     }
@@ -415,6 +427,127 @@ impl Expr {
             }
         }
     }
+    async fn eval_create_pod(&self, body: &[Expr], env: Env) -> Result<Value> {
+        let mut pod_env = env.extend();
+        let pod_name = if let Expr::Atom(_, op) = &body[0] {
+            Some(op)
+        } else {
+            None
+        };
+        info!("creating pod {}", pod_name.expect("No pod name"));
+        let builder = Arc::new(Mutex::new(PodBuilder::new()));
+        pod_env.current_builder = Some(builder.clone());
+        for chunk in body[1..].chunks(2) {
+            if chunk.len() != 2 {
+                return Err(anyhow!("Odd number of key-value pairs"));
+            }
+
+            let (key_expr, value_expr) = (&chunk[0], &chunk[1]);
+            match key_expr {
+                Expr::Atom(_, key) => {
+                    let value = value_expr.eval(pod_env.clone()).await?;
+                    match value {
+                        Value::Scalar(s) => {
+                            let entry = Entry {
+                                key: key.clone(),
+                                value: ScalarOrVec::Scalar(s),
+                            };
+
+                            let mut builder_guard = builder.lock().unwrap();
+                            builder_guard.add_operation(Op::NewEntry(entry), key.clone());
+                        }
+                        Value::SRef(sref) => match sref {
+                            SRef(ORef::S, statement) => {
+                                let statement_id =
+                                    statement.split(':').collect::<Vec<&str>>()[1].to_string();
+                                let mut builder_guard = builder.lock().unwrap();
+                                if let Some(operation) =
+                                    builder_guard.pending_operations.get(&statement_id)
+                                {
+                                    if let Op::NewEntry(entry) = &operation.0 {
+                                        let new_entry = Entry {
+                                            key: key.clone(),
+                                            value: entry.value.clone(),
+                                        };
+                                        let op_cmd = OpCmd(
+                                            Op::NewEntry(new_entry),
+                                            Box::leak(statement_id.clone().into_boxed_str()),
+                                        );
+                                        builder_guard
+                                            .pending_operations
+                                            .insert(statement_id.to_string(), op_cmd);
+                                    } else {
+                                        return Err(anyhow!(format!(
+                                                "Couldn't find a statement with statement id {} while editing a NewEntry in createpod",
+                                                statement_id
+                                            )));
+                                    }
+                                }
+                            }
+                            SRef(ORef::P(pod_id), statement) => {
+                                todo!();
+                            }
+                        },
+                        _ => return Err(anyhow!("Can't assign a non scalar to pod entry")),
+                    }
+                }
+                _ => return Err(anyhow!("Expected key-value pair")),
+            }
+        }
+        // Finalize pod
+        let pod = builder.lock().unwrap().finalize()?;
+        Ok(Value::PodRef(pod))
+    }
+    async fn eval_pod_query(&self, parts: &[Expr], env: Env) -> Result<Value> {
+        // From operands I want to put together a list a query, which is a list of keys, operations, and asserts
+        // keys will be checked on ValueOf on _SELF that have the corresponding entry name
+        // each operation will be linked to one of the key (it's a tree of operations that get unrolled into a serie of statements and entries whose values will need to be checked)
+        // asserts will be checked one by one as binary statements
+        let store = env.pod_store.lock().unwrap();
+        'outer: for pod in store.pods.iter() {
+            let mut matched_refs = Vec::new();
+            for part in parts {
+                match part {
+                    Expr::Atom(_, key) => {
+                        // Find a ValueOf statement on _SELF that matches the key we are looking for
+                        if let Some(statement_key) = pod
+                            .payload
+                            .statements_map
+                            .iter()
+                            .find(|(_key, s)| {
+                                s.value_of_key()
+                                    .and_then(|k| Some(k.0.is_self() && k.1 == *key))
+                                    .is_some()
+                            })
+                            .map(|(key, _s)| key)
+                        {
+                            matched_refs.push(SRef(
+                                // the origin will be corrected later
+                                ORef::P("_placeholder".to_string()),
+                                statement_key.clone(),
+                            ));
+                        } else {
+                            continue 'outer;
+                        }
+                    }
+                    Expr::List(_, pattern) => todo!(),
+                }
+            }
+            if let Some(ref builder) = env.current_builder {
+                let mut builder = builder.lock().unwrap();
+                let pod_id = builder.register_input_pod(pod);
+                let srefs: Vec<SRef> = matched_refs
+                    .into_iter()
+                    .map(|sref| SRef::new(pod_id.clone(), sref.1))
+                    .collect();
+                // TODO: for now return the first sref while we don't support lists
+                return Ok(Value::SRef(srefs[0].clone()));
+            } else {
+                return Err(anyhow!("pod? not in createpod context"));
+            }
+        }
+        return Err(anyhow!("No pod found matching statements"));
+    }
     async fn eval_operation(&self, op_type: OpType, operands: &[Expr], env: Env) -> Result<Value> {
         if operands.len() != 2 {
             return Err(anyhow!("Operations require exactly two operands"));
@@ -425,28 +558,27 @@ impl Expr {
         let operation = Operation::from_op_type(op_type, op1.clone(), op2.clone());
 
         if let Some(ref builder) = env.current_builder {
-            let mut builder = builder.lock().unwrap();
             let result_value = operation.eval_with_env(&env)?;
+            let mut builder = builder.lock().unwrap();
 
             // Create refs for any values that need tracking
             match (&op1, &op2) {
                 (Value::SRef(_), _) | (_, Value::SRef(_)) => {
-                    // We need to create a new entry for the result, and also for any operand if it's a new scalar
-                    let result_key = builder.next_result_key();
-                    let result_sref = SRef::self_ref(format!("VALUEOF:{}", result_key));
-
                     // Convert operands to SRefs if they're scalars
                     let op1_sref = match op1 {
                         Value::Scalar(s) => {
                             let key = s.to_string();
+                            // TODO: Check if that constant already exist, and if it does, don't add a new operation
+                            let statement_name = format!("constant_{}", key);
                             builder.add_operation(
                                 Op::NewEntry(Entry {
+                                    // the entry name is the same as the constant (eg: "42" for 42)
                                     key: key.clone(),
                                     value: ScalarOrVec::Scalar(s),
                                 }),
-                                key.clone(),
+                                statement_name.clone(),
                             );
-                            SRef::self_ref(format!("VALUEOF:{}", key))
+                            SRef::self_ref(format!("VALUEOF:{}", statement_name))
                         }
                         Value::SRef(r) => r,
                         _ => return Err(anyhow!("Invalid operand type")),
@@ -455,34 +587,40 @@ impl Expr {
                     let op2_sref = match op2 {
                         Value::Scalar(s) => {
                             let key = s.to_string();
+                            // TODO: Check if that constant already exist, and if it does, don't add a new operation
+                            let statement_name = format!("constant_{}", key);
                             builder.add_operation(
                                 Op::NewEntry(Entry {
+                                    // the entry name is the same as the constant (eg: "42" for 42)
                                     key: key.clone(),
                                     value: ScalarOrVec::Scalar(s),
                                 }),
-                                key.clone(),
+                                statement_name.clone(),
                             );
-                            SRef::self_ref(format!("VALUEOF:{}", key))
+                            SRef::self_ref(format!("VALUEOF:{}", statement_name))
                         }
                         Value::SRef(r) => r,
                         _ => return Err(anyhow!("Invalid operand type")),
                     };
 
+                    // We need to create a new entry for the result, and also for any operand if it's a new scalar
+                    let result_key = builder.next_result_key_id();
+                    let new_entry_statement_id = builder.next_statement_id();
+                    let result_sref = SRef::self_ref(format!("VALUEOF:{}", new_entry_statement_id));
                     let pod_op =
                         Operation::into_pod_op(op_type, result_sref.clone(), op1_sref, op2_sref);
-
-                    // Create the result entry. We use our result_key which was also used in creating the operation
-                    // TODO: we need to name our key the same as the binding we create in case this is top of the computation tree, not named result_key
+                    // Create the result entry. We use our result_key which was also used in creating the operation.
                     builder.add_operation(
                         Op::NewEntry(Entry {
                             key: result_key.clone(),
                             value: ScalarOrVec::Scalar(result_value),
                         }),
-                        result_key.clone(),
+                        new_entry_statement_id,
                     );
 
                     // Then add the operation
-                    builder.add_operation(pod_op, result_key);
+                    let op_statement_id = builder.next_statement_id();
+                    builder.add_operation(pod_op, op_statement_id);
 
                     Ok(Value::SRef(result_sref))
                 }
@@ -529,7 +667,20 @@ fn get_value_from_ref(sref: &SRef, env: &Env) -> Result<GoldilocksField> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use pod2::pod::AnchoredKey;
+    pub fn get_self_entry_value(pod: &POD, key: &str) -> Option<ScalarOrVec> {
+        pod.payload
+            .statements_list
+            .iter()
+            .find(|(_, s)| {
+                if let Statement::ValueOf(AnchoredKey(origin, k), _) = s {
+                    k == key && origin.origin_name == "_SELF"
+                } else {
+                    false
+                }
+            })
+            .and_then(|(_, s)| s.value().ok())
+    }
     #[test]
     fn test_parse() {
         assert_eq!(
@@ -560,36 +711,64 @@ mod tests {
     }
     #[tokio::test]
     async fn test_create_pod() -> Result<()> {
-        // Setup the environment
         let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(MyPods::default());
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
         let env = Env::new("test_user".to_string(), shared, pod_store);
 
         // Create a pod with two scalar values
         let result = eval("[createpod test_pod x [+ 40 2] y 123]", env).await?;
 
-        // Verify we got a PodRef back
         match result {
             Value::PodRef(pod) => {
-                dbg!(&pod);
-                // Check that the pod contains our entries
                 assert_eq!(
-                    pod.payload
-                        .statements_map
-                        .get("VALUEOF:x")
-                        .unwrap()
-                        .value()
-                        .unwrap(),
+                    get_self_entry_value(&pod, "x").unwrap(),
                     ScalarOrVec::Scalar(GoldilocksField(42))
                 );
                 assert_eq!(
-                    pod.payload
-                        .statements_map
-                        .get("VALUEOF:y")
-                        .unwrap()
-                        .value()
-                        .unwrap(),
+                    get_self_entry_value(&pod, "y").unwrap(),
                     ScalarOrVec::Scalar(GoldilocksField(123))
+                );
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected PodRef, got something else")),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_pod_with_pod_basic() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+        let first_pod_eval = eval("[createpod test_pod x [+ 40 2] y 12", env.clone()).await?;
+        let first_pod = match first_pod_eval {
+            Value::PodRef(pod) => pod,
+            _ => panic!("Expected PodRef"),
+        };
+        pod_store.lock().unwrap().add_pod(first_pod);
+
+        let second_pod_eval = eval("[createpod test_pod_2 z 1616]", env.clone()).await?;
+        let second_pod = match second_pod_eval {
+            Value::PodRef(pod) => pod,
+            _ => panic!("Expected PodRef"),
+        };
+        pod_store.lock().unwrap().add_pod(second_pod);
+
+        let result = eval(
+            "[createpod final x [+ 40 2] y [+ [pod? x] 66]]",
+            env.clone(),
+        )
+        .await?;
+
+        match result {
+            Value::PodRef(pod) => {
+                dbg!(&pod.payload.statements_map);
+                assert_eq!(
+                    get_self_entry_value(&pod, "x").unwrap(),
+                    ScalarOrVec::Scalar(GoldilocksField(42))
+                );
+                assert_eq!(
+                    get_self_entry_value(&pod, "y").unwrap(),
+                    ScalarOrVec::Scalar(GoldilocksField(108))
                 );
                 Ok(())
             }

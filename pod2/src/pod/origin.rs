@@ -37,6 +37,9 @@ impl Origin {
     pub fn auto(origin_name: String, gadget_id: GadgetID) -> Self {
         Self::new(Self::SELF.origin_id, origin_name, gadget_id)
     }
+    pub fn is_self(&self) -> bool {
+        self.origin_id == GoldilocksField(1)
+    }
     /// Field representation as a vector of length 2.
     pub fn to_fields(&self) -> Vec<GoldilocksField> {
         vec![
