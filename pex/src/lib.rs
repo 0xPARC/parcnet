@@ -83,6 +83,7 @@ pub struct Env {
     pub pod_store: Arc<Mutex<MyPods>>,
     pub current_builder: Option<Arc<Mutex<PodBuilder>>>,
     shared: Arc<Mutex<HashMap<u64, Value>>>,
+    bindings: Arc<Mutex<HashMap<String, Value>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -338,6 +339,7 @@ impl Env {
             shared,
             pod_store,
             current_builder: None,
+            bindings: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -347,10 +349,11 @@ impl Env {
             shared: self.shared.clone(),
             pod_store: self.pod_store.clone(),
             current_builder: self.current_builder.clone(),
+            bindings: Arc::new(Mutex::new(self.bindings.lock().unwrap().clone())),
         }
     }
 
-    pub async fn get(&self, id: u64) -> Option<Value> {
+    pub async fn get_remote(&self, id: u64) -> Option<Value> {
         loop {
             if let Some(v) = self.shared.lock().unwrap().get(&id).cloned() {
                 return Some(v);
@@ -358,8 +361,15 @@ impl Env {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
-    pub fn set(&self, id: u64, value: Value) {
+    pub fn set_remote(&self, id: u64, value: Value) {
         self.shared.lock().unwrap().insert(id, value);
+    }
+    pub fn get_binding(&self, name: &str) -> Option<Value> {
+        self.bindings.lock().unwrap().get(name).cloned()
+    }
+
+    pub fn set_binding(&self, name: String, value: Value) {
+        self.bindings.lock().unwrap().insert(name, value);
     }
 }
 
@@ -444,6 +454,47 @@ impl Expr {
                                 }
                                 return self.eval_pod_query(&exprs[1..], env).await;
                             }
+                            "define" => {
+                                if exprs.len() != 3 {
+                                    return Err(anyhow!("define requires exactly two arguments"));
+                                }
+
+                                let value = exprs[2].eval(env.clone()).await?;
+
+                                match &exprs[1] {
+                                    // Single binding
+                                    Expr::Atom(_, name) => {
+                                        env.set_binding(name.clone(), value.clone());
+                                        Ok(value)
+                                    }
+
+                                    // List destructuring
+                                    Expr::List(_, names) => {
+                                        if let Value::List(values) = value {
+                                            if names.len() != values.len() {
+                                                return Err(anyhow!(
+                                                    "Destructuring pattern length mismatch"
+                                                ));
+                                            }
+
+                                            for (name_expr, value) in
+                                                names.iter().zip(values.iter())
+                                            {
+                                                if let Expr::Atom(_, name) = name_expr {
+                                                    env.set_binding(name.clone(), value.clone());
+                                                } else {
+                                                    return Err(anyhow!(
+                                                        "Invalid destructuring pattern"
+                                                    ));
+                                                }
+                                            }
+                                            Ok(Value::List(values))
+                                        } else {
+                                            Err(anyhow!("Cannot destructure non-list value"))
+                                        }
+                                    }
+                                }
+                            }
                             "list" => {
                                 let mut values = Vec::new();
                                 for expr in &exprs[1..] {
@@ -497,29 +548,53 @@ impl Expr {
                 }
             }
             Expr::Atom(_, a) => {
-                if let Ok(a) = a.parse::<u64>() {
-                    Ok(Value::Scalar(GoldilocksField(a)))
+                // First try to resolve as binding
+                if let Some(value) = env.get_binding(a) {
+                    Ok(value)
+                } else if let Ok(num) = a.parse::<u64>() {
+                    // Existing number parsing
+                    Ok(Value::Scalar(GoldilocksField(num)))
                 } else {
-                    Err(anyhow!("Not an u64"))
+                    Err(anyhow!("Unknown identifier: {}", a))
                 }
             }
         }
     }
     async fn eval_create_pod(&self, body: &[Expr], env: Env) -> Result<Value> {
         let mut pod_env = env.extend();
+        let builder = Arc::new(Mutex::new(PodBuilder::new()));
+        pod_env.current_builder = Some(builder.clone());
+
         let pod_name = if let Expr::Atom(_, op) = &body[0] {
             Some(op)
         } else {
             None
         };
         info!("creating pod {}", pod_name.expect("No pod name"));
-        let builder = Arc::new(Mutex::new(PodBuilder::new()));
-        pod_env.current_builder = Some(builder.clone());
-        for chunk in body[1..].chunks(2) {
-            if chunk.len() != 2 {
-                return Err(anyhow!("Odd number of key-value pairs"));
+        // First evaluate all expressions that aren't key-value pairs
+        // This includes defines and other forms
+        let mut i = 1;
+        while i < body.len() {
+            match &body[i] {
+                Expr::List(_, _) => {
+                    // Evaluate any list expression (define, etc)
+                    body[i].eval(pod_env.clone()).await?;
+                    i += 1;
+                }
+                Expr::Atom(_, _) => {
+                    // Found what should be start of k/v pairs
+                    break;
+                }
             }
+        }
 
+        // Now process remaining expressions as key-value pairs
+        let remaining = &body[i..];
+        if remaining.len() % 2 != 0 {
+            return Err(anyhow!("Odd number of key-value expressions"));
+        }
+
+        for chunk in remaining.chunks(2) {
             let (key_expr, value_expr) = (&chunk[0], &chunk[1]);
             match key_expr {
                 Expr::Atom(_, key) => {
@@ -687,8 +762,13 @@ impl Expr {
                     .into_iter()
                     .map(|sref| SRef::new(pod_id.clone(), sref.1))
                     .collect();
-                // TODO: for now return the first sref while we don't support lists
-                return Ok(Value::SRef(srefs[0].clone()));
+                // If only one key was queried, return single SRef
+                // Otherwise return a List of SRefs
+                return if srefs.len() == 1 {
+                    Ok(Value::SRef(srefs.into_iter().next().unwrap()))
+                } else {
+                    Ok(Value::List(srefs.into_iter().map(Value::SRef).collect()))
+                };
             } else {
                 return Err(anyhow!("pod? not in createpod context"));
             }
@@ -878,7 +958,7 @@ mod tests {
         pod_store.lock().unwrap().add_pod(second_pod);
 
         let result = eval(
-            "[createpod final x [+ 40 2] y [+ [pod? x] 66] z [+ [pod? x] 66]]",
+            "[createpod final x [+ 40 2] y [+ [pod? x] 66] z [+ [pod? z] 66]]",
             env.clone(),
         )
         .await?;
@@ -981,6 +1061,130 @@ mod tests {
             Ok(())
         } else {
             Err(anyhow!("Failed to create test pod"))
+        }
+    }
+    #[tokio::test]
+    async fn test_pod_query_destructuring() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+
+        // Create a pod with two values
+        let pod1 = eval("[createpod test_pod1 x 10 y 20]", env.clone()).await?;
+        if let Value::PodRef(pod1) = pod1 {
+            pod_store.lock().unwrap().add_pod(pod1);
+
+            // Test destructuring pod query results
+            let result = eval(
+                "[createpod final
+                    [define [a b] [pod? x y]]
+                    sum [+ a b]
+                    double-x [* a 2]]",
+                env.clone(),
+            )
+            .await?;
+
+            match result {
+                Value::PodRef(pod) => {
+                    assert_eq!(
+                        get_self_entry_value(&pod, "sum").unwrap(),
+                        ScalarOrVec::Scalar(GoldilocksField(30))
+                    );
+                    assert_eq!(
+                        get_self_entry_value(&pod, "double-x").unwrap(),
+                        ScalarOrVec::Scalar(GoldilocksField(20))
+                    );
+                    Ok(())
+                }
+                _ => Err(anyhow!("Expected PodRef")),
+            }
+        } else {
+            Err(anyhow!("Failed to create test pod"))
+        }
+    }
+    #[tokio::test]
+    async fn test_pod_query_single_ref() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+
+        // Create a pod with a single value
+        let pod1 = eval("[createpod test_pod1 value1 10]", env.clone()).await?;
+        if let Value::PodRef(pod1) = pod1 {
+            pod_store.lock().unwrap().add_pod(pod1);
+
+            // Test querying single value returns SRef directly, not in a list
+            let result = eval(
+                "[createpod final
+                    [define x [pod? value1]]
+                    a [+ x 1]]",
+                env.clone(),
+            )
+            .await?;
+
+            match result {
+                Value::PodRef(pod) => {
+                    assert_eq!(
+                        get_self_entry_value(&pod, "a").unwrap(),
+                        ScalarOrVec::Scalar(GoldilocksField(11))
+                    );
+                    Ok(())
+                }
+                _ => Err(anyhow!("Expected PodRef")),
+            }
+        } else {
+            Err(anyhow!("Failed to create test pod"))
+        }
+    }
+    #[tokio::test]
+    async fn test_complex_pod_creation_with_defines() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+
+        // First create a pod with some values we'll reference
+        let source_pod = eval("[createpod source value1 10 value2 20]", env.clone()).await?;
+        if let Value::PodRef(source_pod) = source_pod {
+            pod_store.lock().unwrap().add_pod(source_pod);
+
+            // Now create a complex pod using defines and references
+            let result = eval(
+                "[createpod test
+                    [define [x y] [pod? value1 value2]]
+                    [define z 42]
+                    key1 [+ x 10]
+                    key2 [max y 100]
+                    key3 z]",
+                env.clone(),
+            )
+            .await?;
+
+            match result {
+                Value::PodRef(pod) => {
+                    // Test that key1 = value1 + 10 = 20
+                    assert_eq!(
+                        get_self_entry_value(&pod, "key1").unwrap(),
+                        ScalarOrVec::Scalar(GoldilocksField(20))
+                    );
+
+                    // Test that key2 = max(value2, 100) = 100
+                    assert_eq!(
+                        get_self_entry_value(&pod, "key2").unwrap(),
+                        ScalarOrVec::Scalar(GoldilocksField(100))
+                    );
+
+                    // Test that key3 = z = 42
+                    assert_eq!(
+                        get_self_entry_value(&pod, "key3").unwrap(),
+                        ScalarOrVec::Scalar(GoldilocksField(42))
+                    );
+
+                    Ok(())
+                }
+                _ => Err(anyhow!("Expected PodRef")),
+            }
+        } else {
+            Err(anyhow!("Failed to create source pod"))
         }
     }
     #[tokio::test]
