@@ -31,7 +31,6 @@ c''_1...c''_M   │p''_1  │      │p''_N
 use anyhow::{anyhow, Result};
 use plonky2::field::types::Field;
 use plonky2::gates::noop::NoopGate;
-use plonky2::hash::hash_types::{HashOut, HashOutTarget};
 use plonky2::iop::target::{BoolTarget, Target};
 use plonky2::iop::witness::{PartialWitness, WitnessWrite};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
@@ -52,12 +51,8 @@ use crate::{PlonkyProof, C, D, F};
 /// - N plonky2 recursive proof verifiers
 /// - the given OpsExecutorTrait
 #[derive(Debug, Clone)]
-pub struct RecursionTree<
-    I: InnerCircuitTrait,
-    O: OpsExecutorTrait<M, N>,
-    const M: usize,
-    const N: usize,
-> where
+pub struct RecursionTree<I: InnerCircuitTrait, O: OpsExecutorTrait, const M: usize, const N: usize>
+where
     [(); M + N]:,
 {
     _i: PhantomData<I>,
@@ -67,8 +62,9 @@ pub struct RecursionTree<
 impl<I, O, const M: usize, const N: usize> RecursionTree<I, O, M, N>
 where
     I: InnerCircuitTrait,
-    O: OpsExecutorTrait<M, N>,
+    O: OpsExecutorTrait,
     [(); M + N]:,
+    [(); O::NS]:,
 {
     /// returns the full-recursive CircuitData
     pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
@@ -84,30 +80,24 @@ where
         Ok(data)
     }
 
-    pub fn prepare_public_inputs(
-        verifier_data: VerifierCircuitData<F, C, D>,
-        // `hashes` contains (in this order) M hashes corresponding to the M InnerCircuits, and N
-        // hashes corresponding to the plonky2 proofs
-        hashes: [HashOut<F>; M + N],
-    ) -> Vec<F> {
-        RecursionCircuit::<I, O, M, N>::prepare_public_inputs(verifier_data, hashes)
+    pub fn prepare_public_inputs(verifier_data: VerifierCircuitData<F, C, D>) -> Vec<F> {
+        RecursionCircuit::<I, O, M, N>::prepare_public_inputs(verifier_data)
     }
 
     pub fn prove_node(
         verifier_data: VerifierCircuitData<F, C, D>,
-        hashes: &[HashOut<F>; M + N],
-        // if selectors[i]==0: verify InnerCircuit. if selectors[i]==1: verify recursive_proof[i]
         selectors: [F; M + N],
         inner_circuits_input: [I::Input; M],
+        ops_executor_input: [O::Input; O::NS],
         recursive_proofs: &[PlonkyProof; N],
     ) -> Result<PlonkyProof> {
         println!("prove_node:");
         for i in 0..M + N {
             let what = if i < M { "inner circuit" } else { "proof" };
             if selectors[i].is_nonzero() {
-                println!("  (selectors[{}]==1), verify {}-th {}", i, i, what);
+                println!("  (selectors[{}] enabled), verify {}", i, what);
             } else {
-                println!("  (selectors[{}]==0), verify {}-th {}", i, i, what);
+                println!("  (selectors[{}] disabled), skip {}", i, what);
             }
         }
 
@@ -125,9 +115,9 @@ where
         let start = Instant::now();
         circuit.set_targets(
             &mut pw,
-            hashes,
             selectors,
             inner_circuits_input,
+            ops_executor_input,
             recursive_proofs,
         )?;
         println!("circuit.set_targets(): {:?}", start.elapsed());
@@ -173,15 +163,16 @@ where
 /// N: number of plonky2 proofs per recursive step
 pub struct RecursionCircuit<
     I: InnerCircuitTrait,
-    O: OpsExecutorTrait<M, N>,
+    O: OpsExecutorTrait,
     const M: usize,
     const N: usize,
 > where
     [(); M + N]:,
+    [(); O::NS]:,
 {
-    hashes_targ: [HashOutTarget; M + N],
     selectors_targ: [Target; M + N],
     inner_circuit_targ: [I::Targets; M],
+    ops_executor_targ: [O::Targets; O::NS],
     proofs_targ: [ProofWithPublicInputsTarget<D>; N],
     // the next two are common for all the given proofs. It is the data for this circuit itself
     // (cyclic circuit).
@@ -192,17 +183,15 @@ pub struct RecursionCircuit<
 impl<I, O, const M: usize, const N: usize> RecursionCircuit<I, O, M, N>
 where
     I: InnerCircuitTrait,
-    O: OpsExecutorTrait<M, N>,
+    O: OpsExecutorTrait,
     [(); M + N]:,
+    [(); O::NS]:,
 {
     pub fn prepare_public_inputs(
         verifier_data: VerifierCircuitData<F, C, D>,
-        // `hashes` contains (in this order) M hashes corresponding to the M InnerCircuits, and N
-        // hashes corresponding to the plonky2 proofs
-        hashes: [HashOut<F>; M + N],
+        // TODO will need here an array of the extra public inputs Vec<Target>
     ) -> Vec<F> {
         [
-            hashes.into_iter().flat_map(|h| h.elements).collect(),
             // add verifier_data as public inputs:
             verifier_data.verifier_only.circuit_digest.elements.to_vec(),
             verifier_data
@@ -222,9 +211,6 @@ where
         builder: &mut CircuitBuilder<F, D>,
         verifier_data: VerifierCircuitData<F, C, D>,
     ) -> Result<Self> {
-        let hashes_targ: [HashOutTarget; M + N] =
-            array::from_fn(|_| builder.add_virtual_hash_public_input());
-
         // build the InnerCircuit logic. Also set the selectors, used both by the InnerCircuit and
         // by the recursive proofs verifications.
         let selectors_targ: [Target; M + N] = array::from_fn(|_| {
@@ -236,9 +222,11 @@ where
         let selectors_bool_targ: [BoolTarget; M + N] =
             array::from_fn(|i| BoolTarget::new_unsafe(selectors_targ[i]));
 
-        let inner_circuit_targ: [I::Targets; M] = array::try_from_fn(|i| {
-            I::add_targets(builder, &selectors_bool_targ[i], &hashes_targ[i])
-        })?;
+        let inner_circuit_targ: [I::Targets; M] =
+            array::try_from_fn(|i| I::add_targets(builder, &selectors_bool_targ[i]))?;
+
+        let ops_executor_targ: [O::Targets; O::NS] =
+            array::try_from_fn(|_| O::add_targets(builder))?;
 
         // proof verification:
 
@@ -248,7 +236,7 @@ where
         let proofs_targ: Result<[ProofWithPublicInputsTarget<D>; N]> = array::try_from_fn(|i| {
             let proof_targ = builder.add_virtual_proof_with_pis(&common_data);
             builder.conditionally_verify_cyclic_proof_or_dummy::<C>(
-                selectors_bool_targ[i],
+                selectors_bool_targ[M + i],
                 &proof_targ,
                 &common_data,
             )?;
@@ -256,12 +244,10 @@ where
         });
         let proofs_targ = proofs_targ?;
 
-        let new_hash = O::add_targets(builder, hashes_targ)?;
-
         Ok(Self {
-            hashes_targ,
             selectors_targ,
             inner_circuit_targ,
+            ops_executor_targ,
             proofs_targ,
             verifier_data_targ,
             verifier_data,
@@ -271,26 +257,23 @@ where
     pub fn set_targets(
         &mut self,
         pw: &mut PartialWitness<F>,
-        // `hashes` contains (in this order) M hashes corresponding to the M InnerCircuits, and N
-        // hashes corresponding to the plonky2 proofs
-        hashes: &[HashOut<F>; M + N],
         // if selectors[i]==0: verify InnerCircuit. if selectors[i]==1: verify recursive_proof[i]
         selectors: [F; M + N],
         inner_circuit_input: [I::Input; M],
+        ops_executor_input: [O::Input; O::NS],
         recursive_proofs: &[PlonkyProof; N],
     ) -> Result<()> {
-        // set the msgs values
-        for i in 0..(M + N) {
-            pw.set_hash_target(self.hashes_targ[i], hashes[i])?;
-        }
-
-        // set the InnerCircuit related values
         for i in 0..(M + N) {
             pw.set_target(self.selectors_targ[i], selectors[i])?;
         }
 
+        // set the InnerCircuit related values
         for i in 0..M {
             I::set_targets(pw, &self.inner_circuit_targ[i], &inner_circuit_input[i])?;
+        }
+
+        for i in 0..O::NS {
+            O::set_targets(pw, &self.ops_executor_targ[i], &ops_executor_input[i])?;
         }
 
         // set proof related values:
@@ -298,10 +281,7 @@ where
         // recursive proofs verification
         pw.set_verifier_data_target(&self.verifier_data_targ, &self.verifier_data.verifier_only)?;
 
-        let public_inputs = RecursionCircuit::<I, O, M, N>::prepare_public_inputs(
-            self.verifier_data.clone(),
-            hashes.clone(),
-        );
+        let public_inputs = Self::prepare_public_inputs(self.verifier_data.clone());
         for i in 0..N {
             pw.set_proof_with_pis_target(
                 &self.proofs_targ[i],
@@ -318,7 +298,7 @@ where
 
 pub fn common_data_for_recursion<
     I: InnerCircuitTrait,
-    O: OpsExecutorTrait<M, N>,
+    O: OpsExecutorTrait,
     const M: usize,
     const N: usize,
 >() -> Result<CircuitData<F, C, D>>
@@ -345,11 +325,6 @@ where
     // 3rd
     let config = CircuitConfig::standard_recursion_config();
     let mut builder = CircuitBuilder::<F, D>::new(config.clone());
-    let mut hashes_targ: Vec<HashOutTarget> = vec![];
-    for _ in 0..(M + N) {
-        let hash_targ = builder.add_virtual_hash_public_input();
-        hashes_targ.push(hash_targ);
-    }
 
     builder.add_gate(
         // add a ConstantGate, because without this, when later generating the `dummy_circuit`
@@ -360,14 +335,14 @@ where
         vec![],
     );
 
-    // InnerCircuits targets
+    // add selectors and InnerCircuits targets
     for i in 0..(M + N) {
         let selector_F_targ = builder.add_virtual_target();
         binary_check(&mut builder, selector_F_targ);
         let b = BoolTarget::new_unsafe(selector_F_targ);
         // add targets of M InnerCircuits
         if i < M {
-            let _ = I::add_targets(&mut builder, &b, &hashes_targ[i]).unwrap();
+            let _ = I::add_targets(&mut builder, &b)?;
         }
     }
 
@@ -437,7 +412,7 @@ mod tests {
     /// cargo test --release test_recursion -- --nocapture
     #[test]
     fn test_recursion() -> Result<()> {
-        test_recursion_opt::<2, 2>()?; // M=2, N=2
+        test_recursion_opt::<3, 2>()?; // <M, N>
 
         Ok(())
     }
@@ -450,8 +425,8 @@ mod tests {
         println!("\n--------------------------------------------------");
         println!("\n--------------------------------------------------");
         println!(
-            "\nrunning test:\n===test_tree_recursion_opt with N={} (arity)",
-            N
+            "\nrunning test:\n===test_tree_recursion_opt with M={} (num InnerCircuits) N={} (arity of the recursion tree)",
+            M, N
         );
 
         let l: u32 = 2; // levels of the recursion (binary) tree
@@ -462,25 +437,30 @@ mod tests {
 
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
         let schnorr = SchnorrSigner::new();
-        // generate M+N random hashes
-        let hashes: [HashOut<F>; M + N] = array::from_fn(|_| HashOut::<F>::sample(&mut rng));
+        // generate M random messages, each of length 4
+        let msg_vec: Vec<Vec<F>> = (0..M)
+            .map(|_| {
+                std::iter::repeat_with(|| F::sample(&mut rng))
+                    .take(4)
+                    .collect()
+            })
+            .collect();
 
         // generate M*N key pairs (M for each of the N recursive nodes at the base level)
         let sk_vec: Vec<SchnorrSecretKey> =
             (0..M).map(|i| SchnorrSecretKey { sk: i as u64 }).collect();
         let pk_vec: Vec<SchnorrPublicKey> = sk_vec.iter().map(|&sk| schnorr.keygen(&sk)).collect();
 
-        // sign the hashes
+        // sign the messages
         let sig_vec: Vec<SchnorrSignature> = sk_vec
             .iter()
-            .zip(hashes.iter().take(M).map(|h| h.elements).cycle())
+            .zip(msg_vec.clone())
             .map(|(&sk, msg)| schnorr.sign(&msg.to_vec(), &sk, &mut rng))
             .collect();
         assert_eq!(sig_vec.len(), M);
 
-        // const NS: usize = 2;
         type RT<const M: usize, const N: usize> =
-            RecursionTree<ExampleGadget, ExampleOpsExecutor<M, N>, M, N>;
+            RecursionTree<ExampleGadget, ExampleOpsExecutor, M, N>;
 
         // build the circuit_data & verifier_data for the recursive circuit
         let circuit_data = RT::circuit_data()?;
@@ -514,26 +494,28 @@ mod tests {
                 );
 
                 // prepare the inputs for the `RecursionTree::prove_node` call
-                let mut selectors: [F; M + N] = [F::ZERO; M + N];
-                if i > 0 {
-                    // if we're not at the base-level, enable the N selectors of the proofs
-                    // verifications
-                    selectors[M..N].fill(F::ONE);
+                let mut selectors: [F; M + N] = [F::ONE; M + N];
+                if i == 0 {
+                    // if we're at the base level, set to 0 (=disable) the N selectors of the
+                    // proofs verifications
+                    selectors[M..M + N].fill(F::ZERO);
                 }
                 let innercircuits_input: [ExampleGadgetInput; M] =
                     array::from_fn(|k| ExampleGadgetInput {
                         pk: pk_vec[k],
                         sig: sig_vec[k],
+                        msg: msg_vec[k].clone(),
                     });
-                let proofs: [PlonkyProof; N] = array::from_fn(|k| proofs_at_level_i[k].clone());
+                let ops_executor_input = array::from_fn(|_| ());
+                let proofs: [PlonkyProof; N] = array::from_fn(|k| proofs_at_level_i[j + k].clone());
 
                 // do the recursive step
                 let start = Instant::now();
                 let new_proof = RT::prove_node(
                     verifier_data.clone(),
-                    &hashes,
                     selectors,
                     innercircuits_input,
+                    ops_executor_input,
                     &proofs,
                 )?;
                 println!(
@@ -544,8 +526,7 @@ mod tests {
                 );
 
                 // verify the recursive proof
-                let public_inputs =
-                    RT::prepare_public_inputs(verifier_data.clone(), hashes.clone());
+                let public_inputs = RT::prepare_public_inputs(verifier_data.clone());
                 verifier_data.clone().verify(ProofWithPublicInputs {
                     proof: new_proof.clone(),
                     public_inputs: public_inputs.clone(),
@@ -560,7 +541,7 @@ mod tests {
         let last_proof = proofs_at_level_i[0].clone();
 
         // verify the last proof
-        let public_inputs = RT::prepare_public_inputs(verifier_data.clone(), hashes.clone());
+        let public_inputs = RT::prepare_public_inputs(verifier_data.clone());
         verifier_data.clone().verify(ProofWithPublicInputs {
             proof: last_proof.clone(),
             public_inputs: public_inputs.clone(),

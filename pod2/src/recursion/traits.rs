@@ -22,7 +22,7 @@ pub trait InnerCircuitTrait {
     fn add_targets(
         builder: &mut CircuitBuilder<F, D>,
         selector_booltarg: &BoolTarget,
-        hash_targ: &HashOutTarget,
+        // hash_targ: &HashOutTarget,
     ) -> Result<Self::Targets>;
 
     /// set the actual witness values for the current instance of the circuit
@@ -33,22 +33,14 @@ pub trait InnerCircuitTrait {
     ) -> Result<()>;
 }
 
-pub trait OpsExecutorTrait<const M: usize, const N: usize>
-where
-    [(); M + N]:,
-{
+pub trait OpsExecutorTrait {
+    // NS is the associated constant to set the Number of Statements that the OpsExecutor uses
+    const NS: usize;
     type Input;
     type Targets;
 
     /// setup the circuit logic
-    fn add_targets(
-        builder: &mut CircuitBuilder<F, D>,
-        // the hashes have been created at a previous method. They get their witness values
-        // assigned also at a previous method.
-        // This is because these hashes are shared with the M InnerCircuits and the plonky2
-        // recursive verifiers.
-        hashes: [HashOutTarget; M + N],
-    ) -> Result<Self::Targets>;
+    fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets>;
 
     /// assigns the given Input to the given Targets
     fn set_targets(

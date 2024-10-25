@@ -29,11 +29,26 @@ pub fn binary_check(builder: &mut CircuitBuilder<F, D>, b: Target) {
 
 /// asserts that the given `v` is equal to `1` if the given `selector` is set to `0`,
 /// otherwise not (in which case it asserts 1==1)
-pub fn assert_one_if_enabled(builder: &mut CircuitBuilder<F, D>, v: Target, selector: &BoolTarget) {
-    // if selector==0: ensure v=1
-    // if selector==1: don't care -> ensure one=1
+pub fn assert_one_if_enabled_inverted(
+    builder: &mut CircuitBuilder<F, D>,
+    v: Target,
+    inverted_selector: &BoolTarget,
+) {
+    // if inverted_selector==0: ensure v=1
+    // if inverted_selector==1: don't care -> ensure one=1
     let one = builder.one();
-    let expected = selector_gate(builder, v, one, selector.target);
+    let expected = selector_gate(builder, v, one, inverted_selector.target);
+    let one_2 = builder.one();
+    builder.connect(expected, one_2);
+}
+
+/// asserts that the given `v` is equal to `1` if the given `selector` is set to `1`,
+/// otherwise not (in which case it asserts 1==1)
+pub fn assert_one_if_enabled(builder: &mut CircuitBuilder<F, D>, v: Target, selector: &BoolTarget) {
+    // if selector==1: ensure v=1
+    // if selector==0: don't care -> ensure one=1
+    let one = builder.one();
+    let expected = selector_gate(builder, v, selector.target, one);
     let one_2 = builder.one();
     builder.connect(expected, one_2);
 }
