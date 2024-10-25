@@ -84,7 +84,7 @@ pub struct Env {
 
 #[derive(Clone, Debug)]
 pub struct PodBuilder {
-    pub pending_operations: HashMap<String, OpCmd<'static, 'static, 'static>>,
+    pub pending_operations: Vec<(String, OpCmd<'static, 'static, 'static>)>,
     pub input_pods: HashMap<String, POD>,
     pub next_origin_id: usize,
     pub next_result_key_id: usize,
@@ -241,7 +241,7 @@ impl Operation {
 impl PodBuilder {
     pub fn new() -> Self {
         Self {
-            pending_operations: HashMap::new(),
+            pending_operations: Vec::new(),
             input_pods: HashMap::new(),
             next_origin_id: 2,
             next_result_key_id: 0,
@@ -278,15 +278,15 @@ impl PodBuilder {
     pub fn add_operation(&mut self, op: Op<StatementRef<'static, 'static>>, statement_id: String) {
         let static_str = Box::leak(statement_id.to_owned().into_boxed_str());
         self.pending_operations
-            .insert(statement_id.clone(), OpCmd(op, static_str));
+            .push((statement_id.clone(), OpCmd(op, static_str)));
     }
 
     pub fn finalize(&self) -> Result<POD> {
         let gpg_input = GPGInput::new(self.input_pods.clone(), HashMap::new());
         let pending_ops: &[OpCmd] = &self
             .pending_operations
-            .values()
-            .cloned()
+            .iter()
+            .map(|(_, ops)| ops.clone()) // Clone the OpCmd
             .collect::<Vec<OpCmd>>()[..];
         POD::execute_oracle_gadget(&gpg_input, pending_ops)
     }
@@ -461,8 +461,11 @@ impl Expr {
                                 let statement_id =
                                     statement.split(':').collect::<Vec<&str>>()[1].to_string();
                                 let mut builder_guard = builder.lock().unwrap();
-                                if let Some(operation) =
-                                    builder_guard.pending_operations.get(&statement_id)
+                                if let Some((index, (_, operation))) = builder_guard
+                                    .pending_operations
+                                    .iter()
+                                    .enumerate()
+                                    .find(|(_, (s, _))| s == &statement_id)
                                 {
                                     if let Op::NewEntry(entry) = &operation.0 {
                                         let new_entry = Entry {
@@ -473,9 +476,8 @@ impl Expr {
                                             Op::NewEntry(new_entry),
                                             Box::leak(statement_id.clone().into_boxed_str()),
                                         );
-                                        builder_guard
-                                            .pending_operations
-                                            .insert(statement_id.to_string(), op_cmd);
+                                        builder_guard.pending_operations[index] =
+                                            (statement_id.to_string(), op_cmd);
                                     } else {
                                         return Err(anyhow!(format!(
                                                 "Couldn't find a statement with statement id {} while editing a NewEntry in createpod",
@@ -514,10 +516,11 @@ impl Expr {
                             .payload
                             .statements_map
                             .iter()
-                            .find(|(_key, s)| {
-                                s.value_of_key()
+                            .find(|(_, s)| {
+                                s.value_of_anchored_key()
                                     .and_then(|k| Some(k.0.is_self() && k.1 == *key))
-                                    .is_some()
+                                    .filter(|&x| x)
+                                    .unwrap_or(false)
                             })
                             .map(|(key, _s)| key)
                         {
