@@ -17,7 +17,8 @@ fn get_pod_info(pod: &POD) -> HashMap<String, Vec<String>> {
         let refs = match statement {
             Statement::SumOf(_, op1, op2)
             | Statement::ProductOf(_, op1, op2)
-            | Statement::MaxOf(_, op1, op2) => vec![op1, op2]
+            | Statement::MaxOf(_, op1, op2)
+            | Statement::Equal(op1, op2) => vec![op1, op2] // Added Equal here
                 .into_iter()
                 .filter(|r| !r.0.is_self())
                 .map(|r| (statement_id.clone(), r))
@@ -134,6 +135,15 @@ fn print_pod_details(pod: &POD, pod_store: &MyPods) {
                     format_ref(op1).yellow(),
                     format_ref(op2).yellow(),
                     format_ref(result).bright_green()
+                );
+            }
+            Statement::Equal(op1, op2) => {
+                println!(
+                    "{}: {} {} = {}",
+                    statement_id,
+                    "Equality:".red(),
+                    format_ref(op1).yellow(),
+                    format_ref(op2).yellow(),
                 );
             }
             Statement::ValueOf(key, value) => {

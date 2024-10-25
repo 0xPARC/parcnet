@@ -536,6 +536,9 @@ impl Expr {
                         }
                         Value::SRef(sref) => match sref {
                             SRef(ORef::S, statement) => {
+                                // In case we are pointing to a statement on _SELF, we'll go in our list of pending operation and rename the entry to the entry the user wants to create with createpod
+                                // Eg: [createpod x [+ 1 [pod? z]]] will have a randomly named entry for the result of 1 + pod.z (where pod is the result of the query)
+                                // We will rename that entry to the key (`key` in our case)
                                 let statement_id =
                                     statement.split(':').collect::<Vec<&str>>()[1].to_string();
                                 let mut builder_guard = builder.lock().unwrap();
@@ -564,8 +567,64 @@ impl Expr {
                                     }
                                 }
                             }
-                            SRef(ORef::P(_pod_id), _statement) => {
-                                todo!();
+                            SRef(ORef::P(pod_id), statement) => {
+                                // The user wants to create a new entry that is equal to an entry in another pod
+                                // Eg: [createpod x [pod? z]]
+                                // We will read the value from that POD's entry, copy it in our new POD, and queue an EqualityFromEntries operation
+                                // Given we don't copy entries from previous PODs unless explicitly instructed with 'keep' (TODO: this doesn't exit yet)
+                                let mut builder_guard = builder.lock().unwrap();
+
+                                // First ensure the referenced pod is registered as an input pod
+                                if let Some(source_pod) = builder_guard.input_pods.get(&pod_id) {
+                                    // Check if statement exists in source pod
+                                    if let Some(statement_value) =
+                                        source_pod.payload.statements_map.get(&statement)
+                                    {
+                                        // Create a new entry with the target key
+                                        if let Ok(value_of) = statement_value.value() {
+                                            // Create an entry with the new key and same value
+                                            let new_entry = Entry {
+                                                key: key.clone(),
+                                                value: value_of,
+                                            };
+
+                                            let new_statement_id =
+                                                builder_guard.next_statement_id();
+                                            // Add NewEntry operation
+                                            builder_guard.add_operation(
+                                                Op::NewEntry(new_entry),
+                                                new_statement_id.clone(),
+                                            );
+
+                                            // Add EqualityFromEntries operation using SRef
+                                            let next_statement_id =
+                                                builder_guard.next_statement_id();
+                                            builder_guard.add_operation(
+                                                Op::EqualityFromEntries(
+                                                    SRef(
+                                                        ORef::P(pod_id.clone()),
+                                                        statement.clone(),
+                                                    )
+                                                    .into(),
+                                                    SRef::self_ref(format!(
+                                                        "{}:{}",
+                                                        PREDICATE_VALUEOF, new_statement_id
+                                                    ))
+                                                    .into(),
+                                                ),
+                                                next_statement_id,
+                                            );
+                                        } else {
+                                            return Err(anyhow!(
+                                                "Could not extract value from source statement"
+                                            ));
+                                        }
+                                    } else {
+                                        return Err(anyhow!("Statement not found in source pod"));
+                                    }
+                                } else {
+                                    return Err(anyhow!("Source pod not found in input pods"));
+                                }
                             }
                         },
                         _ => return Err(anyhow!("Can't assign a non scalar to pod entry")),
