@@ -2,7 +2,7 @@ mod constants;
 mod macros;
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -143,7 +143,7 @@ impl Operation {
     fn extract_value(value: &Value, env: Option<&Env>) -> Result<GoldilocksField> {
         match value {
             Value::Scalar(s) => Ok(*s),
-            Value::SRef(r) if env.is_some() => get_value_from_ref(r, env.unwrap()),
+            Value::SRef(r) if env.is_some() => get_value_from_sref(r, env.unwrap()),
             _ => Err(anyhow!("Invalid operand type")),
         }
     }
@@ -268,11 +268,60 @@ impl PodBuilder {
     }
 
     pub fn finalize(&self) -> Result<POD> {
-        let gpg_input = GPGInput::new(self.input_pods.clone(), HashMap::new());
+        let mut origin_renaming_map = HashMap::new();
+        let mut used_origin_names = HashSet::new();
+        let mut next_id = 1;
+
+        for (pod_id, pod) in &self.input_pods {
+            // For _SELF origins, use the pod's payload hash
+            let pod_hash = pod.payload.hash_payload().to_string();
+            if !used_origin_names.insert(pod_hash.clone()) {
+                while used_origin_names.contains(&format!("origin_{}", next_id)) {
+                    next_id += 1;
+                }
+                let fallback_name = format!("origin_{}", next_id);
+                origin_renaming_map.insert(
+                    (pod_id.clone(), SELF_ORIGIN_NAME.to_string()),
+                    fallback_name.clone(),
+                );
+                used_origin_names.insert(fallback_name);
+                next_id += 1;
+            } else {
+                origin_renaming_map.insert(
+                    (pod_id.clone(), SELF_ORIGIN_NAME.to_string()),
+                    format!("{}{}", POD_PREFIX, pod_hash),
+                );
+            }
+
+            for (_, statement) in &pod.payload.statements_list {
+                // Check all anchored keys in the statement
+                for anchored_key in statement.anchored_keys() {
+                    if !anchored_key.0.is_self() {
+                        let origin_name = anchored_key.0.origin_name.clone();
+                        if !used_origin_names.insert(origin_name.clone()) {
+                            // Name clash - fallback to incremental ID
+                            while used_origin_names.contains(&format!("origin_{}", next_id)) {
+                                next_id += 1;
+                            }
+                            let fallback_name = format!("origin_{}", next_id);
+                            origin_renaming_map
+                                .insert((pod_id.clone(), origin_name), fallback_name.clone());
+                            used_origin_names.insert(fallback_name);
+                            next_id += 1;
+                        } else {
+                            // Can keep the original name
+                            origin_renaming_map
+                                .insert((pod_id.clone(), origin_name.clone()), origin_name);
+                        }
+                    }
+                }
+            }
+        }
+        let gpg_input = GPGInput::new(self.input_pods.clone(), origin_renaming_map);
         let pending_ops: &[OpCmd] = &self
             .pending_operations
             .iter()
-            .map(|(_, ops)| ops.clone()) // Clone the OpCmd
+            .map(|(_, ops)| ops.clone())
             .collect::<Vec<OpCmd>>()[..];
         POD::execute_oracle_gadget(&gpg_input, pending_ops)
     }
@@ -632,13 +681,14 @@ impl Expr {
         } else {
             // Direct evaluation
             // TODO: In the future we might want to evaluate with env in case we allow computation on statement ref outside of create pod
+            // We would also need to make get_value_from_ref work outside a builder context, by fetching the refs in the store directly
             // as an example if createpod returns a list of statementref (like pod?) that enables to then do further computation on it
             Ok(Value::Scalar(operation.eval()?))
         }
     }
 }
 
-fn get_value_from_ref(sref: &SRef, env: &Env) -> Result<GoldilocksField> {
+fn get_value_from_sref(sref: &SRef, env: &Env) -> Result<GoldilocksField> {
     if let Some(ref builder) = env.current_builder {
         let builder = builder.lock().unwrap();
         if sref.0.eq(&ORef::S) {
@@ -663,6 +713,7 @@ fn get_value_from_ref(sref: &SRef, env: &Env) -> Result<GoldilocksField> {
             Err(anyhow!("Pod not found for ref"))
         }
     } else {
+        // We might want to support finding the refs inside the POD store
         Err(anyhow!("No active pod builder"))
     }
 }
@@ -764,7 +815,6 @@ mod tests {
 
         match result {
             Value::PodRef(pod) => {
-                dbg!(&pod.payload.statements_map);
                 assert_eq!(
                     get_self_entry_value(&pod, "x").unwrap(),
                     ScalarOrVec::Scalar(GoldilocksField(42))
@@ -772,6 +822,38 @@ mod tests {
                 assert_eq!(
                     get_self_entry_value(&pod, "y").unwrap(),
                     ScalarOrVec::Scalar(GoldilocksField(108))
+                );
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected PodRef, got something else")),
+        }
+    }
+    #[tokio::test]
+    async fn test_nest_pod() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+        let first_pod_eval = eval("[createpod test_pod x 10", env.clone()).await?;
+        let first_pod = match first_pod_eval {
+            Value::PodRef(pod) => pod,
+            _ => panic!("Expected PodRef"),
+        };
+        pod_store.lock().unwrap().add_pod(first_pod);
+
+        let second_pod_eval = eval("[createpod test_pod_2 z [+ [pod? x] 10]]", env.clone()).await?;
+        let second_pod = match second_pod_eval {
+            Value::PodRef(pod) => pod,
+            _ => panic!("Expected PodRef"),
+        };
+        pod_store.lock().unwrap().add_pod(second_pod);
+
+        let result = eval("[createpod final final-key [+ 10 [pod? z]]]", env.clone()).await?;
+
+        match result {
+            Value::PodRef(pod) => {
+                assert_eq!(
+                    get_self_entry_value(&pod, "final-key").unwrap(),
+                    ScalarOrVec::Scalar(GoldilocksField(30))
                 );
                 Ok(())
             }
