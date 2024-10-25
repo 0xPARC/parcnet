@@ -98,6 +98,7 @@ pub enum Value {
     PodRef(POD),
     SRef(SRef),
     Operation(Box<Operation>),
+    List(Vec<Value>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -355,9 +356,6 @@ impl Env {
     pub fn set(&self, id: u64, value: Value) {
         self.shared.lock().unwrap().insert(id, value);
     }
-    // pub fn local(&self, key: &str) -> Option<Value> {
-    //     self.pods.find(key)
-    // }
 }
 
 type Id = u64;
@@ -424,13 +422,7 @@ impl Expr {
                 }
                 match &exprs[0] {
                     Expr::Atom(_, op) => {
-                        // Handle pod? query
-                        if op == "pod?" {
-                            if exprs.len() < 2 {
-                                return Err(anyhow!("pod? requires at least one argument"));
-                            }
-                            return self.eval_pod_query(&exprs[1..], env).await;
-                        }
+                        // Handle operation which can be tracked inside PODs
                         if let Ok(op_type) = OpType::from_str(op) {
                             return self.eval_operation(op_type, &exprs[1..], env).await;
                         }
@@ -440,6 +432,58 @@ impl Expr {
                                     return Err(anyhow!("createpod requires a body"));
                                 }
                                 return self.eval_create_pod(&exprs[1..], env).await;
+                            }
+                            "pod?" => {
+                                if exprs.len() < 2 {
+                                    return Err(anyhow!("pod? requires at least one argument"));
+                                }
+                                return self.eval_pod_query(&exprs[1..], env).await;
+                            }
+                            "list" => {
+                                let mut values = Vec::new();
+                                for expr in &exprs[1..] {
+                                    values.push(expr.eval(env.clone()).await?);
+                                }
+                                Ok(Value::List(values))
+                            }
+                            "car" => {
+                                if exprs.len() != 2 {
+                                    return Err(anyhow!("car requires exactly one argument"));
+                                }
+                                match exprs[1].eval(env).await? {
+                                    Value::List(values) => {
+                                        values.first().cloned().ok_or_else(|| anyhow!("Empty list"))
+                                    }
+                                    _ => Err(anyhow!("car requires a list argument")),
+                                }
+                            }
+                            "cdr" => {
+                                if exprs.len() != 2 {
+                                    return Err(anyhow!("cdr requires exactly one argument"));
+                                }
+                                match exprs[1].eval(env).await? {
+                                    Value::List(values) => {
+                                        if values.is_empty() {
+                                            Err(anyhow!("Empty list"))
+                                        } else {
+                                            Ok(Value::List(values[1..].to_vec()))
+                                        }
+                                    }
+                                    _ => Err(anyhow!("cdr requires a list argument")),
+                                }
+                            }
+                            "cons" => {
+                                if exprs.len() != 3 {
+                                    return Err(anyhow!("cons requires exactly two arguments"));
+                                }
+                                let head = exprs[1].eval(env.clone()).await?;
+                                match exprs[2].eval(env).await? {
+                                    Value::List(mut values) => {
+                                        values.insert(0, head);
+                                        Ok(Value::List(values))
+                                    }
+                                    _ => Err(anyhow!("cons requires a list as second argument")),
+                                }
                             }
                             op => Err(anyhow!("Unknown operation: {}", op)),
                         }
@@ -779,6 +823,159 @@ mod tests {
                 Ok(())
             }
             _ => Err(anyhow!("Expected PodRef, got something else")),
+        }
+    }
+    #[tokio::test]
+    async fn test_list_creation() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store);
+
+        let result = eval("[list 1 2 3 4]", env).await?;
+
+        match result {
+            Value::List(values) => {
+                assert_eq!(values.len(), 4);
+                assert!(matches!(values[0], Value::Scalar(GoldilocksField(1))));
+                assert!(matches!(values[1], Value::Scalar(GoldilocksField(2))));
+                assert!(matches!(values[2], Value::Scalar(GoldilocksField(3))));
+                assert!(matches!(values[3], Value::Scalar(GoldilocksField(4))));
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected List, got something else")),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_car() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store);
+
+        let result = eval("[car [list 42 2 3]]", env).await?;
+
+        match result {
+            Value::Scalar(GoldilocksField(42)) => Ok(()),
+            _ => Err(anyhow!("Expected Scalar(42), got something else")),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_car_empty_list_error() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store);
+
+        let result = eval("[car [list]]", env).await;
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_cdr() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store);
+
+        let result = eval("[cdr [list 1 2 3]]", env).await?;
+
+        match result {
+            Value::List(values) => {
+                assert_eq!(values.len(), 2);
+                assert!(matches!(values[0], Value::Scalar(GoldilocksField(2))));
+                assert!(matches!(values[1], Value::Scalar(GoldilocksField(3))));
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected List, got something else")),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_cdr_empty_list_error() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store);
+
+        let result = eval("[cdr [list]]", env).await;
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_cons() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store);
+
+        let result = eval("[cons 1 [list 2 3]]", env).await?;
+
+        match result {
+            Value::List(values) => {
+                assert_eq!(values.len(), 3);
+                assert!(matches!(values[0], Value::Scalar(GoldilocksField(1))));
+                assert!(matches!(values[1], Value::Scalar(GoldilocksField(2))));
+                assert!(matches!(values[2], Value::Scalar(GoldilocksField(3))));
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected List, got something else")),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_cons_to_empty_list() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store);
+
+        let result = eval("[cons 42 [list]]", env).await?;
+
+        match result {
+            Value::List(values) => {
+                assert_eq!(values.len(), 1);
+                assert!(matches!(values[0], Value::Scalar(GoldilocksField(42))));
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected List, got something else")),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_nested_list_operations() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store);
+
+        let result = eval("[cons [car [list 1 2]] [cdr [list 3 4 5]]]", env).await?;
+
+        match result {
+            Value::List(values) => {
+                assert_eq!(values.len(), 3);
+                assert!(matches!(values[0], Value::Scalar(GoldilocksField(1))));
+                assert!(matches!(values[1], Value::Scalar(GoldilocksField(4))));
+                assert!(matches!(values[2], Value::Scalar(GoldilocksField(5))));
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected List, got something else")),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_with_arithmetic() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store);
+
+        let result = eval("[list [+ 1 2] [* 3 4] [max 5 2]]", env).await?;
+
+        match result {
+            Value::List(values) => {
+                assert_eq!(values.len(), 3);
+                assert!(matches!(values[0], Value::Scalar(GoldilocksField(3))));
+                assert!(matches!(values[1], Value::Scalar(GoldilocksField(12))));
+                assert!(matches!(values[2], Value::Scalar(GoldilocksField(5))));
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected List, got something else")),
         }
     }
 }
