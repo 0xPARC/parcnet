@@ -1,3 +1,4 @@
+mod constants;
 mod macros;
 
 use std::{
@@ -5,6 +6,8 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+
+use constants::*;
 
 use tracing::info;
 
@@ -25,7 +28,7 @@ pub enum ORef {
 impl ORef {
     fn as_str(&self) -> &str {
         match self {
-            ORef::S => "_SELF",
+            ORef::S => SELF_ORIGIN_NAME,
             ORef::P(s) => s,
         }
     }
@@ -119,6 +122,16 @@ impl OpType {
     }
 }
 
+impl From<(OpType, Value, Value)> for Operation {
+    fn from((op_type, op1, op2): (OpType, Value, Value)) -> Self {
+        match op_type {
+            OpType::Add => Operation::Sum(op1, op2),
+            OpType::Multiply => Operation::Product(op1, op2),
+            OpType::Max => Operation::Max(op1, op2),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Operation {
     Sum(Value, Value),
@@ -127,56 +140,46 @@ pub enum Operation {
 }
 
 impl Operation {
-    fn from_op_type(op_type: OpType, op1: Value, op2: Value) -> Self {
-        match op_type {
-            OpType::Add => Operation::Sum(op1, op2),
-            OpType::Multiply => Operation::Product(op1, op2),
-            OpType::Max => Operation::Max(op1, op2),
+    fn extract_value(value: &Value, env: Option<&Env>) -> Result<GoldilocksField> {
+        match value {
+            Value::Scalar(s) => Ok(*s),
+            Value::SRef(r) if env.is_some() => get_value_from_ref(r, env.unwrap()),
+            _ => Err(anyhow!("Invalid operand type")),
         }
     }
-    fn eval(&self) -> Result<GoldilocksField> {
-        match self {
-            Operation::Sum(Value::Scalar(a), Value::Scalar(b)) => Ok(*a + *b),
-            Operation::Product(Value::Scalar(a), Value::Scalar(b)) => Ok(*a * *b),
-            Operation::Max(Value::Scalar(a), Value::Scalar(b)) => {
-                Ok(if a.to_canonical_u64() > b.to_canonical_u64() {
-                    *a
-                } else {
-                    *b
-                })
-            }
-            _ => Err(anyhow!(
-                "Cannot eval operation with non-scalar values directly"
-            )),
-        }
-    }
-    fn eval_with_env(&self, env: &Env) -> Result<GoldilocksField> {
+
+    fn evaluate_values(&self, env: Option<&Env>) -> Result<(GoldilocksField, GoldilocksField)> {
         match self {
             Operation::Sum(a, b) | Operation::Product(a, b) | Operation::Max(a, b) => {
-                let value1 = match a {
-                    Value::Scalar(s) => *s,
-                    Value::SRef(r) => get_value_from_ref(r, env)?,
-                    _ => return Err(anyhow!("Invalid operand type")),
-                };
-                let value2 = match b {
-                    Value::Scalar(s) => *s,
-                    Value::SRef(r) => get_value_from_ref(r, env)?,
-                    _ => return Err(anyhow!("Invalid operand type")),
-                };
-
-                Ok(match self {
-                    Operation::Sum(_, _) => value1 + value2,
-                    Operation::Product(_, _) => value1 * value2,
-                    Operation::Max(_, _) => {
-                        if value1.to_canonical_u64() > value2.to_canonical_u64() {
-                            value1
-                        } else {
-                            value2
-                        }
-                    }
-                })
+                let value1 = Self::extract_value(a, env)?;
+                let value2 = Self::extract_value(b, env)?;
+                Ok((value1, value2))
             }
         }
+    }
+
+    fn apply_operation(&self, value1: GoldilocksField, value2: GoldilocksField) -> GoldilocksField {
+        match self {
+            Operation::Sum(_, _) => value1 + value2,
+            Operation::Product(_, _) => value1 * value2,
+            Operation::Max(_, _) => {
+                if value1.to_canonical_u64() > value2.to_canonical_u64() {
+                    value1
+                } else {
+                    value2
+                }
+            }
+        }
+    }
+
+    fn eval(&self) -> Result<GoldilocksField> {
+        let (value1, value2) = self.evaluate_values(None)?;
+        Ok(self.apply_operation(value1, value2))
+    }
+
+    fn eval_with_env(&self, env: &Env) -> Result<GoldilocksField> {
+        let (value1, value2) = self.evaluate_values(Some(env))?;
+        Ok(self.apply_operation(value1, value2))
     }
     fn into_pod_op(
         op_type: OpType,
@@ -204,7 +207,7 @@ impl PodBuilder {
     }
     pub fn pod_id(pod: &POD) -> String {
         let pod_hash = pod.payload.hash_payload();
-        let name = format!("pod_{}", pod_hash);
+        let name = format!("{}{}", POD_PREFIX, pod_hash);
         name
     }
     pub fn register_input_pod(&mut self, pod: &POD) -> String {
@@ -218,13 +221,13 @@ impl PodBuilder {
     }
 
     pub fn next_result_key_id(&mut self) -> String {
-        let key = format!("result_{}", self.next_result_key_id);
+        let key = format!("{}{}", STATEMENT_PREFIX_RESULT, self.next_result_key_id);
         self.next_result_key_id += 1;
         key
     }
 
     pub fn next_statement_id(&mut self) -> String {
-        let id = format!("statement_{}", self.next_statement_id);
+        let id = format!("{}{}", STATEMENT_PREFIX_OTHER, self.next_statement_id);
         self.next_statement_id += 1;
         id
     }
@@ -241,7 +244,7 @@ impl PodBuilder {
         // Only match against other constants (statements starting with "constant_")
         if let Some((statement_id, _)) =
             self.pending_operations.iter().find(|(statement_id, op)| {
-                statement_id.starts_with("constant_")
+                statement_id.starts_with(STATEMENT_PREFIX_CONSTANT)
                     && if let Op::NewEntry(entry) = &op.0 {
                         entry.key == key && entry.value == ScalarOrVec::Scalar(value)
                     } else {
@@ -249,11 +252,11 @@ impl PodBuilder {
                     }
             })
         {
-            return SRef::self_ref(format!("VALUEOF:{}", statement_id));
+            return SRef::self_ref(format!("{}:{}", PREDICATE_VALUEOF, statement_id));
         }
 
         // Create new constant if it doesn't exist
-        let statement_name = format!("constant_{}", key);
+        let statement_name = format!("{}{}", STATEMENT_PREFIX_CONSTANT, key);
         self.add_operation(
             Op::NewEntry(Entry {
                 key: key.clone(),
@@ -261,7 +264,7 @@ impl PodBuilder {
             }),
             statement_name.clone(),
         );
-        SRef::self_ref(format!("VALUEOF:{}", statement_name))
+        SRef::self_ref(format!("{}:{}", PREDICATE_VALUEOF, statement_name))
     }
 
     pub fn finalize(&self) -> Result<POD> {
@@ -527,10 +530,6 @@ impl Expr {
         Ok(Value::PodRef(pod))
     }
     async fn eval_pod_query(&self, parts: &[Expr], env: Env) -> Result<Value> {
-        // From operands I want to put together a list a query, which is a list of keys, operations, and asserts
-        // keys will be checked on ValueOf on _SELF that have the corresponding entry name
-        // each operation will be linked to one of the key (it's a tree of operations that get unrolled into a serie of statements and entries whose values will need to be checked)
-        // asserts will be checked one by one as binary statements
         let store = env.pod_store.lock().unwrap();
         'outer: for pod in store.pods.iter() {
             let mut matched_refs = Vec::new();
@@ -584,7 +583,7 @@ impl Expr {
         let op1 = operands[0].eval(env.clone()).await?;
         let op2 = operands[1].eval(env.clone()).await?;
 
-        let operation = Operation::from_op_type(op_type, op1.clone(), op2.clone());
+        let operation: Operation = (op_type, op1.clone(), op2.clone()).into();
 
         if let Some(ref builder) = env.current_builder {
             let result_value = operation.eval_with_env(&env)?;
@@ -609,7 +608,8 @@ impl Expr {
                     // We need to create a new entry for the result, and also for any operand if it's a new scalar
                     let result_key = builder.next_result_key_id();
                     let new_entry_statement_id = builder.next_statement_id();
-                    let result_sref = SRef::self_ref(format!("VALUEOF:{}", new_entry_statement_id));
+                    let result_sref =
+                        SRef::self_ref(format!("{}:{}", PREDICATE_VALUEOF, new_entry_statement_id));
                     let pod_op =
                         Operation::into_pod_op(op_type, result_sref.clone(), op1_sref, op2_sref);
                     // Create the result entry. We use our result_key which was also used in creating the operation.
