@@ -22,7 +22,6 @@ pub trait InnerCircuitTrait {
     fn add_targets(
         builder: &mut CircuitBuilder<F, D>,
         selector_booltarg: &BoolTarget,
-        // hash_targ: &HashOutTarget,
     ) -> Result<Self::Targets>;
 
     /// set the actual witness values for the current instance of the circuit
@@ -34,12 +33,6 @@ pub trait InnerCircuitTrait {
 }
 
 pub trait OpsExecutorTrait {
-    // NP is the associated constant to set the maximum Number of PODs that the OpsExecutor references
-    const NP: usize;
-
-    // NS is the associated constant to set the Number of Statements that the OpsExecutor uses
-    const NS: usize;
-
     type Input;
     type Output;
     type Targets;

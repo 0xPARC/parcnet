@@ -8,18 +8,24 @@
 use anyhow::{anyhow, Result};
 use hashbrown::HashMap;
 use plonky2::field::goldilocks_field::GoldilocksField;
+use plonky2::iop::witness::{PartialWitness, WitnessWrite};
+use plonky2::plonk::circuit_builder::CircuitBuilder;
+use plonky2::plonk::circuit_data::{
+    CircuitConfig, CircuitData, VerifierCircuitData, VerifierCircuitTarget,
+};
 use plonky2::plonk::config::PoseidonGoldilocksConfig;
 use plonky2::plonk::proof::Proof;
 use plonky2::recursion::dummy_circuit::cyclic_base_proof;
-use pod::circuit::operation::OpExecutorGadget;
+use std::array;
+
 use pod::circuit::pod::SchnorrPODGadget;
 use pod::entry::Entry;
 use pod::gadget::GadgetID;
 use pod::operation::OpList;
-use pod::payload::PODPayload;
+use pod::payload::{PODPayload, StatementList};
 use pod::statement::Statement;
+use pod::PODProof;
 use pod::{GPGInput, POD};
-use recursion::RecursionTree;
 use signature::schnorr::SchnorrSecretKey;
 
 pub type F = GoldilocksField;
@@ -31,48 +37,68 @@ pub mod pod;
 pub mod recursion;
 pub mod signature;
 
-const num_statements: usize = 10;
-const num_schnorr_pods: usize = 2;
-const num_plonky_pods: usize = 2;
+// expose the main structs & traits at the high level
+pub use pod::circuit::operation::{OpExecutorGadget, OperationTarget};
+pub use recursion::{RecursionCircuit, RecursionTree};
+
+// const num_statements: usize = 10;
+// const num_schnorr_pods: usize = 2;
+// const num_plonky_pods: usize = 2;
 
 // TODO
 /// PlonkyPOD constructor taking a list of named input PODs (which
 /// could be either Schnorr or Plonky PODs) as well as operations to
 /// be carried out on them as inputs.
-pub fn make_plonky_pod(
+pub fn make_plonky_pod<const M: usize, const N: usize, const NS: usize>(
     /*    num_schnorr_pods: usize, // i.e. `M`
     num_plonky_pods: usize, // i.e. `N`
     num_statements: usize, // i.e. `NS` */
     input_pods: &[(String, POD)],
-    op_list: &OpList,
-) -> Result<()> /* -> POD */ {
+    op_list: OpList,
+) -> Result<()>
+/* -> POD */
+where
+    [(); M + N]:,
+{
     // Check that the input data is valid, i.e. that we have at most M
     // SchnorrPODs and N PlonkyPODs in our list, *and each POD
     // contains exactly `NS` statements*.
-    let mut schnorr_pods = input_pods
+    let mut schnorr_pods: Vec<(String, POD)> = input_pods
         .to_vec()
         .into_iter()
         .filter(|(_, pod)| pod.proof_type == GadgetID::SCHNORR16)
         .collect::<Vec<_>>();
     let schnorr_count = schnorr_pods.len();
-    let mut plonky_pods = input_pods
+
+    let mut plonky_pods: Vec<(String, POD)> = input_pods
         .to_vec()
         .into_iter()
         .filter(|(_, pod)| pod.proof_type == GadgetID::PLONKY)
         .collect::<Vec<_>>();
     let plonky_count = plonky_pods.len();
-    if schnorr_count > num_schnorr_pods {
+
+    if schnorr_count > M {
         return Err(anyhow!(
             "Number of SchnorrPODs ({}) exceeds allowed maximum ({}).",
             schnorr_count,
-            num_schnorr_pods
+            M
         ));
     }
-    if plonky_count > num_plonky_pods {
+    if plonky_count > N {
         return Err(anyhow!(
             "Number of PlonkyPODs ({}) exceeds allowed maximum ({}).",
             plonky_count,
-            num_plonky_pods
+            N
+        ));
+    }
+
+    let statement_check = input_pods
+        .iter()
+        .all(|(_, pod)| pod.payload.statements_list.len() == NS);
+    if !statement_check {
+        return Err(anyhow!(
+            "All input PODs must contain exactly {} statements.",
+            NS
         ));
     }
 
@@ -80,36 +106,30 @@ pub fn make_plonky_pod(
     schnorr_pods.sort_by(|a, b| a.0.cmp(&b.0));
     plonky_pods.sort_by(|a, b| a.0.cmp(&b.0));
 
-    let statement_check = input_pods
-        .iter()
-        .all(|(_, pod)| pod.payload.statements_list.len() == num_statements);
-    if !statement_check {
-        return Err(anyhow!(
-            "All input PODs must contain exactly {} statements.",
-            num_statements
-        ));
-    }
-
-    // TODO
-    // Initialise circuit data for padding.
-    type RT<'a> = RecursionTree<
-        SchnorrPODGadget<num_statements>,
-        OpExecutorGadget<'a, { num_plonky_pods + num_schnorr_pods }, num_statements>,
-        num_schnorr_pods,
-        num_plonky_pods,
-    >;
-    let circuit_data = RT::circuit_data()?;
+    // generate circuit data
+    // TODO the circuit_data & verifier_data will be moved outside so it can be reused instead of
+    // recomputed each time
+    let circuit_data = RecursionCircuit::<
+        SchnorrPODGadget<NS>,
+        // TODO: ideally the user does not have to set the
+        // `NP={M+N}` param, and it can get 'deducted' from
+        // the M,N params of the RecursionCircuit
+        OpExecutorGadget<'static, { M + N }, NS>, // NP=M+N
+        M,
+        N,
+    >::circuit_data()?;
     let verifier_data = circuit_data.verifier_data();
-    let dummy_proof_pis = cyclic_base_proof(
-        &circuit_data.common,
-        &verifier_data.verifier_only,
-        HashMap::new(),
-    );
-    let dummy_proof = dummy_proof_pis.proof;
+    let dummy_proof = RecursionCircuit::<
+        SchnorrPODGadget<NS>,
+        OpExecutorGadget<'static, { M + N }, NS>,
+        M,
+        N,
+    >::dummy_proof(circuit_data);
+
     // TODO: Constructor
     let dummy_plonky_pod = POD {
         payload: PODPayload {
-            statements_list: (0..num_statements)
+            statements_list: (0..NS)
                 .map(|i| (format!("Dummy statement {}", i), Statement::None))
                 .collect(),
             statements_map: std::collections::HashMap::new(),
@@ -119,7 +139,7 @@ pub fn make_plonky_pod(
     };
 
     let dummy_schnorr_pod = POD::execute_schnorr_gadget(
-        &(0..num_statements)
+        &(0..NS)
             .map(|i| Entry::new_from_scalar(&format!("Dummy entry {}", i), GoldilocksField(0)))
             .collect::<Vec<_>>(),
         &SchnorrSecretKey { sk: 0 },
@@ -127,25 +147,38 @@ pub fn make_plonky_pod(
 
     // Arrange input PODs as a list of M SchnorrPODs followed by N
     // PlonkyPODs. Pad with appropriate dummy data.
-    let padded_pod_list = [
-        schnorr_pods,
-        (0..(num_schnorr_pods - schnorr_count))
-            .map(|i| (format!("_DUMMYSCHNORR{}", i), dummy_schnorr_pod.clone()))
-            .collect(),
-        plonky_pods,
-        (0..(num_plonky_pods - plonky_count))
-            .map(|i| (format!("_DUMMYPLONKY{}", i), dummy_plonky_pod.clone()))
-            .collect(),
-    ]
-    .concat();
+    let schnorr_pods_padded: [(String, POD); M] = array::from_fn(|i| {
+        if i < schnorr_count {
+            schnorr_pods[i].clone()
+        } else {
+            (format!("_DUMMYSCHNORR{}", i), dummy_schnorr_pod.clone())
+        }
+    });
+    let plonky_pods_padded: [(String, POD); N] = array::from_fn(|i| {
+        if i < plonky_count {
+            plonky_pods[i].clone()
+        } else {
+            (format!("_DUMMYPLONKY{}", i), dummy_plonky_pod.clone())
+        }
+    });
+    let mut padded_pod_list: [(String, POD); M + N] = array::from_fn(|i| {
+        if i < M {
+            schnorr_pods_padded[i].clone()
+        } else {
+            plonky_pods_padded[i - M].clone()
+        }
+    });
 
-    // Prepare selectors
-    let selectors = (0..num_schnorr_pods)
-        .map(|i| GoldilocksField(if i < schnorr_count { 1 } else { 0 }))
-        .chain((0..num_plonky_pods).map(|i| GoldilocksField(if i < plonky_count { 1 } else { 0 })))
-        .collect::<Vec<_>>();
+    // Prepare selectors. Set them enabled for the given schnorr & plonky pods, and disabled for
+    // the padding ones
+    let selectors: [F; M + N] = array::from_fn(|i| {
+        if i < M {
+            GoldilocksField(if i < schnorr_count { 1 } else { 0 })
+        } else {
+            GoldilocksField(if i < M + plonky_count { 1 } else { 0 })
+        }
+    });
 
-    // TODO: Clean up.
     // Compute result of operations.
     let gpg_input = {
         let sorted_gpg_input = GPGInput::new(
@@ -153,27 +186,68 @@ pub fn make_plonky_pod(
             std::collections::HashMap::new(),
         );
         GPGInput {
-            pods_list: padded_pod_list,
+            // TODO NOTE: this feels redundant usage of `GPGInput`, first we call
+            // GPGInput::new and then we manually construct it
+            pods_list: padded_pod_list.to_vec(),
             origin_renaming_map: sorted_gpg_input.origin_renaming_map,
         }
     };
 
     // Output Plonky POD should have this as its statement_list in its payload.
-    let output_statements = POD::execute_oracle_gadget(&gpg_input, &op_list.0)?
+    let output_statements: StatementList = POD::execute_oracle_gadget(&gpg_input, &op_list.0)?
         .payload
         .statements_list;
 
-    // Verify SchnorrPODs in circuit by routing the first
-    // `num_schnorr_pods` elements of `padded_pod_list` (ignoring the
-    // string part of the tuple) and the first `num_schnorr_pods`
-    // elements of `selectors` into the InnerCircuit.
-    
-    // Verify PlonkyPODs in circuit by routing the last
-    // `num_plonky_pods` elements of `padded_pod_list` (ignoring the
-    // string part of the tuple) and the last `num_plonky_pods`
-    // elements of `selectors` into the Plonky2 proof verification
-    // circuit.
-    
+    // Verify SchnorrPODs in circuit by routing the first `M` elements of `padded_pod_list`
+    // (ignoring the string part of the tuple) and the first `M` elements of `selectors` into the
+    // InnerCircuit.
+
+    // Verify PlonkyPODs in circuit by routing the last `N` elements of `padded_pod_list` (ignoring
+    // the string part of the tuple) and the last `N` elements of `selectors` into the Plonky2
+    // proof verification circuit.
+
+    // prepare inputs for the circuit
+    let inner_circuit_input: [POD; M] = array::from_fn(|i| schnorr_pods_padded[i].1.clone());
+    let recursive_proofs: [PlonkyProof; N] = array::from_fn(|i| {
+        // convert the PODProof.proof into an actual PlonkyProof:
+        let proof = match plonky_pods_padded[i].1.proof.clone() {
+            PODProof::Plonky(p) => p,
+            _ => panic!("Expected PODProof's Plonky variant"),
+        };
+        proof
+    });
+
+    /*
+    // TODO WIP: plonky2 proof generation:
+    let config = CircuitConfig::standard_recursion_config();
+    let mut builder = CircuitBuilder::new(config);
+    let mut pw: PartialWitness<F> = PartialWitness::new();
+
+    // create the circuit
+    let mut circuit = RecursionCircuit::<
+        SchnorrPODGadget<NS>,
+        OpExecutorGadget<'static, { M + N }, NS>,
+        M,
+        N,
+    >::add_targets(&mut builder, verifier_data.clone())?;
+    // set the circuit witness
+    circuit.set_targets(
+        &mut pw,
+        selectors,
+        inner_circuit_input,  // =[InnerCircuit::Input; M]
+        (gpg_input, op_list), // =OpsExecutor::Input
+        output_statements,    // =OpsExecutor::Output
+        &recursive_proofs,
+    )?;
+
+    let data = builder.build::<C>();
+    let plonky2_proof = data.prove(pw)?; // TODO plonky2_proof.proof will be returned inside
+                                         // the output POD
+
+    #[cfg(test)] // if running a test, verify the proof
+    data.verify(plonky2_proof.clone())?;
+    */
+
     // Check operations in circuit by routing `gpg_input` and
     // `output_statements` into the op executor.
 
@@ -181,7 +255,6 @@ pub fn make_plonky_pod(
     // should be connected to the corresponding statement targets of
     // the SchnorrPOD and PlonkyPOD gadgets (in that order). These
     // can be connected using StatementTarget's `connect` method.
-    
 
     Ok(())
     /*
@@ -213,3 +286,107 @@ let op_list = OpList(
 // Call the procedure
 let plonky_pod = make_plonky_pod(&input_pods, &op_list)?;
 */
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+    use plonky2::{
+        field::goldilocks_field::GoldilocksField,
+        iop::witness::PartialWitness,
+        plonk::{circuit_builder::CircuitBuilder, circuit_data::CircuitConfig},
+    };
+    use std::array;
+    use std::collections::HashMap;
+
+    use super::make_plonky_pod;
+    use super::{OpExecutorGadget, OperationTarget, D, F};
+    use crate::{
+        pod::{
+            circuit::{pod::SchnorrPODTarget, statement::StatementTarget},
+            entry::Entry,
+            gadget::GadgetID,
+            operation::{OpList, Operation as Op, OperationCmd as OpCmd},
+            statement::StatementRef,
+            GPGInput, POD,
+        },
+        recursion::OpsExecutorTrait,
+        signature::schnorr::SchnorrSecretKey,
+        C,
+    };
+
+    /// returns M Schnorr PODs
+    fn prepare_pods() -> Vec<(String, POD)> {
+        // TODO generate the list dependent on M, instead of hardcoded
+        let schnorr_pod1_name = "Test POD 1".to_string();
+        let schnorr_pod1 = POD::execute_schnorr_gadget(
+            &[
+                Entry::new_from_scalar("s1", GoldilocksField(55)),
+                Entry::new_from_scalar("s2", GoldilocksField(56)),
+            ],
+            &SchnorrSecretKey { sk: 27 },
+        );
+        let schnorr_pod2_name = "Test POD 2".to_string();
+        let schnorr_pod2 = POD::execute_schnorr_gadget(
+            &[
+                Entry::new_from_scalar("s3", GoldilocksField(57)),
+                Entry::new_from_scalar("s4", GoldilocksField(55)),
+            ],
+            &SchnorrSecretKey { sk: 29 },
+        );
+
+        let pods_list = vec![
+            (schnorr_pod1_name.clone(), schnorr_pod1),
+            (schnorr_pod2_name.clone(), schnorr_pod2),
+        ];
+        pods_list
+    }
+
+    #[test]
+    fn test_make_plonky_pod() -> Result<()> {
+        const M: usize = 2; // max num SchnorrPOD
+        const N: usize = 1; // max num Plonky2 recursive proof // TODO allow having >1 plonky2proofs
+        const NS: usize = 3; // num statements
+
+        let pods_list = prepare_pods();
+        assert_eq!(pods_list.len(), M);
+
+        let schnorr_pod1_name = pods_list[0].0.clone();
+        let schnorr_pod2_name = pods_list[1].0.clone();
+
+        let op_list = OpList(vec![
+            // NONE:pop
+            OpCmd(Op::None, "pop"),
+            // VALUEOF:op3
+            OpCmd(
+                Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
+                "op3",
+            ),
+            // NOTEQUAL:yolo
+            OpCmd(
+                Op::NonequalityFromEntries(
+                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+                    StatementRef(&schnorr_pod1_name, "VALUEOF:s2"),
+                ),
+                "yolo",
+            ),
+            // VALUEOF:nono
+            OpCmd(
+                Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
+                "nono",
+            ),
+            // EQUAL:op2
+            OpCmd(
+                Op::EqualityFromEntries(
+                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+                    StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
+                ),
+                "op2",
+            ),
+        ])
+        .sort(&pods_list);
+
+        make_plonky_pod::<M, N, NS>(&pods_list, op_list)?;
+
+        Ok(())
+    }
+}

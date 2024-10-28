@@ -29,6 +29,7 @@ c''_1...c''_M   │p''_1  │      │p''_N
  cargo test --release test_recursion -- --nocapture
 */
 use anyhow::{anyhow, Result};
+use hashbrown::HashMap;
 use plonky2::field::types::Field;
 use plonky2::gates::noop::NoopGate;
 use plonky2::iop::target::{BoolTarget, Target};
@@ -38,6 +39,7 @@ use plonky2::plonk::circuit_data::{
     CircuitConfig, CircuitData, VerifierCircuitData, VerifierCircuitTarget,
 };
 use plonky2::plonk::proof::{ProofWithPublicInputs, ProofWithPublicInputsTarget};
+use plonky2::recursion::dummy_circuit::cyclic_base_proof;
 use std::array;
 use std::marker::PhantomData;
 use std::time::Instant;
@@ -64,20 +66,11 @@ where
     I: InnerCircuitTrait,
     O: OpsExecutorTrait,
     [(); M + N]:,
-    [(); O::NS]:,
+    // [(); O::NS]:,
 {
     /// returns the full-recursive CircuitData
     pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
-        let mut data = common_data_for_recursion::<I, O, M, N>()?;
-
-        // build the actual RecursionCircuit circuit data
-        let config = CircuitConfig::standard_recursion_config();
-        let mut builder = CircuitBuilder::new(config);
-        let _ = RecursionCircuit::<I, O, M, N>::add_targets(&mut builder, data.verifier_data())?;
-        dbg!(builder.num_gates());
-        data = builder.build::<C>();
-
-        Ok(data)
+        RecursionCircuit::<I, O, M, N>::circuit_data()
     }
 
     pub fn prepare_public_inputs(verifier_data: VerifierCircuitData<F, C, D>) -> Vec<F> {
@@ -88,7 +81,9 @@ where
         verifier_data: VerifierCircuitData<F, C, D>,
         selectors: [F; M + N],
         inner_circuits_input: [I::Input; M],
-        ops_executor_input: [O::Input; O::NS],
+        // ops_executor_input: [O::Input; O::NS],
+        ops_executor_input: O::Input,
+        ops_executor_output: O::Output,
         recursive_proofs: &[PlonkyProof; N],
     ) -> Result<PlonkyProof> {
         println!("prove_node:");
@@ -118,6 +113,7 @@ where
             selectors,
             inner_circuits_input,
             ops_executor_input,
+            ops_executor_output,
             recursive_proofs,
         )?;
         println!("circuit.set_targets(): {:?}", start.elapsed());
@@ -168,11 +164,12 @@ pub struct RecursionCircuit<
     const N: usize,
 > where
     [(); M + N]:,
-    [(); O::NS]:,
+    // [(); O::NS]:,
 {
     selectors_targ: [Target; M + N],
     inner_circuit_targ: [I::Targets; M],
-    ops_executor_targ: [O::Targets; O::NS],
+    // ops_executor_targ: [O::Targets; O::NS],
+    ops_executor_targ: O::Targets,
     proofs_targ: [ProofWithPublicInputsTarget<D>; N],
     // the next two are common for all the given proofs. It is the data for this circuit itself
     // (cyclic circuit).
@@ -185,12 +182,33 @@ where
     I: InnerCircuitTrait,
     O: OpsExecutorTrait,
     [(); M + N]:,
-    [(); O::NS]:,
+    // [(); O::NS]:,
 {
-    pub fn prepare_public_inputs(
-        verifier_data: VerifierCircuitData<F, C, D>,
-        // TODO will need here an array of the extra public inputs Vec<Target>
-    ) -> Vec<F> {
+    /// returns the full-recursive CircuitData
+    pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
+        let mut data = common_data_for_recursion::<I, O, M, N>()?;
+
+        // build the actual RecursionCircuit circuit data
+        let config = CircuitConfig::standard_recursion_config();
+        let mut builder = CircuitBuilder::new(config);
+        let _ = Self::add_targets(&mut builder, data.verifier_data())?;
+        dbg!(builder.num_gates());
+        data = builder.build::<C>();
+
+        Ok(data)
+    }
+
+    pub fn dummy_proof(circuit_data: CircuitData<F, C, D>) -> PlonkyProof {
+        let verifier_data = circuit_data.verifier_data();
+        let dummy_proof_pis = cyclic_base_proof(
+            &circuit_data.common,
+            &verifier_data.verifier_only,
+            HashMap::new(),
+        );
+        dummy_proof_pis.proof
+    }
+
+    pub fn prepare_public_inputs(verifier_data: VerifierCircuitData<F, C, D>) -> Vec<F> {
         [
             // add verifier_data as public inputs:
             verifier_data.verifier_only.circuit_digest.elements.to_vec(),
@@ -225,8 +243,7 @@ where
         let inner_circuit_targ: [I::Targets; M] =
             array::try_from_fn(|i| I::add_targets(builder, &selectors_bool_targ[i]))?;
 
-        let ops_executor_targ: [O::Targets; O::NS] =
-            array::try_from_fn(|_| O::add_targets(builder))?;
+        let ops_executor_targ: O::Targets = O::add_targets(builder)?;
 
         // proof verification:
 
@@ -260,7 +277,8 @@ where
         // if selectors[i]==0: verify InnerCircuit. if selectors[i]==1: verify recursive_proof[i]
         selectors: [F; M + N],
         inner_circuit_input: [I::Input; M],
-        ops_executor_input: [O::Input; O::NS],
+        ops_executor_input: O::Input,
+        ops_executor_output: O::Output,
         recursive_proofs: &[PlonkyProof; N],
     ) -> Result<()> {
         for i in 0..(M + N) {
@@ -272,10 +290,12 @@ where
             I::set_targets(pw, &self.inner_circuit_targ[i], &inner_circuit_input[i])?;
         }
 
-        for i in 0..O::NS {
-            // TODO
-            // O::set_targets(pw, &self.ops_executor_targ[i], &ops_executor_input[i])?;
-        }
+        O::set_targets(
+            pw,
+            &self.ops_executor_targ,
+            &ops_executor_input,
+            &ops_executor_output,
+        )?;
 
         // set proof related values:
 
@@ -368,7 +388,7 @@ fn compute_num_gates<const N: usize>() -> Result<usize> {
     // Note: the following numbers are WIP, obtained by trial-error by running different
     // configurations in the tests.
     let n_gates = match N {
-        1 => 1 << 12,
+        0..=1 => 1 << 12,
         2 => 1 << 13,
         3..=5 => 1 << 14,
         6 => 1 << 15,
@@ -386,10 +406,8 @@ fn compute_num_gates<const N: usize>() -> Result<usize> {
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
-    use hashbrown::HashMap;
     use plonky2::field::types::{Field, Sample};
     use plonky2::plonk::proof::ProofWithPublicInputs;
-    use plonky2::recursion::dummy_circuit::cyclic_base_proof;
     use rand;
     use std::array;
     use std::time::Instant;
@@ -460,19 +478,16 @@ mod tests {
             .collect();
         assert_eq!(sig_vec.len(), M);
 
+        type RC<const M: usize, const N: usize> =
+            RecursionCircuit<ExampleGadget, ExampleOpsExecutor<1>, M, N>;
         type RT<const M: usize, const N: usize> =
-            RecursionTree<ExampleGadget, ExampleOpsExecutor, M, N>;
+            RecursionTree<ExampleGadget, ExampleOpsExecutor<1>, M, N>;
 
         // build the circuit_data & verifier_data for the recursive circuit
         let circuit_data = RT::circuit_data()?;
         let verifier_data = circuit_data.verifier_data();
 
-        let dummy_proof_pis = cyclic_base_proof(
-            &circuit_data.common,
-            &verifier_data.verifier_only,
-            HashMap::new(),
-        );
-        let dummy_proof = dummy_proof_pis.proof;
+        let dummy_proof = RC::dummy_proof(circuit_data);
 
         // we start with k dummy proofs, since at the leafs level we don't have proofs yet and we
         // just verify the signatures. At each level we divide the amount of proofs by N. At the
@@ -507,7 +522,9 @@ mod tests {
                         sig: sig_vec[k],
                         msg: msg_vec[k].clone(),
                     });
-                let ops_executor_input = array::from_fn(|_| ());
+                // let ops_executor_input = array::from_fn(|_| ());
+                let ops_executor_input = ();
+                let ops_executor_output = ();
                 let proofs: [PlonkyProof; N] = array::from_fn(|k| proofs_at_level_i[j + k].clone());
 
                 // do the recursive step
@@ -517,6 +534,7 @@ mod tests {
                     selectors,
                     innercircuits_input,
                     ops_executor_input,
+                    ops_executor_output,
                     &proofs,
                 )?;
                 println!(

@@ -266,6 +266,7 @@ impl<'a> Operation<StatementRef<'a>> {
 
 // Op list type. TODO.
 #[allow(dead_code)]
+#[derive(Clone, Debug)]
 pub struct OpList<'a>(pub Vec<OperationCmd<'a>>);
 
 #[allow(dead_code)]
