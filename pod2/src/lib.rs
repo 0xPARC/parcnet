@@ -163,9 +163,25 @@ pub fn make_plonky_pod(
         .payload
         .statements_list;
 
-    // Verify SchnorrPODs in circuit.
-    // Verify PlonkyPODs in circuit.
-    // Check operations.
+    // Verify SchnorrPODs in circuit by routing the first
+    // `num_schnorr_pods` elements of `padded_pod_list` (ignoring the
+    // string part of the tuple) and the first `num_schnorr_pods`
+    // elements of `selectors` into the InnerCircuit.
+    
+    // Verify PlonkyPODs in circuit by routing the last
+    // `num_plonky_pods` elements of `padded_pod_list` (ignoring the
+    // string part of the tuple) and the last `num_plonky_pods`
+    // elements of `selectors` into the Plonky2 proof verification
+    // circuit.
+    
+    // Check operations in circuit by routing `gpg_input` and
+    // `output_statements` into the op executor.
+
+    // Note that one of the targets of `OpExecutorGadget`, `target.0`,
+    // should be connected to the corresponding statement targets of
+    // the SchnorrPOD and PlonkyPOD gadgets (in that order). These
+    // can be connected using StatementTarget's `connect` method.
+    
 
     Ok(())
     /*
