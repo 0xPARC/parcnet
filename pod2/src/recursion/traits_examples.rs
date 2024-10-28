@@ -91,7 +91,7 @@ impl OpsExecutorTrait for ExampleOpsExecutor {
                      // type Input = (
                      //     [Op<StatementRef<'static>>; Self::NS],
                      //     HashMap<StatementRef<'static>, (usize, usize)>, // StatementRef::index_map()
-    // );
+                     // );
     type Output = ();
 
     fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets> {
@@ -104,7 +104,7 @@ impl OpsExecutorTrait for ExampleOpsExecutor {
         pw: &mut PartialWitness<F>,
         targets: &Self::Targets,
         input: &Self::Input,
-        output: &Self::Output
+        output: &Self::Output,
     ) -> Result<()>
     where
         [(); Self::NS]:,
