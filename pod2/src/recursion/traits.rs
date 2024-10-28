@@ -39,7 +39,7 @@ pub trait OpsExecutorTrait {
 
     // NS is the associated constant to set the Number of Statements that the OpsExecutor uses
     const NS: usize;
-    
+
     type Input;
     type Output;
     type Targets;
@@ -52,6 +52,6 @@ pub trait OpsExecutorTrait {
         pw: &mut PartialWitness<F>,
         targets: &Self::Targets,
         input: &Self::Input,
-        output: &Self::Output
+        output: &Self::Output,
     ) -> Result<()>;
 }
