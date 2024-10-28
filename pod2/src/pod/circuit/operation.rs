@@ -8,7 +8,7 @@ use plonky2::{
     },
     plonk::circuit_builder::CircuitBuilder,
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 use std::iter::zip;
 
 use crate::{
@@ -159,6 +159,7 @@ impl OperationTarget {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use crate::recursion::OpsExecutorTrait;
 
     use anyhow::Result;
     use plonky2::{
@@ -180,7 +181,7 @@ mod tests {
         C,
     };
 
-    use super::{OperationTarget, D, F};
+    use super::{OpExecutorGadget, OperationTarget, D, F};
 
     #[test]
     fn op_test() -> Result<()> {
@@ -304,18 +305,100 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn op_test2() -> Result<()> {
+        let config = CircuitConfig::standard_recursion_config();
+        let mut builder = CircuitBuilder::<F, D>::new(config);
+        let mut pw: PartialWitness<F> = PartialWitness::new();
+
+        // Input Schnorr PODs. For now, they must all have the same number
+        // of statements.
+        let num_statements = 3;
+        let schnorr_pod1_name = "Test POD 1".to_string();
+        let schnorr_pod1 = POD::execute_schnorr_gadget(
+            &[
+                Entry::new_from_scalar("s1", GoldilocksField(55)),
+                Entry::new_from_scalar("s2", GoldilocksField(56)),
+            ],
+            &SchnorrSecretKey { sk: 27 },
+        );
+        let schnorr_pod2_name = "Test POD 2".to_string();
+        let schnorr_pod2 = POD::execute_schnorr_gadget(
+            &[
+                Entry::new_from_scalar("s3", GoldilocksField(57)),
+                Entry::new_from_scalar("s4", GoldilocksField(55)),
+            ],
+            &SchnorrSecretKey { sk: 29 },
+        );
+
+        let pods_list = [
+            (schnorr_pod1_name.clone(), schnorr_pod1),
+            (schnorr_pod2_name.clone(), schnorr_pod2),
+        ];
+
+        // Ops
+        let op_list = OpList(vec![
+            // NONE:pop
+            OpCmd(Op::None, "pop"),
+            // VALUEOF:op3
+            OpCmd(
+                Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
+                "op3",
+            ),
+            // NOTEQUAL:yolo
+            OpCmd(
+                Op::NonequalityFromEntries(
+                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+                    StatementRef(&schnorr_pod1_name, "VALUEOF:s2"),
+                ),
+                "yolo",
+            ),
+            // VALUEOF:nono
+            OpCmd(
+                Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
+                "nono",
+            ),
+            // EQUAL:op2
+            OpCmd(
+                Op::EqualityFromEntries(
+                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+                    StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
+                ),
+                "op2",
+            ),
+        ])
+        .sort(&pods_list);
+
+        let gpg_input = GPGInput::new(HashMap::from(pods_list.clone()), HashMap::new());
+
+        let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &op_list.0)?;
+
+        // ZK test
+        let targets = OpExecutorGadget::<2,3>::add_targets(&mut builder)?;
+        OpExecutorGadget::<2,3>::set_targets(&mut pw, &targets,
+                                             &(gpg_input, op_list),
+                                             &oracle_pod.payload.statements_list)?;
+        
+        let data = builder.build::<C>();
+        let _proof = data.prove(pw)?;
+
+        Ok(())
+    }
 }
 
-pub struct OpExecutorGadget<const NP: usize, const NS: usize>;
+pub struct OpExecutorGadget<'a, const NP: usize, const NS: usize> {
+    _phantom_data:  PhantomData<&'a ()>
+}
 
-impl<const NS: usize, const NP: usize> OpsExecutorTrait for OpExecutorGadget<NP, NS> {
+impl<'a, const NS: usize, const NP: usize> OpsExecutorTrait for OpExecutorGadget<'a, NP, NS> {
     const NP: usize = NP;
     const NS: usize = NS;
     
     /// Input consists of:
     /// - GPG input (pod list + origin renaming map), and
     /// - a list of operations.
-    type Input = (GPGInput, OpList<'static>);
+    type Input = (GPGInput, OpList<'a>);
 
     /// Output consists of the output statement list of the list of operations.
     /// Note that this should contain `NS` elements!
@@ -363,8 +446,7 @@ impl<const NS: usize, const NP: usize> OpsExecutorTrait for OpExecutorGadget<NP,
             let pod_statements = &pod.payload.statements_list;
                                                        zip(s_targets, pod_statements).try_for_each(
                                                            |(s_target, (_,s))|
-                                                           s_target.set_witness(pw, &s)
-                                                           
+                                                           s_target.set_witness(pw, &s)                                                           
                                                        )
         }
         )?;
@@ -386,7 +468,9 @@ impl<const NS: usize, const NP: usize> OpsExecutorTrait for OpExecutorGadget<NP,
             )?;
 
         // Check output statement list target
-        
-        Ok(())
+        zip(&targets.3, output).try_for_each(
+            |(s_target, (_, s))|
+              s_target.set_witness(pw, s)
+            )
     }
 }
