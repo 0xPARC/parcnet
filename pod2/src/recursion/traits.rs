@@ -34,12 +34,17 @@ pub trait InnerCircuitTrait {
 }
 
 pub trait OpsExecutorTrait {
+    // NP is the associated constant to set the maximum Number of PODs that the OpsExecutor references
+    const NP: usize;
+
     // NS is the associated constant to set the Number of Statements that the OpsExecutor uses
     const NS: usize;
+    
     type Input;
+    type Output;
     type Targets;
 
-    /// setup the circuit logic
+    /// sets up the circuit logic
     fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets>;
 
     /// assigns the given Input to the given Targets
@@ -47,5 +52,6 @@ pub trait OpsExecutorTrait {
         pw: &mut PartialWitness<F>,
         targets: &Self::Targets,
         input: &Self::Input,
+        output: &Self::Output
     ) -> Result<()>;
 }

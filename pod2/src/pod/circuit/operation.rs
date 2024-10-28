@@ -1,4 +1,5 @@
 use anyhow::Result;
+use env_logger::builder;
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
     iop::{
@@ -8,12 +9,17 @@ use plonky2::{
     plonk::circuit_builder::CircuitBuilder,
 };
 use std::collections::HashMap;
+use std::iter::zip;
 
 use crate::{
     pod::{
-        circuit::util::statement_matrix_ref, gadget::GadgetID, operation::Operation as Op,
-        statement::StatementRef,
+        circuit::util::statement_matrix_ref,
+        gadget::GadgetID,
+        operation::{OpList, Operation as Op, OperationCmd},
+        payload::{PODPayload, StatementList},
+        statement::StatementRef, GPGInput,
     },
+    recursion::OpsExecutorTrait,
     D, F,
 };
 
@@ -130,7 +136,7 @@ impl OperationTarget {
 
         // Select the right op.
         let (output_statement_is_valid, output_statement_target) =
-            std::iter::zip(op_is_valid, op_out).fold(
+            zip(op_is_valid, op_out).fold(
                 (builder._false(), StatementTarget::none(builder)),
                 |(cur_validity, cur_s), (o_valid, s)| {
                     (
@@ -166,7 +172,7 @@ mod tests {
             circuit::{pod::SchnorrPODTarget, statement::StatementTarget},
             entry::Entry,
             gadget::GadgetID,
-            operation::{Operation as Op, OperationCmd as OpCmd},
+            operation::{OpList, Operation as Op, OperationCmd as OpCmd},
             statement::StatementRef,
             GPGInput, POD,
         },
@@ -202,18 +208,20 @@ mod tests {
             &SchnorrSecretKey { sk: 29 },
         );
 
+        let pods_list = [
+            (schnorr_pod1_name.clone(), schnorr_pod1),
+            (schnorr_pod2_name.clone(), schnorr_pod2),
+        ];
+
         // Ops
-        let op_cmds = [
-            // EQUAL:op2
-            OpCmd(
-                Op::EqualityFromEntries(
-                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-                    StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
-                ),
-                "op2",
-            ),
+        let op_list = OpList(vec![
             // NONE:pop
             OpCmd(Op::None, "pop"),
+            // VALUEOF:op3
+            OpCmd(
+                Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
+                "op3",
+            ),
             // NOTEQUAL:yolo
             OpCmd(
                 Op::NonequalityFromEntries(
@@ -227,22 +235,22 @@ mod tests {
                 Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
                 "nono",
             ),
-            // VALUEOF:op3
+            // EQUAL:op2
             OpCmd(
-                Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
-                "op3",
+                Op::EqualityFromEntries(
+                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+                    StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
+                ),
+                "op2",
             ),
-        ];
+        ])
+        .sort(&pods_list);
 
-        let pods_list = [
-            (schnorr_pod1_name.clone(), schnorr_pod1),
-            (schnorr_pod2_name.clone(), schnorr_pod2),
-        ];
         let ref_index_map = StatementRef::index_map(&pods_list);
 
         let gpg_input = GPGInput::new(HashMap::from(pods_list.clone()), HashMap::new());
 
-        let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &op_cmds)?;
+        let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &op_list.0)?;
         let out_statements = oracle_pod
             .payload
             .statements_list
@@ -273,7 +281,8 @@ mod tests {
             })
             .collect::<Result<Vec<Vec<_>>>>()?;
 
-        op_cmds
+        op_list
+            .0
             .iter()
             .enumerate()
             .try_for_each(|(i, OpCmd(op, _))| {
@@ -293,6 +302,91 @@ mod tests {
         let data = builder.build::<C>();
         let _proof = data.prove(pw)?;
 
+        Ok(())
+    }
+}
+
+pub struct OpExecutorGadget<const NP: usize, const NS: usize>;
+
+impl<const NS: usize, const NP: usize> OpsExecutorTrait for OpExecutorGadget<NP, NS> {
+    const NP: usize = NP;
+    const NS: usize = NS;
+    
+    /// Input consists of:
+    /// - GPG input (pod list + origin renaming map), and
+    /// - a list of operations.
+    type Input = (GPGInput, OpList<'static>);
+
+    /// Output consists of the output statement list of the list of operations.
+    /// Note that this should contain `NS` elements!
+    /// (TODO: Switch from vecs to arrays?)
+    type Output = StatementList;
+
+    /// Targets consist of input targets corresponding to all of the
+    /// above, viz.
+    /// (statement_list_vec_target, origin_id_map_target, op_list_target, output_statement_list_target).
+    ///
+    /// TODO: `statement_list_vec_target` should be `connected`
+    /// (i.e. `builder.connect`ed) to the statements passed in to the
+    /// inner and recursion circuits.
+    type Targets = (Vec<Vec<StatementTarget>>, Vec<Vec<Target>>, Vec<OperationTarget>, Vec<StatementTarget>);
+
+    fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets> {
+        let statement_list_vec_target = (0..NP).map(|_| (0..NS).map(|_| StatementTarget::new_virtual(builder)).collect::<Vec<_>>()).collect::<Vec<_>>();
+        let origin_id_map_target = (0..NP).map( |_| builder.add_virtual_targets(NS+2) ).collect::<Vec<_>>();
+        let op_list_target = (0..NS).map(|_| OperationTarget::new_virtual(builder)).collect::<Vec<_>>();
+
+        // TODO: Check that origin ID map has appropriate properties.
+        
+        // To apply ops, remap statements' origin IDs.
+        let remapped_statement_list_vec_target = statement_list_vec_target.iter().enumerate().map(
+            |(pod_index, s_vec)| s_vec.iter().map(
+                |s| { let pod_index_target = builder.constant(GoldilocksField(pod_index as u64)); s.remap_origins(builder, &origin_id_map_target, pod_index_target)}
+                ).collect::<Result<Vec<_>>>()
+            ).collect::<Result<Vec<_>>>()?;
+        
+        // Apply ops.
+        let output_statement_list_target = op_list_target.iter().map(|op| op.eval_with_gadget_id(builder, GadgetID::ORACLE, &remapped_statement_list_vec_target)).collect::<Result<Vec<_>>>()?;
+
+        Ok((statement_list_vec_target, origin_id_map_target, op_list_target, output_statement_list_target))
+    }
+
+    fn set_targets(
+        pw: &mut PartialWitness<F>,
+        targets: &Self::Targets,
+        input: &Self::Input,
+        output: &Self::Output
+    ) -> Result<()> {
+        // Set POD targets.
+        // TODO: Connect these to the POD targets that go into the inner and recursion circuits instead!
+        zip(&targets.0, &input.0.pods_list).try_for_each(|(s_targets, (_, pod))| {
+            let pod_statements = &pod.payload.statements_list;
+                                                       zip(s_targets, pod_statements).try_for_each(
+                                                           |(s_target, (_,s))|
+                                                           s_target.set_witness(pw, &s)
+                                                           
+                                                       )
+        }
+        )?;
+        
+        // Set origin remapping targets.
+        zip(&targets.1, input.0.origin_id_map_fields()?).try_for_each(
+            |(target_row, row)|
+            zip(target_row, row).try_for_each(
+                |(target, value)|
+                pw.set_target(*target, value)
+                )
+            )?;
+
+        // Set operation targets
+        let ref_index_map = StatementRef::index_map(&input.0.pods_list);
+        zip(&targets.2, input.1.sort(&input.0.pods_list).0).try_for_each(
+            |(op_target, OperationCmd(op, _))|
+            op_target.set_witness(pw, &op, &ref_index_map)
+            )?;
+
+        // Check output statement list target
+        
         Ok(())
     }
 }

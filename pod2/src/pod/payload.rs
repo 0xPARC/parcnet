@@ -9,6 +9,8 @@ use std::collections::HashMap;
 use super::statement::Statement;
 use crate::F;
 
+pub type StatementList = Vec<(String, Statement)>;
+
 // HashablePayload trait, and PODPayload which implements it.
 pub trait HashablePayload: Clone + PartialEq {
     fn to_field_vec(&self) -> Vec<GoldilocksField>;
