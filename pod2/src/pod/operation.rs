@@ -266,16 +266,14 @@ impl<'a> Operation<StatementRef<'a>> {
 
 // Op list type. TODO.
 #[allow(dead_code)]
-struct OpList<'a>(Vec<OperationCmd<'a>>);
+pub struct OpList<'a>(pub Vec<OperationCmd<'a>>);
 
 #[allow(dead_code)]
 impl<'a> OpList<'a> {
-    pub fn to_fields(&self, pods_list: &[(String, POD)]) -> Result<Vec<Vec<GoldilocksField>>> {
+    pub fn sort(&self, pods_list: &[(String, POD)]) -> Self {
         // Map from StatementRef to pair of the form (pod index, statement index)
         let ref_index_map = StatementRef::index_map(pods_list);
 
-        // Arrange OpCmds by output statement name and convert.
-        // TODO: Factor out
         let mut sorted_opcmds = self.0.clone();
         let return_type = |op| {
             Statement::code_to_predicate(GoldilocksField(match op {
@@ -308,7 +306,17 @@ impl<'a> OpList<'a> {
                 b.1
             ))
         });
-        sorted_opcmds
+        Self(sorted_opcmds)
+    }
+    pub fn to_fields(&self, pods_list: &[(String, POD)]) -> Result<Vec<Vec<GoldilocksField>>> {
+        // Map from StatementRef to pair of the form (pod index, statement index)
+        let ref_index_map = StatementRef::index_map(pods_list);
+
+        // Arrange OpCmds by output statement name and convert.
+        let sorted_oplist = self.sort(pods_list);
+
+        sorted_oplist
+            .0
             .iter()
             .map(|OperationCmd(op, _)| op.to_fields(&ref_index_map))
             .collect::<Result<Vec<Vec<_>>>>()

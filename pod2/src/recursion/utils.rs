@@ -34,12 +34,10 @@ pub fn assert_one_if_enabled_inverted(
     v: Target,
     inverted_selector: &BoolTarget,
 ) {
+    let selector = builder.not(*inverted_selector);
     // if inverted_selector==0: ensure v=1
     // if inverted_selector==1: don't care -> ensure one=1
-    let one = builder.one();
-    let expected = selector_gate(builder, v, one, inverted_selector.target);
-    let one_2 = builder.one();
-    builder.connect(expected, one_2);
+    assert_one_if_enabled(builder, v, &selector);
 }
 
 /// asserts that the given `v` is equal to `1` if the given `selector` is set to `1`,
@@ -48,7 +46,6 @@ pub fn assert_one_if_enabled(builder: &mut CircuitBuilder<F, D>, v: Target, sele
     // if selector==1: ensure v=1
     // if selector==0: don't care -> ensure one=1
     let one = builder.one();
-    let expected = selector_gate(builder, v, selector.target, one);
-    let one_2 = builder.one();
-    builder.connect(expected, one_2);
+    let expected = builder.select(*selector, v, one);
+    builder.connect(expected, one);
 }

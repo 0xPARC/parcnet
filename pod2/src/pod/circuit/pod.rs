@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use plonky2::{
     field::{goldilocks_field::GoldilocksField, types::Field},
-    hash::hash_types::HashOutTarget,
+    hash::{hash_types::HashOutTarget, poseidon::PoseidonHash},
     iop::{
         target::{BoolTarget, Target},
         witness::{PartialWitness, WitnessWrite},
@@ -13,7 +13,10 @@ use std::iter::zip;
 use super::{statement::StatementTarget, util::vector_ref};
 use crate::{
     pod::{util::hash_string_to_field, PODProof, POD, SIGNER_PK_KEY},
-    recursion::{utils::assert_one_if_enabled, InnerCircuitTrait},
+    recursion::{
+        utils::{assert_one_if_enabled, assert_one_if_enabled_inverted},
+        InnerCircuitTrait,
+    },
     signature::schnorr_prover::{
         MessageTarget, SchnorrBuilder, SchnorrPublicKeyTarget, SchnorrSignatureTarget,
         SignatureVerifierBuilder,
@@ -82,6 +85,12 @@ impl SchnorrPODTarget {
         Ok(value_target)
     }
 
+    pub fn compute_hash_target(&self, builder: &mut CircuitBuilder<F, D>) -> HashOutTarget {
+        builder.hash_n_to_hash_no_pad::<PoseidonHash>(
+            self.payload.iter().flat_map(|s| s.to_targets()).collect(),
+        )
+    }
+
     /// Verifies the signature over the hash_target, and returns a boolean indicating whether
     /// verification of the POD signature was successful.
     pub fn compute_targets_and_verify(
@@ -134,8 +143,9 @@ impl SchnorrPODTarget {
     }
 }
 
+/// TODO
 /// NS stands for NumStatements, the number of statements checked in the POD.
-pub struct SchnorrPODGadget<const NS: usize> {}
+pub struct SchnorrPODGadget<const NS: usize>;
 
 impl<const NS: usize> InnerCircuitTrait for SchnorrPODGadget<NS> {
     type Input = POD;
@@ -145,17 +155,17 @@ impl<const NS: usize> InnerCircuitTrait for SchnorrPODGadget<NS> {
     fn add_targets(
         builder: &mut CircuitBuilder<F, D>,
         selector_booltarg: &BoolTarget,
-        hash_target: &HashOutTarget,
     ) -> Result<Self::Targets> {
         let schnorr_pod_target = SchnorrPODTarget::new_virtual(builder, NS);
 
+        let hash_target = schnorr_pod_target.compute_hash_target(builder);
+
         // add POD in-circuit verification logic
-        let (_, verified) = schnorr_pod_target.compute_targets_and_verify(builder, hash_target)?;
+        let (_, verified) = schnorr_pod_target.compute_targets_and_verify(builder, &hash_target)?;
 
         // if selector_booltarg=0, we check the verified.target (else the recursive tree will check
         // the plonky2 proof)
-        assert_one_if_enabled(builder, verified.target, &selector_booltarg);
-
+        assert_one_if_enabled_inverted(builder, verified.target, &selector_booltarg);
         Ok(schnorr_pod_target)
     }
 
@@ -205,7 +215,7 @@ mod tests {
         let hash_target = builder.add_virtual_hash_public_input();
 
         let schnorr_pod_target =
-            SchnorrPODGadget::<NS>::add_targets(&mut builder, &selector_booltarg, &hash_target)?;
+            SchnorrPODGadget::<NS>::add_targets(&mut builder, &selector_booltarg)?;
 
         // set selector=0, so that the pod is verified in the InnerCircuit
         let selector = F::ZERO;

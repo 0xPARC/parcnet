@@ -273,7 +273,7 @@ where
         }
 
         for i in 0..O::NS {
-            O::set_targets(pw, &self.ops_executor_targ[i], &ops_executor_input[i])?;
+//            O::set_targets(pw, &self.ops_executor_targ[i], &ops_executor_input[i])?;
         }
 
         // set proof related values:

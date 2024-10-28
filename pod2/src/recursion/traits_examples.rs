@@ -81,16 +81,18 @@ impl InnerCircuitTrait for ExampleGadget {
     }
 }
 
-pub struct ExampleOpsExecutor {}
+pub struct ExampleOpsExecutor;
 
 impl OpsExecutorTrait for ExampleOpsExecutor {
+    const NP: usize = 2;
     const NS: usize = 3;
     type Targets = [OperationTarget; Self::NS];
     type Input = (); // WIP
                      // type Input = (
                      //     [Op<StatementRef<'static>>; Self::NS],
                      //     HashMap<StatementRef<'static>, (usize, usize)>, // StatementRef::index_map()
-                     // );
+    // );
+    type Output = ();
 
     fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets> {
         // naive ops logic (create the targets without logic)
@@ -102,6 +104,7 @@ impl OpsExecutorTrait for ExampleOpsExecutor {
         pw: &mut PartialWitness<F>,
         targets: &Self::Targets,
         input: &Self::Input,
+        output: &Self::Output
     ) -> Result<()>
     where
         [(); Self::NS]:,
