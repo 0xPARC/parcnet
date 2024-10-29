@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use colored::Colorize;
-use pod2::pod::{AnchoredKey, Statement, POD};
+use pod2::pod::{statement::AnchoredKey, Statement, POD};
 
 use crate::{MyPods, PodBuilder};
 

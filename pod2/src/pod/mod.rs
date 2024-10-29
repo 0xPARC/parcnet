@@ -19,8 +19,9 @@ use crate::signature::schnorr::{
 };
 use crate::PlonkyProof;
 
-use operation::OperationCmd as OpCmd;
-use statement::Statement;
+pub use operation::Operation as Op;
+pub use operation::OperationCmd as OpCmd;
+pub use statement::Statement;
 
 pub mod entry;
 pub mod gadget;
