@@ -6,16 +6,9 @@
 #![allow(non_camel_case_types)]
 
 use anyhow::{anyhow, Result};
-use hashbrown::HashMap;
 use plonky2::field::goldilocks_field::GoldilocksField;
-use plonky2::iop::witness::{PartialWitness, WitnessWrite};
-use plonky2::plonk::circuit_builder::CircuitBuilder;
-use plonky2::plonk::circuit_data::{
-    CircuitConfig, CircuitData, VerifierCircuitData, VerifierCircuitTarget,
-};
 use plonky2::plonk::config::PoseidonGoldilocksConfig;
 use plonky2::plonk::proof::Proof;
-use plonky2::recursion::dummy_circuit::cyclic_base_proof;
 use std::array;
 use std::marker::PhantomData;
 
@@ -42,14 +35,32 @@ pub mod signature;
 pub use pod::circuit::operation::{OpExecutorGadget, OperationTarget};
 pub use recursion::{RecursionCircuit, RecursionTree};
 
-// const num_statements: usize = 10;
-// const num_schnorr_pods: usize = 2;
-// const num_plonky_pods: usize = 2;
-
-// TODO
 /// PlonkyPOD constructor taking a list of named input PODs (which
 /// could be either Schnorr or Plonky PODs) as well as operations to
 /// be carried out on them as inputs.
+/// Example usage:
+///
+/// Enumerate PODs you want to prove about:
+/// ```
+/// let input_pods = [("some POD", schnorr_pod1), ("some other POD", schnorr_pod2)];
+/// ```
+///
+/// Enumerate operations:
+/// ```
+/// let op_list = OpList(
+///         OpCmd(Op::None, "some out statement name"),
+///         OpCmd(
+///                 Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
+///         "some other out statement name",
+///             ), ...
+///               );
+/// ```
+///
+/// Call the procedure
+/// ```
+/// let plonky_pod = PlonkyButNotPlonkyGadget::<2,2,3>::execute(&input_pods, &op_list)?;
+/// ```
+// TODO: better struct name.
 pub struct PlonkyButNotPlonkyGadget<'a, const M: usize, const N: usize, const NS: usize>(
     PhantomData<&'a ()>,
 )
@@ -276,51 +287,20 @@ where
     }
 }
 
-/*
-
-// Example usage:
-
-// Enumerate PODs you want to prove about:
-let input_pods = [("some POD", schnorr_pod1), ("some other POD", schnorr_pod2)];
-
-// Enumerate operations
-let op_list = OpList(
-        OpCmd(Op::None, "some out statement name"),
-        OpCmd(
-                Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
-        "some other out statement name",
-            ), ...
-              );
-
-// Call the procedure
-let plonky_pod = PlonkyButNotPlonkyGadget::<2,2,3>::execute(&input_pods, &op_list)?;
-*/
-
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
-    use plonky2::{
-        field::goldilocks_field::GoldilocksField,
-        iop::witness::PartialWitness,
-        plonk::{circuit_builder::CircuitBuilder, circuit_data::CircuitConfig},
-    };
-    use std::array;
-    use std::collections::HashMap;
+    use plonky2::field::goldilocks_field::GoldilocksField;
 
     use super::PlonkyButNotPlonkyGadget;
-    use super::{OpExecutorGadget, OperationTarget, D, F};
     use crate::{
         pod::{
-            circuit::{pod::SchnorrPODTarget, statement::StatementTarget},
             entry::Entry,
-            gadget::GadgetID,
             operation::{OpList, Operation as Op, OperationCmd as OpCmd},
             statement::StatementRef,
-            GPGInput, POD,
+            POD,
         },
-        recursion::OpsExecutorTrait,
         signature::schnorr::SchnorrSecretKey,
-        C,
     };
 
     /// returns M Schnorr PODs
@@ -396,6 +376,7 @@ mod tests {
 
         PlonkyButNotPlonkyGadget::<M, N, NS>::execute(&pods_list, op_list)?;
 
+        // TODO do a 2nd iteration where the generated plonky2-pod is (recursively) verified
         Ok(())
     }
 }
