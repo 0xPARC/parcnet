@@ -7,6 +7,11 @@
 
 use anyhow::{anyhow, Result};
 use plonky2::field::goldilocks_field::GoldilocksField;
+use plonky2::iop::witness::{PartialWitness, WitnessWrite};
+use plonky2::plonk::circuit_builder::CircuitBuilder;
+use plonky2::plonk::circuit_data::{
+    CircuitConfig, CircuitData, VerifierCircuitData, VerifierCircuitTarget,
+};
 use plonky2::plonk::config::PoseidonGoldilocksConfig;
 use plonky2::plonk::proof::Proof;
 use std::array;
@@ -60,7 +65,7 @@ pub use recursion::{RecursionCircuit, RecursionTree};
 /// ```
 /// let plonky_pod = PlonkyButNotPlonkyGadget::<2,2,3>::execute(&input_pods, &op_list)?;
 /// ```
-// TODO: better struct name.
+// TODO: `PlonkyButNotPlonkyGadget` is a placeholder name, set better struct name.
 pub struct PlonkyButNotPlonkyGadget<'a, const M: usize, const N: usize, const NS: usize>(
     PhantomData<&'a ()>,
 )
@@ -71,7 +76,24 @@ impl<'a, const M: usize, const N: usize, const NS: usize> PlonkyButNotPlonkyGadg
 where
     [(); M + N]:,
 {
-    pub fn execute(input_pods: &[(String, POD)], op_list: OpList) -> Result<POD> {
+    /// Returns the RecursiveCircuit's CircuitData, which is reused for all calls of the `execute`
+    /// method
+    pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
+        // generate circuit data
+        RecursionCircuit::<
+            SchnorrPODGadget<NS>,
+            OpExecutorGadget<'a, { M + N }, NS>, // NP=M+N
+            M,
+            N,
+        >::circuit_data()
+    }
+
+    /// Generates a new POD from the given input PODs and the OpList (operations list)
+    pub fn execute(
+        circuit_data: CircuitData<F, C, D>,
+        input_pods: &[(String, POD)],
+        op_list: OpList<'a>,
+    ) -> Result<POD> {
         // Check that the input data is valid, i.e. that we have at most M
         // SchnorrPODs and N PlonkyPODs in our list, *and each POD
         // contains exactly `NS` statements*.
@@ -118,18 +140,6 @@ where
         schnorr_pods.sort_by(|a, b| a.0.cmp(&b.0));
         plonky_pods.sort_by(|a, b| a.0.cmp(&b.0));
 
-        // generate circuit data
-        // TODO the circuit_data & verifier_data will be moved outside so it can be reused instead of
-        // recomputed each time
-        let circuit_data = RecursionCircuit::<
-            SchnorrPODGadget<NS>,
-            // TODO: ideally the user does not have to set the
-            // `NP={M+N}` param, and it can get 'deducted' from
-            // the M,N params of the RecursionCircuit
-            OpExecutorGadget<'a, { M + N }, NS>, // NP=M+N
-            M,
-            N,
-        >::circuit_data()?;
         let verifier_data = circuit_data.verifier_data();
         let dummy_proof = RecursionCircuit::<
             SchnorrPODGadget<NS>,
@@ -173,7 +183,7 @@ where
                 (format!("_DUMMYPLONKY{}", i), dummy_plonky_pod.clone())
             }
         });
-        let mut padded_pod_list: [(String, POD); M + N] = array::from_fn(|i| {
+        let padded_pod_list: [(String, POD); M + N] = array::from_fn(|i| {
             if i < M {
                 schnorr_pods_padded[i].clone()
             } else {
@@ -229,32 +239,31 @@ where
             proof
         });
 
-        /*
         // TODO WIP: plonky2 proof generation:
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::new(config);
         let mut pw: PartialWitness<F> = PartialWitness::new();
 
-        // create the circuit
+        // create the circuit (WIP)
         let mut circuit = RecursionCircuit::<
             SchnorrPODGadget<NS>,
-            OpExecutorGadget<'static, { M + N }, NS>,
+            OpExecutorGadget<'a, { M + N }, NS>,
             M,
             N,
         >::add_targets(&mut builder, verifier_data.clone())?;
+        /*
         // set the circuit witness
         circuit.set_targets(
             &mut pw,
             selectors,
-            inner_circuit_input,  // =[InnerCircuit::Input; M]
-            (gpg_input, op_list), // =OpsExecutor::Input
-            output_statements,    // =OpsExecutor::Output
+            inner_circuit_input,       // =[InnerCircuit::Input; M]
+            (gpg_input, op_list),      // =OpsExecutor::Input
+            output_statements.clone(), // =OpsExecutor::Output
             &recursive_proofs,
         )?;
 
         let data = builder.build::<C>();
-        let plonky2_proof = data.prove(pw)?; // TODO plonky2_proof.proof will be returned inside
-                                             // the output POD
+        let plonky2_proof = data.prove(pw)?;
 
         #[cfg(test)] // if running a test, verify the proof
         data.verify(plonky2_proof.clone())?;
@@ -305,7 +314,6 @@ mod tests {
 
     /// returns M Schnorr PODs
     fn prepare_pods() -> Vec<(String, POD)> {
-        // TODO generate the list dependent on M, instead of hardcoded
         let schnorr_pod1_name = "Test POD 1".to_string();
         let schnorr_pod1 = POD::execute_schnorr_gadget(
             &[
@@ -330,14 +338,14 @@ mod tests {
         pods_list
     }
 
+    // TODO: `PlonkyButNotPlonkyGadget` is tmp, put better name.
     #[test]
-    fn test_make_plonky_pod() -> Result<()> {
-        const M: usize = 2; // max num SchnorrPOD
-        const N: usize = 1; // max num Plonky2 recursive proof // TODO allow having >1 plonky2proofs
+    fn test_PlonkyButNotPlonkyGadget() -> Result<()> {
+        const M: usize = 3; // max num SchnorrPOD
+        const N: usize = 2; // max num Plonky2 recursive proof
         const NS: usize = 3; // num statements
 
         let pods_list = prepare_pods();
-        assert_eq!(pods_list.len(), M);
 
         let schnorr_pod1_name = pods_list[0].0.clone();
         let schnorr_pod2_name = pods_list[1].0.clone();
@@ -374,7 +382,12 @@ mod tests {
         ])
         .sort(&pods_list);
 
-        PlonkyButNotPlonkyGadget::<M, N, NS>::execute(&pods_list, op_list)?;
+        // get the circuit_data, this struct is reused for all the calls of
+        // PlonkyButNotPlonkyGadget::execute
+        let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS>::circuit_data()?;
+
+        let _new_pod =
+            PlonkyButNotPlonkyGadget::<M, N, NS>::execute(circuit_data, &pods_list, op_list)?;
 
         // TODO do a 2nd iteration where the generated plonky2-pod is (recursively) verified
         Ok(())
