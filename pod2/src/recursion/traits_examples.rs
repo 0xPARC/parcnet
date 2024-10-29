@@ -1,20 +1,12 @@
 /// This file contains a simple example implementing the InnerCircuit trait, by a circuit that
 /// checks a signature over the given msg.
 use anyhow::Result;
-use plonky2::hash::hash_types::{HashOut, HashOutTarget, NUM_HASH_OUT_ELTS};
-use plonky2::iop::target::{BoolTarget, Target};
-use plonky2::iop::witness::{PartialWitness, WitnessWrite};
+use plonky2::iop::target::BoolTarget;
+use plonky2::iop::witness::PartialWitness;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 use std::array;
-use std::collections::HashMap;
 
-use crate::pod::{
-    circuit::operation::OperationTarget,
-    circuit::statement::StatementTarget,
-    gadget::GadgetID,
-    operation::Operation as Op,
-    statement::{Statement, StatementRef},
-};
+use crate::pod::circuit::operation::OperationTarget;
 use crate::signature::schnorr::*;
 use crate::signature::schnorr_prover::*;
 
@@ -95,10 +87,10 @@ impl<const NS: usize> OpsExecutorTrait for ExampleOpsExecutor<NS> {
     }
 
     fn set_targets(
-        pw: &mut PartialWitness<F>,
-        targets: &Self::Targets,
-        input: &Self::Input,
-        output: &Self::Output,
+        _pw: &mut PartialWitness<F>,
+        _targets: &Self::Targets,
+        _input: &Self::Input,
+        _output: &Self::Output,
     ) -> Result<()> {
         Ok(())
     }
