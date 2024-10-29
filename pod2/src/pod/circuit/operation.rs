@@ -1,29 +1,20 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use plonky2::{
-    field::{
-        goldilocks_field::GoldilocksField,
-        types::{Field, PrimeField64},
-    },
+    field::goldilocks_field::GoldilocksField,
     iop::{
-        target::{BoolTarget, Target},
+        target::Target,
         witness::{PartialWitness, WitnessWrite},
     },
-    plonk::{circuit_builder::CircuitBuilder, circuit_data::CircuitConfig},
+    plonk::circuit_builder::CircuitBuilder,
 };
 use std::collections::HashMap;
 
-use super::pod::SchnorrPODTarget;
 use crate::{
     pod::{
-        circuit::util::{statement_matrix_ref, vector_ref},
-        entry::Entry,
-        gadget::GadgetID,
-        operation::{Operation as Op, OperationCmd as OpCmd},
-        statement::{Statement, StatementRef},
-        GPGInput, POD,
+        circuit::util::statement_matrix_ref, gadget::GadgetID, operation::Operation as Op,
+        statement::StatementRef,
     },
-    signature::schnorr::SchnorrSecretKey,
-    C, D, F,
+    D, F,
 };
 
 use super::{
@@ -86,22 +77,7 @@ impl OperationTarget {
         gadget_id: GadgetID,
         statement_targets: &[Vec<StatementTarget>],
     ) -> Result<StatementTarget> {
-        let one_target = builder.constant(GoldilocksField(1));
-        let statement_len_target = builder.constant(StatementTarget::len());
-        // Get operands by flattening out `statement_targets`.
-        // TODO: Factor out.
-        let num_statements = GoldilocksField(
-            statement_targets
-                .first()
-                .ok_or(anyhow!("No statement targets provided!"))?
-                .len() as u64,
-        );
-        let flattened_statement_targets = statement_targets
-            .iter()
-            .flat_map(|s_vec| s_vec.iter().flat_map(|s| s.to_targets()))
-            .collect::<Vec<_>>();
-        // Statement N is the slice of length 11 starting at
-        // pod_index*num_statements*11 + statement_index*11.
+        // Select statement targets from matrix.
         let statement1_target = statement_matrix_ref(
             builder,
             statement_targets,
@@ -174,122 +150,149 @@ impl OperationTarget {
     }
 }
 
-#[test]
-fn op_test() -> Result<()> {
-    let config = CircuitConfig::standard_recursion_config();
-    let mut builder = CircuitBuilder::<F, D>::new(config);
-    let mut pw: PartialWitness<F> = PartialWitness::new();
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
 
-    // Input Schnorr PODs. For now, they must all have the same number
-    // of statements.
-    let num_statements = 3;
-    let schnorr_pod1_name = "Test POD 1".to_string();
-    let schnorr_pod1 = POD::execute_schnorr_gadget(
-        &[
-            Entry::new_from_scalar("s1", GoldilocksField(55)),
-            Entry::new_from_scalar("s2", GoldilocksField(56)),
-        ],
-        &SchnorrSecretKey { sk: 27 },
-    );
-    let schnorr_pod2_name = "Test POD 2".to_string();
-    let schnorr_pod2 = POD::execute_schnorr_gadget(
-        &[
-            Entry::new_from_scalar("s3", GoldilocksField(57)),
-            Entry::new_from_scalar("s4", GoldilocksField(55)),
-        ],
-        &SchnorrSecretKey { sk: 29 },
-    );
+    use anyhow::Result;
+    use plonky2::{
+        field::goldilocks_field::GoldilocksField,
+        iop::witness::PartialWitness,
+        plonk::{circuit_builder::CircuitBuilder, circuit_data::CircuitConfig},
+    };
 
-    // Ops
-    let op_cmds = [
-        // EQUAL:op2
-        OpCmd(
-            Op::EqualityFromEntries(
-                StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-                StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
+    use crate::{
+        pod::{
+            circuit::{pod::SchnorrPODTarget, statement::StatementTarget},
+            entry::Entry,
+            gadget::GadgetID,
+            operation::{Operation as Op, OperationCmd as OpCmd},
+            statement::StatementRef,
+            GPGInput, POD,
+        },
+        signature::schnorr::SchnorrSecretKey,
+        C,
+    };
+
+    use super::{OperationTarget, D, F};
+
+    #[test]
+    fn op_test() -> Result<()> {
+        let config = CircuitConfig::standard_recursion_config();
+        let mut builder = CircuitBuilder::<F, D>::new(config);
+        let mut pw: PartialWitness<F> = PartialWitness::new();
+
+        // Input Schnorr PODs. For now, they must all have the same number
+        // of statements.
+        let num_statements = 3;
+        let schnorr_pod1_name = "Test POD 1".to_string();
+        let schnorr_pod1 = POD::execute_schnorr_gadget(
+            &[
+                Entry::new_from_scalar("s1", GoldilocksField(55)),
+                Entry::new_from_scalar("s2", GoldilocksField(56)),
+            ],
+            &SchnorrSecretKey { sk: 27 },
+        );
+        let schnorr_pod2_name = "Test POD 2".to_string();
+        let schnorr_pod2 = POD::execute_schnorr_gadget(
+            &[
+                Entry::new_from_scalar("s3", GoldilocksField(57)),
+                Entry::new_from_scalar("s4", GoldilocksField(55)),
+            ],
+            &SchnorrSecretKey { sk: 29 },
+        );
+
+        // Ops
+        let op_cmds = [
+            // EQUAL:op2
+            OpCmd(
+                Op::EqualityFromEntries(
+                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+                    StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
+                ),
+                "op2",
             ),
-            "op2",
-        ),
-        // NONE:pop
-        OpCmd(Op::None, "pop"),
-        // NOTEQUAL:yolo
-        OpCmd(
-            Op::NonequalityFromEntries(
-                StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-                StatementRef(&schnorr_pod1_name, "VALUEOF:s2"),
+            // NONE:pop
+            OpCmd(Op::None, "pop"),
+            // NOTEQUAL:yolo
+            OpCmd(
+                Op::NonequalityFromEntries(
+                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+                    StatementRef(&schnorr_pod1_name, "VALUEOF:s2"),
+                ),
+                "yolo",
             ),
-            "yolo",
-        ),
-        // VALUEOF:nono
-        OpCmd(
-            Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
-            "nono",
-        ),
-        // VALUEOF:op3
-        OpCmd(
-            Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
-            "op3",
-        ),
-    ];
+            // VALUEOF:nono
+            OpCmd(
+                Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
+                "nono",
+            ),
+            // VALUEOF:op3
+            OpCmd(
+                Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
+                "op3",
+            ),
+        ];
 
-    let pods_list = [
-        (schnorr_pod1_name.clone(), schnorr_pod1),
-        (schnorr_pod2_name.clone(), schnorr_pod2),
-    ];
-    let ref_index_map = StatementRef::index_map(&pods_list);
+        let pods_list = [
+            (schnorr_pod1_name.clone(), schnorr_pod1),
+            (schnorr_pod2_name.clone(), schnorr_pod2),
+        ];
+        let ref_index_map = StatementRef::index_map(&pods_list);
 
-    let gpg_input = GPGInput::new(HashMap::from(pods_list.clone()), HashMap::new());
+        let gpg_input = GPGInput::new(HashMap::from(pods_list.clone()), HashMap::new());
 
-    let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &op_cmds)?;
-    let out_statements = oracle_pod
-        .payload
-        .statements_list
-        .iter()
-        .map(|(_, s)| s.clone())
-        .collect::<Vec<_>>();
+        let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &op_cmds)?;
+        let out_statements = oracle_pod
+            .payload
+            .statements_list
+            .iter()
+            .map(|(_, s)| s.clone())
+            .collect::<Vec<_>>();
 
-    // Apply ops in ZK, making sure to remap statement origins.
-    let origin_id_map = gpg_input.origin_id_map_fields()?;
-    let origin_id_map_target = origin_id_map
-        .iter()
-        .map(|row| row.iter().map(|i| builder.constant(*i)).collect::<Vec<_>>())
-        .collect::<Vec<_>>();
-    let statement_targets = pods_list
-        .iter()
-        .enumerate()
-        .map(|(pod_index, (_, pod))| {
-            // QUESTION: this is creating a new target, but does not call
-            // `compute_targets_and_verify`
-            let pod_target = SchnorrPODTarget::new_virtual(&mut builder, num_statements);
-            let pod_index_target = builder.constant(GoldilocksField(pod_index as u64));
-            pod_target.set_witness(&mut pw, pod)?;
-            pod_target
-                .payload
-                .iter()
-                .map(|s| s.remap_origins(&mut builder, &origin_id_map_target, pod_index_target))
-                .collect()
-        })
-        .collect::<Result<Vec<Vec<_>>>>()?;
+        // Apply ops in ZK, making sure to remap statement origins.
+        let origin_id_map = gpg_input.origin_id_map_fields()?;
+        let origin_id_map_target = origin_id_map
+            .iter()
+            .map(|row| row.iter().map(|i| builder.constant(*i)).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let statement_targets = pods_list
+            .iter()
+            .enumerate()
+            .map(|(pod_index, (_, pod))| {
+                // QUESTION: this is creating a new target, but does not call
+                // `compute_targets_and_verify`
+                let pod_target = SchnorrPODTarget::new_virtual(&mut builder, num_statements);
+                let pod_index_target = builder.constant(GoldilocksField(pod_index as u64));
+                pod_target.set_witness(&mut pw, pod)?;
+                pod_target
+                    .payload
+                    .iter()
+                    .map(|s| s.remap_origins(&mut builder, &origin_id_map_target, pod_index_target))
+                    .collect()
+            })
+            .collect::<Result<Vec<Vec<_>>>>()?;
 
-    op_cmds
-        .iter()
-        .enumerate()
-        .try_for_each(|(i, OpCmd(op, _))| {
-            let op_target = OperationTarget::new_virtual(&mut builder);
-            op_target.set_witness(&mut pw, op, &ref_index_map)?;
-            let out_statement_target = op_target.eval_with_gadget_id(
-                &mut builder,
-                GadgetID::ORACLE,
-                &statement_targets,
-            )?;
-            let expected_out_statement =
-                StatementTarget::constant(&mut builder, &out_statements[i]);
-            // Check that we get the expected output.
-            out_statement_target.connect(&mut builder, &expected_out_statement);
-            anyhow::Ok(())
-        })?;
-    let data = builder.build::<C>();
-    let _proof = data.prove(pw)?;
+        op_cmds
+            .iter()
+            .enumerate()
+            .try_for_each(|(i, OpCmd(op, _))| {
+                let op_target = OperationTarget::new_virtual(&mut builder);
+                op_target.set_witness(&mut pw, op, &ref_index_map)?;
+                let out_statement_target = op_target.eval_with_gadget_id(
+                    &mut builder,
+                    GadgetID::ORACLE,
+                    &statement_targets,
+                )?;
+                let expected_out_statement =
+                    StatementTarget::constant(&mut builder, &out_statements[i]);
+                // Check that we get the expected output.
+                out_statement_target.connect(&mut builder, &expected_out_statement);
+                anyhow::Ok(())
+            })?;
+        let data = builder.build::<C>();
+        let _proof = data.prove(pw)?;
 
-    Ok(())
+        Ok(())
+    }
 }

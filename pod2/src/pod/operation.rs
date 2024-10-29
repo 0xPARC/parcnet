@@ -173,7 +173,7 @@ impl<S: StatementOrRef> Operation<S> {
 
     /// Method specifying opcodes.
     pub fn code(&self) -> GoldilocksField {
-        (match self {
+        match self {
             Self::None => Self::NONE,
             Self::NewEntry(_) => Self::NEW_ENTRY,
             Self::CopyStatement(_) => Self::COPY_STATEMENT,
@@ -189,7 +189,7 @@ impl<S: StatementOrRef> Operation<S> {
             Self::SumOf(_, _, _) => Self::SUM_OF,
             Self::ProductOf(_, _, _) => Self::PRODUCT_OF,
             Self::MaxOf(_, _, _) => Self::MAX_OF,
-        })
+        }
     }
     /// Method specifying operands.
     pub fn operands(&self) -> Vec<&S> {
@@ -265,8 +265,10 @@ impl<'a> Operation<StatementRef<'a>> {
 }
 
 // Op list type. TODO.
+#[allow(dead_code)]
 struct OpList<'a>(Vec<OperationCmd<'a>>);
 
+#[allow(dead_code)]
 impl<'a> OpList<'a> {
     pub fn to_fields(&self, pods_list: &[(String, POD)]) -> Result<Vec<Vec<GoldilocksField>>> {
         // Map from StatementRef to pair of the form (pod index, statement index)
@@ -296,7 +298,6 @@ impl<'a> OpList<'a> {
                 Operation::SumOf(_, _, _) => 6,
                 Operation::ProductOf(_, _, _) => 7,
                 Operation::MaxOf(_, _, _) => 8,
-                _ => 0,
             }))
         };
 

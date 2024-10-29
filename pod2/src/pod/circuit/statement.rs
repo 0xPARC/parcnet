@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use plonky2::{
     field::{goldilocks_field::GoldilocksField, types::Field},
     iop::{
@@ -7,15 +7,13 @@ use plonky2::{
     },
     plonk::circuit_builder::CircuitBuilder,
 };
-use std::collections::HashMap;
 
 use crate::pod::{
     gadget::GadgetID,
-    statement::{AnchoredKey, Statement, StatementRef},
+    statement::{AnchoredKey, Statement},
     util::hash_string_to_field,
-    value::HashableEntryValue,
 };
-use crate::{C, D, F};
+use crate::{D, F};
 
 use super::{entry::EntryTarget, origin::OriginTarget};
 

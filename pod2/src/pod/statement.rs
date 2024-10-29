@@ -9,6 +9,7 @@ use plonky2::field::{
     goldilocks_field::GoldilocksField,
     types::{Field, PrimeField64},
 };
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Debug};
 
 use super::{
@@ -140,7 +141,7 @@ impl Statement {
     pub const PRODUCT_OF: GoldilocksField = GoldilocksField(7);
     pub const MAX_OF: GoldilocksField = GoldilocksField(8);
     pub fn code(&self) -> GoldilocksField {
-        (match self {
+        match self {
             Self::None => Self::NONE,
             Self::ValueOf(_, _) => Self::VALUE_OF,
             Self::Equal(_, _) => Self::EQUAL,
@@ -150,7 +151,7 @@ impl Statement {
             Self::SumOf(_, _, _) => Self::SUM_OF,
             Self::ProductOf(_, _, _) => Self::PRODUCT_OF,
             Self::MaxOf(_, _, _) => Self::MAX_OF,
-        })
+        }
     }
     /// Field representation as a vector of length 11.
     /// Each statement is arranged as

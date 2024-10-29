@@ -98,7 +98,7 @@ inner-circuit inputs─────┼───►│                           
 use anyhow::{anyhow, Result};
 use plonky2::field::types::Field;
 use plonky2::gates::noop::NoopGate;
-use plonky2::hash::hash_types::{HashOut, HashOutTarget, NUM_HASH_OUT_ELTS};
+use plonky2::hash::hash_types::{HashOut, HashOutTarget};
 use plonky2::iop::target::{BoolTarget, Target};
 use plonky2::iop::witness::{PartialWitness, WitnessWrite};
 use plonky2::plonk::circuit_builder::CircuitBuilder;

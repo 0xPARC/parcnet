@@ -1,8 +1,7 @@
 use anyhow::{anyhow, Result};
 use plonky2::{
     field::{goldilocks_field::GoldilocksField, types::Field},
-    hash::hash_types::{HashOut, HashOutTarget, NUM_HASH_OUT_ELTS},
-    hash::poseidon::PoseidonHash,
+    hash::hash_types::HashOutTarget,
     iop::{
         target::{BoolTarget, Target},
         witness::{PartialWitness, WitnessWrite},
@@ -19,7 +18,7 @@ use crate::{
         MessageTarget, SchnorrBuilder, SchnorrPublicKeyTarget, SchnorrSignatureTarget,
         SignatureVerifierBuilder,
     },
-    C, D, F,
+    D, F,
 };
 
 pub struct SchnorrPODTarget {

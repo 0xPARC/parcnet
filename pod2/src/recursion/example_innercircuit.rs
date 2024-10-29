@@ -1,7 +1,7 @@
 /// This file contains a simple example implementing the InnerCircuit trait, by a circuit that
 /// checks a signature over the given msg.
 use anyhow::Result;
-use plonky2::hash::hash_types::{HashOut, HashOutTarget};
+use plonky2::hash::hash_types::HashOutTarget;
 use plonky2::iop::target::BoolTarget;
 use plonky2::iop::witness::PartialWitness;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
