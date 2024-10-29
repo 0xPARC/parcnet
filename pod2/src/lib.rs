@@ -40,9 +40,8 @@ pub mod signature;
 pub use pod::circuit::operation::{OpExecutorGadget, OperationTarget};
 pub use recursion::{RecursionCircuit, RecursionTree};
 
-/// PlonkyPOD constructor taking a list of named input PODs (which
-/// could be either Schnorr or Plonky PODs) as well as operations to
-/// be carried out on them as inputs.
+/// PlonkyPOD constructor taking a list of named input PODs (which could be either Schnorr or
+/// Plonky PODs) as well as operations to be carried out on them as inputs.
 /// Example usage:
 ///
 /// Enumerate PODs you want to prove about:
