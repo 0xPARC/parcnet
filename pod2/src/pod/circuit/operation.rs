@@ -157,9 +157,7 @@ impl OperationTarget {
 }
 
 /// OpExecutorGadget implements the OpsExecutorTrait
-pub struct OpExecutorGadget<'a, const NP: usize, const NS: usize> {
-    _phantom_data: PhantomData<&'a ()>,
-}
+pub struct OpExecutorGadget<'a, const NP: usize, const NS: usize>(PhantomData<&'a ()>);
 
 impl<'a, const NS: usize, const NP: usize> OpsExecutorTrait for OpExecutorGadget<'a, NP, NS> {
     /// Input consists of:
@@ -300,10 +298,6 @@ mod tests {
 
     #[test]
     fn op_test() -> Result<()> {
-        let config = CircuitConfig::standard_recursion_config();
-        let mut builder = CircuitBuilder::<F, D>::new(config);
-        let mut pw: PartialWitness<F> = PartialWitness::new();
-
         // Input Schnorr PODs. For now, they must all have the same number
         // of statements.
         let num_statements = 3;
@@ -324,102 +318,135 @@ mod tests {
             &SchnorrSecretKey { sk: 29 },
         );
 
+        let schnorr_pod3_name = "Test POD 3".to_string();
+        let schnorr_pod3 = POD::execute_schnorr_gadget(
+            &[
+                Entry::new_from_scalar("s0", GoldilocksField(57)),
+                Entry::new_from_scalar("s-1", GoldilocksField(55)),
+            ],
+            &SchnorrSecretKey { sk: 24 },
+        );
+
+        let schnorr_pod4_name = "Test POD 4".to_string();
+        let schnorr_pod4 = POD::execute_schnorr_gadget(
+            &[
+                Entry::new_from_scalar("who", GoldilocksField(7)),
+                Entry::new_from_scalar("what", GoldilocksField(5)),
+            ],
+            &SchnorrSecretKey { sk: 20 },
+        );
+
         let pods_list = [
             (schnorr_pod1_name.clone(), schnorr_pod1),
             (schnorr_pod2_name.clone(), schnorr_pod2),
+            (schnorr_pod3_name.clone(), schnorr_pod3),
+            (schnorr_pod4_name.clone(), schnorr_pod4),
         ];
 
         // Ops
-        let op_list = OpList(vec![
-            // NONE:pop
-            OpCmd(Op::None, "pop"),
-            // VALUEOF:op3
-            OpCmd(
-                Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
-                "op3",
-            ),
-            // NOTEQUAL:yolo
-            OpCmd(
-                Op::NonequalityFromEntries(
-                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-                    StatementRef(&schnorr_pod1_name, "VALUEOF:s2"),
+        let op_lists = [
+            OpList(vec![
+                // NONE:pop
+                OpCmd(Op::None, "pop"),
+                // VALUEOF:op3
+                OpCmd(
+                    Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
+                    "op3",
                 ),
-                "yolo",
-            ),
-            // VALUEOF:nono
-            OpCmd(
-                Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
-                "nono",
-            ),
-            // EQUAL:op2
-            OpCmd(
-                Op::EqualityFromEntries(
-                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-                    StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
+                // NOTEQUAL:yolo
+                OpCmd(
+                    Op::NonequalityFromEntries(
+                        StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+                        StatementRef(&schnorr_pod1_name, "VALUEOF:s2"),
+                    ),
+                    "yolo",
                 ),
-                "op2",
-            ),
-        ])
-        .sort(&pods_list);
+            ]),
+            OpList(vec![
+                // VALUEOF:nono
+                OpCmd(
+                    Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
+                    "nono",
+                ),
+                // EQUAL:op2
+                OpCmd(
+                    Op::EqualityFromEntries(
+                        StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+                        StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
+                    ),
+                    "op2",
+                ),
+                OpCmd(Op::None, "bop"),
+            ]),
+        ]
+        .into_iter()
+        .map(|op_list| op_list.sort(&pods_list))
+        .collect::<Vec<_>>();
 
         let ref_index_map = StatementRef::index_map(&pods_list);
 
         let gpg_input = GPGInput::new(HashMap::from(pods_list.clone()), HashMap::new());
 
-        let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &op_list.0)?;
-        let out_statements = oracle_pod
-            .payload
-            .statements_list
-            .iter()
-            .map(|(_, s)| s.clone())
-            .collect::<Vec<_>>();
+        op_lists.into_iter().try_for_each(|op_list| {
+            let config = CircuitConfig::standard_recursion_config();
+            let mut builder = CircuitBuilder::<F, D>::new(config);
+            let mut pw: PartialWitness<F> = PartialWitness::new();
 
-        // Apply ops in ZK, making sure to remap statement origins.
-        let origin_id_map = gpg_input.origin_id_map_fields()?;
-        let origin_id_map_target = origin_id_map
-            .iter()
-            .map(|row| row.iter().map(|i| builder.constant(*i)).collect::<Vec<_>>())
-            .collect::<Vec<_>>();
-        let statement_targets = pods_list
-            .iter()
-            .enumerate()
-            .map(|(pod_index, (_, pod))| {
-                // QUESTION: this is creating a new target, but does not call
-                // `compute_targets_and_verify`
-                let pod_target = SchnorrPODTarget::new_virtual(&mut builder, num_statements);
-                let pod_index_target = builder.constant(GoldilocksField(pod_index as u64));
-                pod_target.set_witness(&mut pw, pod)?;
-                pod_target
-                    .payload
-                    .iter()
-                    .map(|s| s.remap_origins(&mut builder, &origin_id_map_target, pod_index_target))
-                    .collect()
-            })
-            .collect::<Result<Vec<Vec<_>>>>()?;
+            let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &op_list.0)?;
+            let out_statements = oracle_pod
+                .payload
+                .statements_list
+                .iter()
+                .map(|(_, s)| s.clone())
+                .collect::<Vec<_>>();
 
-        op_list
-            .0
-            .iter()
-            .enumerate()
-            .try_for_each(|(i, OpCmd(op, _))| {
-                let op_target = OperationTarget::new_virtual(&mut builder);
-                op_target.set_witness(&mut pw, op, &ref_index_map)?;
-                let out_statement_target = op_target.eval_with_gadget_id(
-                    &mut builder,
-                    GadgetID::ORACLE,
-                    &statement_targets,
-                )?;
-                let expected_out_statement =
-                    StatementTarget::constant(&mut builder, &out_statements[i]);
-                // Check that we get the expected output.
-                out_statement_target.connect(&mut builder, &expected_out_statement);
-                anyhow::Ok(())
-            })?;
-        let data = builder.build::<C>();
-        let proof = data.prove(pw)?;
-        data.verify(proof.clone())?;
+            // Apply ops in ZK, making sure to remap statement origins.
+            let origin_id_map = gpg_input.origin_id_map_fields()?;
+            let origin_id_map_target = origin_id_map
+                .iter()
+                .map(|row| row.iter().map(|i| builder.constant(*i)).collect::<Vec<_>>())
+                .collect::<Vec<_>>();
+            let statement_targets = pods_list
+                .iter()
+                .enumerate()
+                .map(|(pod_index, (_, pod))| {
+                    // QUESTION: this is creating a new target, but does not call
+                    // `compute_targets_and_verify`
+                    let pod_target = SchnorrPODTarget::new_virtual(&mut builder, num_statements);
+                    let pod_index_target = builder.constant(GoldilocksField(pod_index as u64));
+                    pod_target.set_witness(&mut pw, pod)?;
+                    pod_target
+                        .payload
+                        .iter()
+                        .map(|s| {
+                            s.remap_origins(&mut builder, &origin_id_map_target, pod_index_target)
+                        })
+                        .collect()
+                })
+                .collect::<Result<Vec<Vec<_>>>>()?;
 
-        Ok(())
+            op_list
+                .0
+                .iter()
+                .enumerate()
+                .try_for_each(|(i, OpCmd(op, _))| {
+                    let op_target = OperationTarget::new_virtual(&mut builder);
+                    op_target.set_witness(&mut pw, op, &ref_index_map)?;
+                    let out_statement_target = op_target.eval_with_gadget_id(
+                        &mut builder,
+                        GadgetID::ORACLE,
+                        &statement_targets,
+                    )?;
+                    let expected_out_statement =
+                        StatementTarget::constant(&mut builder, &out_statements[i]);
+                    // Check that we get the expected output.
+                    out_statement_target.connect(&mut builder, &expected_out_statement);
+                    anyhow::Ok(())
+                })?;
+            let data = builder.build::<C>();
+            let proof = data.prove(pw)?;
+            data.verify(proof.clone())
+        })
     }
 
     #[test]
@@ -448,61 +475,91 @@ mod tests {
             &SchnorrSecretKey { sk: 29 },
         );
 
+        let schnorr_pod3_name = "Test POD 3".to_string();
+        let schnorr_pod3 = POD::execute_schnorr_gadget(
+            &[
+                Entry::new_from_scalar("s0", GoldilocksField(57)),
+                Entry::new_from_scalar("s-1", GoldilocksField(55)),
+            ],
+            &SchnorrSecretKey { sk: 24 },
+        );
+
+        let schnorr_pod4_name = "Test POD 4".to_string();
+        let schnorr_pod4 = POD::execute_schnorr_gadget(
+            &[
+                Entry::new_from_scalar("who", GoldilocksField(7)),
+                Entry::new_from_scalar("what", GoldilocksField(5)),
+            ],
+            &SchnorrSecretKey { sk: 20 },
+        );
+
         let pods_list = [
             (schnorr_pod1_name.clone(), schnorr_pod1),
             (schnorr_pod2_name.clone(), schnorr_pod2),
+            (schnorr_pod3_name.clone(), schnorr_pod3),
+            (schnorr_pod4_name.clone(), schnorr_pod4),
         ];
 
         // Ops
-        let op_list = OpList(vec![
-            // NONE:pop
-            OpCmd(Op::None, "pop"),
-            // VALUEOF:op3
-            OpCmd(
-                Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
-                "op3",
-            ),
-            // NOTEQUAL:yolo
-            OpCmd(
-                Op::NonequalityFromEntries(
-                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-                    StatementRef(&schnorr_pod1_name, "VALUEOF:s2"),
+        let op_lists = [
+            OpList(vec![
+                // NONE:pop
+                OpCmd(Op::None, "pop"),
+                // VALUEOF:op3
+                OpCmd(
+                    Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
+                    "op3",
                 ),
-                "yolo",
-            ),
-            // VALUEOF:nono
-            OpCmd(
-                Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
-                "nono",
-            ),
-            // EQUAL:op2
-            OpCmd(
-                Op::EqualityFromEntries(
-                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-                    StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
+                // NOTEQUAL:yolo
+                OpCmd(
+                    Op::NonequalityFromEntries(
+                        StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+                        StatementRef(&schnorr_pod1_name, "VALUEOF:s2"),
+                    ),
+                    "yolo",
                 ),
-                "op2",
-            ),
-        ])
-        .sort(&pods_list);
+            ]),
+            OpList(vec![
+                // VALUEOF:nono
+                OpCmd(
+                    Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
+                    "nono",
+                ),
+                // EQUAL:op2
+                OpCmd(
+                    Op::EqualityFromEntries(
+                        StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+                        StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
+                    ),
+                    "op2",
+                ),
+                OpCmd(Op::None, "bop"),
+            ]),
+        ]
+        .into_iter()
+        .map(|op_list| op_list.sort(&pods_list))
+        .collect::<Vec<_>>();
 
         let gpg_input = GPGInput::new(HashMap::from(pods_list.clone()), HashMap::new());
 
-        let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &op_list.0)?;
+        op_lists.into_iter().try_for_each(|op_list| {
+            let config = CircuitConfig::standard_recursion_config();
+            let mut builder = CircuitBuilder::<F, D>::new(config);
+            let mut pw: PartialWitness<F> = PartialWitness::new();
+            let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &op_list.0)?;
 
-        // circuit test
-        let targets = OpExecutorGadget::<2, 3>::add_targets(&mut builder)?;
-        OpExecutorGadget::<2, 3>::set_targets(
-            &mut pw,
-            &targets,
-            &(gpg_input, op_list),
-            &oracle_pod.payload.statements_list,
-        )?;
+            // circuit test
+            let targets = OpExecutorGadget::<4, 3>::add_targets(&mut builder)?;
+            OpExecutorGadget::<4, 3>::set_targets(
+                &mut pw,
+                &targets,
+                &(gpg_input.clone(), op_list),
+                &oracle_pod.payload.statements_list,
+            )?;
 
-        let data = builder.build::<C>();
-        let proof = data.prove(pw)?;
-        data.verify(proof.clone())?;
-
-        Ok(())
+            let data = builder.build::<C>();
+            let proof = data.prove(pw)?;
+            data.verify(proof.clone())
+        })
     }
 }
