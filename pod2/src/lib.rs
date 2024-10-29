@@ -3,6 +3,7 @@ use plonky2::plonk::config::PoseidonGoldilocksConfig;
 use plonky2::plonk::proof::Proof;
 
 pub mod pod;
+pub mod recursion;
 pub mod signature;
 
 pub type F = GoldilocksField;
