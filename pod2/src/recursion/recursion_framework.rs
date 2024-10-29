@@ -248,6 +248,7 @@ where
         // proof verification:
 
         let common_data = verifier_data.common.clone();
+
         let verifier_data_targ = builder.add_verifier_data_public_inputs();
 
         let proofs_targ: Result<[ProofWithPublicInputsTarget<D>; N]> = array::try_from_fn(|i| {
