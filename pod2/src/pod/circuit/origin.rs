@@ -8,7 +8,7 @@ use plonky2::{
     plonk::circuit_builder::CircuitBuilder,
 };
 
-use super::util::{matrix_ref, vector_ref};
+use super::util::matrix_ref;
 use crate::pod::{gadget::GadgetID, origin::Origin};
 use crate::{D, F};
 

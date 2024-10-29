@@ -5,10 +5,8 @@ use plonky2::{
     plonk::circuit_builder::CircuitBuilder,
     util::log2_ceil,
 };
-use std::collections::HashMap;
 
 use super::statement::StatementTarget;
-use crate::pod::statement::{StatementOrRef, StatementRef};
 use crate::{D, F};
 
 const NUM_BITS: usize = 32;
