@@ -8,12 +8,9 @@ use plonky2::{
     plonk::circuit_builder::CircuitBuilder,
 };
 
+use super::util::{matrix_ref, vector_ref};
 use crate::pod::{gadget::GadgetID, origin::Origin};
-
-use super::{
-    util::{matrix_ref, vector_ref},
-    D, F,
-};
+use crate::{D, F};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct OriginTarget {

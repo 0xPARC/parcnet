@@ -1,8 +1,7 @@
 use plonky2::field::goldilocks_field::GoldilocksField;
 
-use crate::pod::{util::hash_string_to_field, value::HashableEntryValue};
-
 use super::value::ScalarOrVec;
+use crate::pod::{util::hash_string_to_field, value::HashableEntryValue};
 
 /// An Entry, which is just a key-value pair.
 #[derive(Clone, Debug, PartialEq)]

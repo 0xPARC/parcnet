@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use anyhow::{anyhow, Result};
 use plonky2::{
     field::{goldilocks_field::GoldilocksField, types::Field},
@@ -9,6 +7,7 @@ use plonky2::{
     },
     plonk::circuit_builder::CircuitBuilder,
 };
+use std::collections::HashMap;
 
 use crate::pod::{
     gadget::GadgetID,
@@ -16,8 +15,9 @@ use crate::pod::{
     util::hash_string_to_field,
     value::HashableEntryValue,
 };
+use crate::{C, D, F};
 
-use super::{entry::EntryTarget, origin::OriginTarget, D, F};
+use super::{entry::EntryTarget, origin::OriginTarget};
 
 // TODO: Maybe use this?
 #[derive(Clone, Debug, PartialEq)]
