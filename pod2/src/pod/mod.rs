@@ -16,6 +16,7 @@ use crate::pod::{
 use crate::signature::schnorr::{
     SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner,
 };
+use crate::PlonkyProof;
 
 pub use entry::Entry;
 pub use gadget::GadgetID;
@@ -41,22 +42,25 @@ pub mod value;
 // submodule
 pub mod circuit;
 
-#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq)]
+pub const SIGNER_PK_KEY: &str = "_signer";
+
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum PODProof {
     Schnorr(SchnorrSignature),
     Oracle(SchnorrSignature),
+    Plonky(PlonkyProof),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct POD {
     pub payload: PODPayload,
-    proof: PODProof,
+    pub proof: PODProof,
     pub proof_type: GadgetID,
 }
 
 impl POD {
     pub fn verify(&self) -> Result<bool> {
-        match self.proof {
+        match &self.proof {
             PODProof::Schnorr(p) => {
                 if self.proof_type != GadgetID::SCHNORR16 {
                     return Err(anyhow!("Proof and POD proofType mismatch"));
@@ -95,6 +99,10 @@ impl POD {
                     &payload_hash.elements.to_vec(),
                     &protocol.keygen(&SchnorrSecretKey { sk: 0 }), // hardcoded secret key
                 ))
+            }
+            PODProof::Plonky(p) => {
+                todo!();
+                // TODO add plonky2 proof verification
             }
         }
     }

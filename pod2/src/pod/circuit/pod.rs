@@ -163,9 +163,8 @@ impl<const NS: usize> InnerCircuitTrait for SchnorrPODGadget<NS> {
         // add POD in-circuit verification logic
         let (_, verified) = schnorr_pod_target.compute_targets_and_verify(builder, &hash_target)?;
 
-        // if selector_booltarg=0, we check the verified.target (else the recursive tree will check
-        // the plonky2 proof)
-        assert_one_if_enabled_inverted(builder, verified.target, &selector_booltarg);
+        // if selector_booltarg=1, we check the verified.target
+        assert_one_if_enabled(builder, verified.target, &selector_booltarg);
         Ok(schnorr_pod_target)
     }
 
@@ -217,8 +216,8 @@ mod tests {
         let schnorr_pod_target =
             SchnorrPODGadget::<NS>::add_targets(&mut builder, &selector_booltarg)?;
 
-        // set selector=0, so that the pod is verified in the InnerCircuit
-        let selector = F::ZERO;
+        // set selector=1, so that the pod is verified in the InnerCircuit
+        let selector = F::ONE;
 
         // Assign witnesses
         let mut pw: PartialWitness<F> = PartialWitness::new();

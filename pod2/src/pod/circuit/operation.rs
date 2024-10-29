@@ -8,8 +8,8 @@ use plonky2::{
     },
     plonk::circuit_builder::CircuitBuilder,
 };
-use std::{collections::HashMap, marker::PhantomData};
 use std::iter::zip;
+use std::{collections::HashMap, marker::PhantomData};
 
 use crate::{
     pod::{
@@ -17,7 +17,8 @@ use crate::{
         gadget::GadgetID,
         operation::{OpList, Operation as Op, OperationCmd},
         payload::{PODPayload, StatementList},
-        statement::StatementRef, GPGInput,
+        statement::StatementRef,
+        GPGInput,
     },
     recursion::OpsExecutorTrait,
     D, F,
@@ -135,22 +136,21 @@ impl OperationTarget {
         .collect::<Vec<_>>();
 
         // Select the right op.
-        let (output_statement_is_valid, output_statement_target) =
-            zip(op_is_valid, op_out).fold(
-                (builder._false(), StatementTarget::none(builder)),
-                |(cur_validity, cur_s), (o_valid, s)| {
-                    (
-                        builder.or(o_valid, cur_validity),
-                        // If o_valid, s, else cur_s.
-                        StatementTarget::from_targets(
-                            std::iter::zip(s.to_targets(), cur_s.to_targets())
-                                .map(|(x, y)| builder.select(o_valid, x, y))
-                                .collect::<Vec<_>>()
-                                .as_ref(),
-                        ),
-                    )
-                },
-            );
+        let (output_statement_is_valid, output_statement_target) = zip(op_is_valid, op_out).fold(
+            (builder._false(), StatementTarget::none(builder)),
+            |(cur_validity, cur_s), (o_valid, s)| {
+                (
+                    builder.or(o_valid, cur_validity),
+                    // If o_valid, s, else cur_s.
+                    StatementTarget::from_targets(
+                        std::iter::zip(s.to_targets(), cur_s.to_targets())
+                            .map(|(x, y)| builder.select(o_valid, x, y))
+                            .collect::<Vec<_>>()
+                            .as_ref(),
+                    ),
+                )
+            },
+        );
         builder.assert_one(output_statement_is_valid.target);
         Ok(output_statement_target)
     }
@@ -158,8 +158,8 @@ impl OperationTarget {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use crate::recursion::OpsExecutorTrait;
+    use std::collections::HashMap;
 
     use anyhow::Result;
     use plonky2::{
@@ -375,26 +375,30 @@ mod tests {
         let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &op_list.0)?;
 
         // ZK test
-        let targets = OpExecutorGadget::<2,3>::add_targets(&mut builder)?;
-        OpExecutorGadget::<2,3>::set_targets(&mut pw, &targets,
-                                             &(gpg_input, op_list),
-                                             &oracle_pod.payload.statements_list)?;
-        
+        let targets = OpExecutorGadget::<2, 3>::add_targets(&mut builder)?;
+        OpExecutorGadget::<2, 3>::set_targets(
+            &mut pw,
+            &targets,
+            &(gpg_input, op_list),
+            &oracle_pod.payload.statements_list,
+        )?;
+
         let data = builder.build::<C>();
-        let _proof = data.prove(pw)?;
+        let proof = data.prove(pw)?;
+        data.verify(proof.clone())?; // TODO check
 
         Ok(())
     }
 }
 
 pub struct OpExecutorGadget<'a, const NP: usize, const NS: usize> {
-    _phantom_data:  PhantomData<&'a ()>
+    _phantom_data: PhantomData<&'a ()>,
 }
 
 impl<'a, const NS: usize, const NP: usize> OpsExecutorTrait for OpExecutorGadget<'a, NP, NS> {
     const NP: usize = NP;
     const NS: usize = NS;
-    
+
     /// Input consists of:
     /// - GPG input (pod list + origin renaming map), and
     /// - a list of operations.
@@ -412,65 +416,91 @@ impl<'a, const NS: usize, const NP: usize> OpsExecutorTrait for OpExecutorGadget
     /// TODO: `statement_list_vec_target` should be `connected`
     /// (i.e. `builder.connect`ed) to the statements passed in to the
     /// inner and recursion circuits.
-    type Targets = (Vec<Vec<StatementTarget>>, Vec<Vec<Target>>, Vec<OperationTarget>, Vec<StatementTarget>);
+    type Targets = (
+        Vec<Vec<StatementTarget>>,
+        Vec<Vec<Target>>,
+        Vec<OperationTarget>,
+        Vec<StatementTarget>,
+    );
 
     fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets> {
-        let statement_list_vec_target = (0..NP).map(|_| (0..NS).map(|_| StatementTarget::new_virtual(builder)).collect::<Vec<_>>()).collect::<Vec<_>>();
-        let origin_id_map_target = (0..NP).map( |_| builder.add_virtual_targets(NS+2) ).collect::<Vec<_>>();
-        let op_list_target = (0..NS).map(|_| OperationTarget::new_virtual(builder)).collect::<Vec<_>>();
+        let statement_list_vec_target = (0..NP)
+            .map(|_| {
+                (0..NS)
+                    .map(|_| StatementTarget::new_virtual(builder))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let origin_id_map_target = (0..NP)
+            .map(|_| builder.add_virtual_targets(NS + 2))
+            .collect::<Vec<_>>();
+        let op_list_target = (0..NS)
+            .map(|_| OperationTarget::new_virtual(builder))
+            .collect::<Vec<_>>();
 
         // TODO: Check that origin ID map has appropriate properties.
-        
-        // To apply ops, remap statements' origin IDs.
-        let remapped_statement_list_vec_target = statement_list_vec_target.iter().enumerate().map(
-            |(pod_index, s_vec)| s_vec.iter().map(
-                |s| { let pod_index_target = builder.constant(GoldilocksField(pod_index as u64)); s.remap_origins(builder, &origin_id_map_target, pod_index_target)}
-                ).collect::<Result<Vec<_>>>()
-            ).collect::<Result<Vec<_>>>()?;
-        
-        // Apply ops.
-        let output_statement_list_target = op_list_target.iter().map(|op| op.eval_with_gadget_id(builder, GadgetID::ORACLE, &remapped_statement_list_vec_target)).collect::<Result<Vec<_>>>()?;
 
-        Ok((statement_list_vec_target, origin_id_map_target, op_list_target, output_statement_list_target))
+        // To apply ops, remap statements' origin IDs.
+        let remapped_statement_list_vec_target = statement_list_vec_target
+            .iter()
+            .enumerate()
+            .map(|(pod_index, s_vec)| {
+                s_vec
+                    .iter()
+                    .map(|s| {
+                        let pod_index_target = builder.constant(GoldilocksField(pod_index as u64));
+                        s.remap_origins(builder, &origin_id_map_target, pod_index_target)
+                    })
+                    .collect::<Result<Vec<_>>>()
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        // Apply ops.
+        let output_statement_list_target = op_list_target
+            .iter()
+            .map(|op| {
+                op.eval_with_gadget_id(
+                    builder,
+                    GadgetID::ORACLE,
+                    &remapped_statement_list_vec_target,
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok((
+            statement_list_vec_target,
+            origin_id_map_target,
+            op_list_target,
+            output_statement_list_target,
+        ))
     }
 
     fn set_targets(
         pw: &mut PartialWitness<F>,
         targets: &Self::Targets,
         input: &Self::Input,
-        output: &Self::Output
+        output: &Self::Output,
     ) -> Result<()> {
         // Set POD targets.
         // TODO: Connect these to the POD targets that go into the inner and recursion circuits instead!
         zip(&targets.0, &input.0.pods_list).try_for_each(|(s_targets, (_, pod))| {
             let pod_statements = &pod.payload.statements_list;
-                                                       zip(s_targets, pod_statements).try_for_each(
-                                                           |(s_target, (_,s))|
-                                                           s_target.set_witness(pw, &s)                                                           
-                                                       )
-        }
-        )?;
-        
+            zip(s_targets, pod_statements)
+                .try_for_each(|(s_target, (_, s))| s_target.set_witness(pw, &s))
+        })?;
+
         // Set origin remapping targets.
-        zip(&targets.1, input.0.origin_id_map_fields()?).try_for_each(
-            |(target_row, row)|
-            zip(target_row, row).try_for_each(
-                |(target, value)|
-                pw.set_target(*target, value)
-                )
-            )?;
+        zip(&targets.1, input.0.origin_id_map_fields()?).try_for_each(|(target_row, row)| {
+            zip(target_row, row).try_for_each(|(target, value)| pw.set_target(*target, value))
+        })?;
 
         // Set operation targets
         let ref_index_map = StatementRef::index_map(&input.0.pods_list);
         zip(&targets.2, input.1.sort(&input.0.pods_list).0).try_for_each(
-            |(op_target, OperationCmd(op, _))|
-            op_target.set_witness(pw, &op, &ref_index_map)
-            )?;
+            |(op_target, OperationCmd(op, _))| op_target.set_witness(pw, &op, &ref_index_map),
+        )?;
 
         // Check output statement list target
-        zip(&targets.3, output).try_for_each(
-            |(s_target, (_, s))|
-              s_target.set_witness(pw, s)
-            )
+        zip(&targets.3, output).try_for_each(|(s_target, (_, s))| s_target.set_witness(pw, s))
     }
 }
