@@ -17,7 +17,8 @@ use async_recursion::async_recursion;
 use plonky2::field::{goldilocks_field::GoldilocksField, types::PrimeField64};
 
 use pod2::pod::{
-    Entry, GPGInput, HashablePayload, Op, OpCmd, ScalarOrVec, Statement, StatementRef, POD,
+    entry::Entry, payload::HashablePayload, statement::StatementRef, value::ScalarOrVec, GPGInput,
+    Op, OpCmd, Statement, POD,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -48,8 +49,8 @@ impl SRef {
     }
 }
 
-impl From<SRef> for StatementRef<'static, 'static> {
-    fn from(sref: SRef) -> StatementRef<'static, 'static> {
+impl From<SRef> for StatementRef<'static> {
+    fn from(sref: SRef) -> StatementRef<'static> {
         StatementRef(
             Box::leak(sref.0.as_str().to_string().into_boxed_str()),
             Box::leak(sref.1.into_boxed_str()),
@@ -89,7 +90,7 @@ pub struct Env {
 
 #[derive(Clone, Debug)]
 pub struct PodBuilder {
-    pub pending_operations: Vec<(String, OpCmd<'static, 'static, 'static>)>,
+    pub pending_operations: Vec<(String, OpCmd<'static>)>,
     pub input_pods: HashMap<String, POD>,
     pub next_origin_id: usize,
     pub next_result_key_id: usize,
@@ -188,7 +189,7 @@ impl Operation {
         result_ref: SRef,
         op1: SRef,
         op2: SRef,
-    ) -> Op<StatementRef<'static, 'static>> {
+    ) -> Op<StatementRef<'static>> {
         match op_type {
             OpType::Add => Op::SumOf(result_ref.into(), op1.into(), op2.into()),
             OpType::Multiply => Op::ProductOf(result_ref.into(), op1.into(), op2.into()),
@@ -209,7 +210,7 @@ impl PodBuilder {
     }
     pub fn pod_id(pod: &POD) -> String {
         let pod_hash = pod.payload.hash_payload();
-        let name = format!("{}{}", POD_PREFIX, pod_hash);
+        let name = format!("{}{:?}", POD_PREFIX, pod_hash);
         name
     }
     pub fn register_input_pod(&mut self, pod: &POD) -> String {
@@ -234,7 +235,7 @@ impl PodBuilder {
         id
     }
 
-    pub fn add_operation(&mut self, op: Op<StatementRef<'static, 'static>>, statement_id: String) {
+    pub fn add_operation(&mut self, op: Op<StatementRef<'static>>, statement_id: String) {
         let static_str = Box::leak(statement_id.to_owned().into_boxed_str());
         self.pending_operations
             .push((statement_id.clone(), OpCmd(op, static_str)));
@@ -276,7 +277,7 @@ impl PodBuilder {
 
         for (pod_id, pod) in &self.input_pods {
             // For _SELF origins, use the pod's payload hash
-            let pod_hash = pod.payload.hash_payload().to_string();
+            let pod_hash = format!("{:?}", pod.payload.hash_payload());
             if !used_origin_names.insert(pod_hash.clone()) {
                 while used_origin_names.contains(&format!("origin_{}", next_id)) {
                     next_id += 1;
@@ -709,7 +710,7 @@ impl Expr {
     async fn eval_pod_query(&self, parts: &[Expr], env: Env) -> Result<Value> {
         let store = env.pod_store.lock().unwrap();
         'outer: for pod in store.pods.iter() {
-            let pod_hash = pod.payload.hash_payload().to_string();
+            let pod_hash = format!("{:?}", pod.payload.hash_payload());
             let pod_id = format!("{}{}", POD_PREFIX, pod_hash);
 
             // Skip if this pod has already been used as an input pod
@@ -865,7 +866,7 @@ fn get_value_from_sref(sref: &SRef, env: &Env) -> Result<GoldilocksField> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pod2::pod::AnchoredKey;
+    use pod2::pod::statement::AnchoredKey;
     pub fn get_self_entry_value(pod: &POD, key: &str) -> Option<ScalarOrVec> {
         pod.payload
             .statements_list
