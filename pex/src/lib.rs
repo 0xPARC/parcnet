@@ -337,6 +337,7 @@ impl Env {
     }
 
     pub fn extend(&self) -> Self {
+        // TODO: scoping
         Self {
             user: self.user.clone(),
             shared: self.shared.clone(),
@@ -601,6 +602,14 @@ impl Expr {
 
                             let mut builder_guard = builder.lock().unwrap();
                             builder_guard.add_operation(Op::NewEntry(entry), key.clone());
+                            // add a binding to that SRef
+                            pod_env.set_binding(
+                                key.clone(),
+                                Value::SRef(SRef::self_ref(format!(
+                                    "{}:{}",
+                                    PREDICATE_VALUEOF, key
+                                ))),
+                            );
                         }
                         Value::SRef(sref) => match sref {
                             SRef(ORef::S, statement) => {
@@ -624,13 +633,23 @@ impl Expr {
                                         let op_cmd =
                                             OpCmd(Op::NewEntry(new_entry), statement_id.clone());
                                         builder_guard.pending_operations[index] =
-                                            (statement_id.to_string(), op_cmd);
+                                            (statement_id.clone(), op_cmd);
+
+                                        pod_env.set_binding(
+                                            key.clone(),
+                                            Value::SRef(SRef::self_ref(format!(
+                                                "{}:{}",
+                                                PREDICATE_VALUEOF, statement_id
+                                            ))),
+                                        );
                                     } else {
                                         return Err(anyhow!(format!(
-                                                "Couldn't find a statement with statement id {} while editing a NewEntry in createpod",
+                                                "Found statement id {} that is not a NewEntry while creating a POD entry",
                                                 statement_id
                                             )));
                                     }
+                                } else {
+                                    return Err(anyhow!(format!("No statement found with statement id {} while creating a POD entry", statement_id)));
                                 }
                             }
                             SRef(ORef::P(pod_id), statement) => {
@@ -650,14 +669,14 @@ impl Expr {
                                                 value: value_of,
                                             };
 
-                                            let new_statement_id =
+                                            let new_entry_statement_id =
                                                 builder_guard.next_statement_id();
                                             builder_guard.add_operation(
                                                 Op::NewEntry(new_entry),
-                                                new_statement_id.clone(),
+                                                new_entry_statement_id.clone(),
                                             );
 
-                                            let next_statement_id =
+                                            let eq_from_entries_statement_id =
                                                 builder_guard.next_statement_id();
                                             builder_guard.add_operation(
                                                 Op::EqualityFromEntries(
@@ -668,11 +687,18 @@ impl Expr {
                                                     .into(),
                                                     SRef::self_ref(format!(
                                                         "{}:{}",
-                                                        PREDICATE_VALUEOF, new_statement_id
+                                                        PREDICATE_VALUEOF, new_entry_statement_id
                                                     ))
                                                     .into(),
                                                 ),
-                                                next_statement_id,
+                                                eq_from_entries_statement_id,
+                                            );
+                                            pod_env.set_binding(
+                                                key.clone(),
+                                                Value::SRef(SRef::self_ref(format!(
+                                                    "{}:{}",
+                                                    PREDICATE_VALUEOF, new_entry_statement_id
+                                                ))),
                                             );
                                         } else {
                                             return Err(anyhow!(
@@ -788,7 +814,7 @@ impl Expr {
                         _ => return Err(anyhow!("Invalid operand type")),
                     };
 
-                    // We need to create a new entry for the result, and also for any operand if it's a new scalar
+                    // We need to create a new entry for the result
                     let result_key = builder.next_result_key_id();
                     let new_entry_statement_id = builder.next_statement_id();
                     let result_sref =
@@ -815,7 +841,7 @@ impl Expr {
         } else {
             // Direct evaluation
             // TODO: In the future we might want to evaluate with env in case we allow computation on statement ref outside of create pod
-            // We would also need to make get_value_from_ref work outside a builder context, by fetching the refs in the store directly
+            // We would also need to make get_value_from_sref work outside a builder context, by fetching the refs in the store directly
             // as an example if createpod returns a list of statementref (like pod?) that enables to then do further computation on it
             Ok(Value::Scalar(operation.eval()?))
         }
@@ -826,13 +852,18 @@ fn get_value_from_sref(sref: &SRef, env: &Env) -> Result<GoldilocksField> {
     if let Some(ref builder) = env.current_builder {
         let builder = builder.lock().unwrap();
         if sref.0.eq(&ORef::S) {
-            // TODO: we might want to enable this in case we support doing stuff with our ValueOf statement right after having defined them
-            // eg:
-            // [createpod test
-            //     x 10
-            //     y [+ x 20]
-            //  ]
-            return Err(anyhow!("Cannot get value from a SELF statement"));
+            if let Some((_, op_cmd)) =
+                builder.pending_operations.iter().find(|(statement_id, _)| {
+                    statement_id == &sref.1.split(':').collect::<Vec<&str>>()[1].to_string()
+                })
+            {
+                if let Op::NewEntry(entry) = &op_cmd.0 {
+                    if let ScalarOrVec::Scalar(value) = entry.value {
+                        return Ok(value);
+                    }
+                }
+            }
+            return Err(anyhow!("Value not found in current pod operations"));
         }
         // Look up value in input pods using origin mapping
         let key: String = sref.0.clone().into();
@@ -1117,6 +1148,85 @@ mod tests {
             }
         } else {
             Err(anyhow!("Failed to create test pod"))
+        }
+    }
+    #[tokio::test]
+    async fn test_pod_refer_to_previously_created_key() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+
+        // Create a pod with a single value
+        let pod1 = eval("[createpod test_pod1 value1 10]", env.clone()).await?;
+        if let Value::PodRef(pod1) = pod1 {
+            pod_store.lock().unwrap().add_pod(pod1);
+
+            // Test querying single value returns SRef directly, not in a list
+            let result = eval(
+                "[createpod final
+                    [define x [pod? value1]]
+                    a 10
+                    b [+ [* x 10] a]]",
+                env.clone(),
+            )
+            .await?;
+
+            match result {
+                Value::PodRef(pod) => {
+                    assert_eq!(
+                        get_self_entry_value(&pod, "b").unwrap(),
+                        ScalarOrVec::Scalar(GoldilocksField(110))
+                    );
+                    Ok(())
+                }
+                _ => Err(anyhow!("Expected PodRef")),
+            }
+        } else {
+            Err(anyhow!("Failed to create test pod"))
+        }
+    }
+    #[tokio::test]
+    async fn test_pod_operations_with_refs() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store);
+
+        let result = eval(
+            "[createpod test
+                base 10
+                double [* base 2]
+                triple [* base 3]
+                sum [+ double triple]
+                max_val [max double triple]]",
+            env,
+        )
+        .await?;
+
+        match result {
+            Value::PodRef(pod) => {
+                assert_eq!(
+                    get_self_entry_value(&pod, "base").unwrap(),
+                    ScalarOrVec::Scalar(GoldilocksField(10))
+                );
+                assert_eq!(
+                    get_self_entry_value(&pod, "double").unwrap(),
+                    ScalarOrVec::Scalar(GoldilocksField(20))
+                );
+                assert_eq!(
+                    get_self_entry_value(&pod, "triple").unwrap(),
+                    ScalarOrVec::Scalar(GoldilocksField(30))
+                );
+                assert_eq!(
+                    get_self_entry_value(&pod, "sum").unwrap(),
+                    ScalarOrVec::Scalar(GoldilocksField(50))
+                );
+                assert_eq!(
+                    get_self_entry_value(&pod, "max_val").unwrap(),
+                    ScalarOrVec::Scalar(GoldilocksField(30))
+                );
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected PodRef")),
         }
     }
     #[tokio::test]
