@@ -4,6 +4,7 @@ use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::types::Field;
 use serde::Deserialize;
 use serde::Serialize;
+
 use plonky2::field::types::PrimeField64;
 use std::collections::HashMap;
 
@@ -18,15 +19,6 @@ use crate::signature::schnorr::{
 };
 use crate::PlonkyProof;
 
-pub use entry::Entry;
-pub use gadget::GadgetID;
-pub use payload::{HashablePayload, PODPayload};
-pub use value::ScalarOrVec;
-
-pub use operation::Operation as Op;
-pub use operation::OperationCmd as OpCmd;
-
-pub use statement::{AnchoredKey, Statement, StatementRef};
 use operation::OperationCmd as OpCmd;
 use statement::Statement;
 

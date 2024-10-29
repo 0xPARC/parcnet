@@ -16,6 +16,7 @@ impl fmt::Display for GadgetID {
             GadgetID::NONE => write!(f, "NONE"),
             GadgetID::SCHNORR16 => write!(f, "SCHNORR16"),
             GadgetID::ORACLE => write!(f, "ORACLE"),
+            GadgetID::PLONKY => write!(f, "PLONKY")
         }
     }
 }
