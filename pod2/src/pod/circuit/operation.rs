@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use anyhow::{anyhow, Result};
 use plonky2::{
     field::{
@@ -12,12 +10,12 @@ use plonky2::{
     },
     plonk::{circuit_builder::CircuitBuilder, circuit_data::CircuitConfig},
 };
+use std::collections::HashMap;
 
-use super::{pod::SchnorrPODTarget, util::statement_matrix_ref, C, D, F};
-
+use super::pod::SchnorrPODTarget;
 use crate::{
     pod::{
-        circuit::util::vector_ref,
+        circuit::util::{statement_matrix_ref, vector_ref},
         entry::Entry,
         gadget::GadgetID,
         operation::{Operation as Op, OperationCmd as OpCmd},
@@ -25,6 +23,7 @@ use crate::{
         GPGInput, POD,
     },
     signature::schnorr::SchnorrSecretKey,
+    C, D, F,
 };
 
 use super::{
@@ -107,21 +106,21 @@ impl OperationTarget {
             builder,
             statement_targets,
             self.operand1.pod_index,
-            self.operand1.statement_index
-            )?;
+            self.operand1.statement_index,
+        )?;
         let statement2_target = statement_matrix_ref(
             builder,
             statement_targets,
             self.operand2.pod_index,
-            self.operand2.statement_index
+            self.operand2.statement_index,
         )?;
         let _statement3_target = statement_matrix_ref(
             builder,
             statement_targets,
             self.operand3.pod_index,
-            self.operand3.statement_index
+            self.operand3.statement_index,
         )?;
-       let entry_target = self.entry;
+        let entry_target = self.entry;
 
         // StatementTarget outputs of each of these ops.
         let op_out = [

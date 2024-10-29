@@ -9,8 +9,7 @@ use plonky2::{
 };
 
 use crate::pod::{entry::Entry, util::hash_string_to_field, value::HashableEntryValue};
-
-use super::{D, F};
+use crate::{D, F};
 
 #[derive(Clone, Copy, Debug)]
 pub struct EntryTarget {

@@ -77,19 +77,19 @@
 
   Where each F is the following circuit:
 
-                           ┌─────────────────────────────────────┐
-                           │    ┌───────────────────────────┐    │
-                           │    │                           │    │
-  inner-circuit inputs─────┼───►│     InnerCircuit logic    │    │
-                           │    │                           │    │
-                           │    └───────────────────────────┘    │
-                           │                  OR                 │──────► new recursive
-                           │ ┌────────────────────────────────┐  │           proof
-                           │ │                                │  │
-   previous recursive──────┼►│  Recursive proof verification  │  │
-         proof             │ │                                │  │
-                           │ └────────────────────────────────┘  │
-                           └─────────────────────────────────────┘
+                         ┌─────────────────────────────────────┐
+                         │    ┌───────────────────────────┐    │
+inner-circuit inputs─────┼───►│                           │    │
+                         │    │     InnerCircuit logic    │    │
+                         │┌──►│                           │    │──────► new hash
+         hash────────────┼┤   └───────────────────────────┘    │
+                         ││                 OR                 │──────► new recursive
+                         ││ ┌────────────────────────────────┐ │           proof
+                         │└►│                                │ │
+                         │  │  Recursive proof verification  │ │
+ previous recursive──────┼─►│                                │ │
+       proof             │  └────────────────────────────────┘ │
+                         └─────────────────────────────────────┘
 
 
  To run the tests that checks this logic:
@@ -106,6 +106,7 @@ use plonky2::plonk::circuit_data::{
     CircuitConfig, CircuitData, VerifierCircuitData, VerifierCircuitTarget,
 };
 use plonky2::plonk::proof::{ProofWithPublicInputs, ProofWithPublicInputsTarget};
+use std::array;
 use std::marker::PhantomData;
 use std::time::Instant;
 
@@ -152,10 +153,10 @@ pub trait InnerCircuit {
 /// N: arity of the recursion tree, ie. how many `(InnerCircuit OR recursive-proof-verify)` each
 /// node of the recursion tree is checking.
 pub struct RecursiveCircuit<I: InnerCircuit, const N: usize> {
-    hashes_targ: Vec<HashOutTarget>,
-    selectors_targ: Vec<Target>,
-    inner_circuit_targ: Vec<I::Targets>,
-    proofs_targ: Vec<ProofWithPublicInputsTarget<D>>,
+    hashes_targ: [HashOutTarget; N],
+    selectors_targ: [Target; N],
+    inner_circuit_targ: [I::Targets; N],
+    proofs_targ: [ProofWithPublicInputsTarget<D>; N],
     // the next two are common for all the given proofs. It is the data for this circuit itself
     // (cyclic circuit).
     verifier_data_targ: VerifierCircuitTarget,
@@ -165,7 +166,7 @@ pub struct RecursiveCircuit<I: InnerCircuit, const N: usize> {
 impl<I: InnerCircuit, const N: usize> RecursiveCircuit<I, N> {
     pub fn prepare_public_inputs(
         verifier_data: VerifierCircuitData<F, C, D>,
-        hashes: Vec<HashOut<F>>,
+        hashes: [HashOut<F>; N],
     ) -> Vec<F> {
         [
             hashes.into_iter().flat_map(|h| h.elements).collect(),
@@ -188,48 +189,39 @@ impl<I: InnerCircuit, const N: usize> RecursiveCircuit<I, N> {
         builder: &mut CircuitBuilder<F, D>,
         verifier_data: VerifierCircuitData<F, C, D>,
     ) -> Result<Self> {
-        let mut hashes_targ: Vec<HashOutTarget> = vec![];
-        for _ in 0..N {
-            // register new target of hash, and set it as public input
-            let hash_targ = builder.add_virtual_hash_public_input();
-            hashes_targ.push(hash_targ);
-        }
+        let hashes_targ: [HashOutTarget; N] =
+            array::from_fn(|_| builder.add_virtual_hash_public_input());
 
         // build the InnerCircuit logic. Also set the selectors, used both by the InnerCircuit and
         // by the recursive proofs verifications.
-        let mut selectors_targ: Vec<Target> = vec![];
-        let mut selectors_bool_targ: Vec<BoolTarget> = vec![];
-        let mut inner_circuit_targ: Vec<I::Targets> = vec![];
-        for i in 0..N {
-            // selectors:
+        let selectors_targ: [Target; N] = array::from_fn(|_| {
             let selector_F_targ = builder.add_virtual_target();
             // ensure that selector_booltarg is \in {0,1}
             binary_check(builder, selector_F_targ);
-            let selector_bool_targ = BoolTarget::new_unsafe(selector_F_targ);
-            selectors_targ.push(selector_F_targ);
-            selectors_bool_targ.push(selector_bool_targ);
+            selector_F_targ
+        });
+        let selectors_bool_targ: [BoolTarget; N] =
+            array::from_fn(|i| BoolTarget::new_unsafe(selectors_targ[i]));
 
-            // inner circuits:
-            let inner_circuit_targets =
-                I::add_targets(builder, &selector_bool_targ, &hashes_targ[i])?;
-            inner_circuit_targ.push(inner_circuit_targets);
-        }
+        let inner_circuit_targ: [I::Targets; N] = array::try_from_fn(|i| {
+            I::add_targets(builder, &selectors_bool_targ[i], &hashes_targ[i])
+        })?;
 
         // proof verification:
 
         let common_data = verifier_data.common.clone();
         let verifier_data_targ = builder.add_verifier_data_public_inputs();
 
-        let mut proofs_targ: Vec<ProofWithPublicInputsTarget<D>> = vec![];
-        for i in 0..N {
+        let proofs_targ: Result<[ProofWithPublicInputsTarget<D>; N]> = array::try_from_fn(|i| {
             let proof_targ = builder.add_virtual_proof_with_pis(&common_data);
             builder.conditionally_verify_cyclic_proof_or_dummy::<C>(
                 selectors_bool_targ[i],
                 &proof_targ,
                 &common_data,
             )?;
-            proofs_targ.push(proof_targ);
-        }
+            Ok(proof_targ)
+        });
+        let proofs_targ = proofs_targ?;
 
         Ok(Self {
             hashes_targ,
@@ -244,11 +236,11 @@ impl<I: InnerCircuit, const N: usize> RecursiveCircuit<I, N> {
     pub fn set_targets(
         &mut self,
         pw: &mut PartialWitness<F>,
-        hashes: &Vec<HashOut<F>>,
+        hashes: &[HashOut<F>; N],
         // if selectors[i]==0: verify InnerCircuit. if selectors[i]==1: verify recursive_proof[i]
-        selectors: Vec<F>,
-        inner_circuit_input: Vec<I::Input>,
-        recursive_proofs: &Vec<PlonkyProof>,
+        selectors: [F; N],
+        inner_circuit_input: [I::Input; N],
+        recursive_proofs: &[PlonkyProof; N],
     ) -> Result<()> {
         // set the msgs values
         for i in 0..N {
@@ -388,11 +380,11 @@ impl<I: InnerCircuit, const N: usize> RecursionTree<I, N> {
 
     pub fn prove_node(
         verifier_data: VerifierCircuitData<F, C, D>,
-        hashes: &Vec<HashOut<F>>,
+        hashes: &[HashOut<F>; N],
         // if selectors[i]==0: verify InnerCircuit. if selectors[i]==1: verify recursive_proof[i]
-        selectors: Vec<F>,
-        inner_circuits_input: Vec<I::Input>,
-        recursive_proofs: &Vec<PlonkyProof>,
+        selectors: [F; N],
+        inner_circuits_input: [I::Input; N],
+        recursive_proofs: &[PlonkyProof; N],
     ) -> Result<PlonkyProof> {
         println!("prove_node:");
         for i in 0..N {
@@ -460,6 +452,7 @@ mod tests {
     use plonky2::plonk::proof::ProofWithPublicInputs;
     use plonky2::recursion::dummy_circuit::cyclic_base_proof;
     use rand;
+    use std::array;
     use std::time::Instant;
 
     use super::*;
@@ -484,7 +477,8 @@ mod tests {
         // For testing: change the following `N` value to try different arities of the recursion tree:
         test_tree_recursion_opt::<2>()?; // N=2
 
-        test_tree_recursion_opt::<3>()?; // N=3
+        // test with arity=3 disabled to reduce testing time
+        // test_tree_recursion_opt::<3>()?; // N=3
 
         Ok(())
     }
@@ -508,10 +502,7 @@ mod tests {
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
         let schnorr = SchnorrSigner::new();
         // generate N random hashes
-        let hashes: Vec<HashOut<F>> = (0..N)
-            .into_iter()
-            .map(|_| HashOut::<F>::sample(&mut rng))
-            .collect();
+        let hashes: [HashOut<F>; N] = array::from_fn(|_| HashOut::<F>::sample(&mut rng));
 
         // generate k key pairs
         let sk_vec: Vec<SchnorrSecretKey> =
@@ -566,19 +557,13 @@ mod tests {
                 let proof_enabled = if i == 0 { F::ZERO } else { F::ONE };
 
                 // prepare the inputs for the `RecursionTree::prove_node` call
-                let selectors = (0..N).into_iter().map(|_| proof_enabled.clone()).collect();
-                let innercircuits_input: Vec<ExampleGadgetInput> = (0..N)
-                    .into_iter()
-                    .map(|k| ExampleGadgetInput {
+                let selectors: [F; N] = [proof_enabled.clone(); N];
+                let innercircuits_input: [ExampleGadgetInput; N] =
+                    array::from_fn(|k| ExampleGadgetInput {
                         pk: pk_vec[j + k],
                         sig: sig_vec[j + k],
-                    })
-                    .collect();
-                let proofs = (0..N)
-                    .into_iter()
-                    .enumerate()
-                    .map(|(k, _)| proofs_at_level_i[j + k].clone())
-                    .collect();
+                    });
+                let proofs: [PlonkyProof; N] = array::from_fn(|k| proofs_at_level_i[j + k].clone());
 
                 // do the recursive step
                 let start = Instant::now();

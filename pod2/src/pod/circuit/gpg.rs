@@ -7,12 +7,11 @@ use plonky2::{
     },
     plonk::circuit_builder::CircuitBuilder,
 };
-
-use crate::pod::{gadget::GadgetID, GPGInput};
-
 use std::iter::zip;
 
-use super::{operation::OperationTarget, statement::StatementTarget, D, F};
+use super::{operation::OperationTarget, statement::StatementTarget};
+use crate::pod::{gadget::GadgetID, GPGInput};
+use crate::{D, F};
 
 #[derive(Clone, Debug)]
 pub struct GPGTarget {

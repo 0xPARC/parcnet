@@ -11,7 +11,7 @@ use plonky2::{
 };
 use std::iter::zip;
 
-use super::{statement::StatementTarget, util::vector_ref, D, F};
+use super::{statement::StatementTarget, util::vector_ref};
 use crate::{
     pod::{util::hash_string_to_field, PODProof, POD, SIGNER_PK_KEY},
     recursion::{utils::assert_one_if_enabled, InnerCircuit},
@@ -19,6 +19,7 @@ use crate::{
         MessageTarget, SchnorrBuilder, SchnorrPublicKeyTarget, SchnorrSignatureTarget,
         SignatureVerifierBuilder,
     },
+    C, D, F,
 };
 
 pub struct SchnorrPODTarget {

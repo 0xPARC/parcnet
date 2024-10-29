@@ -1,10 +1,9 @@
-use std::{collections::HashMap, fmt::Debug};
-
 use anyhow::{anyhow, Result};
 use plonky2::field::{
     goldilocks_field::GoldilocksField,
     types::{Field, PrimeField64},
 };
+use std::{collections::HashMap, fmt::Debug};
 
 use super::{
     entry::Entry,

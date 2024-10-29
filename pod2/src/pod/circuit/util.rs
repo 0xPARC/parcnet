@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use anyhow::{anyhow, Result};
 use plonky2::{
     field::{goldilocks_field::GoldilocksField, types::Field},
@@ -7,10 +5,11 @@ use plonky2::{
     plonk::circuit_builder::CircuitBuilder,
     util::log2_ceil,
 };
+use std::collections::HashMap;
 
+use super::statement::StatementTarget;
 use crate::pod::statement::{StatementOrRef, StatementRef};
-
-use super::{statement::StatementTarget, D, F};
+use crate::{D, F};
 
 const NUM_BITS: usize = 32;
 
@@ -36,11 +35,7 @@ pub fn vector_ref(builder: &mut CircuitBuilder<F, D>, v: &[Target], i: Target) -
         GoldilocksField::from_canonical_u64(v.len() as u64 - 1),
     );
     builder.range_check(expr_target, NUM_BITS);
-    Ok(
-        builder.random_access(
-            i, pad_to_power_of_two(v)?
-            )
-        )
+    Ok(builder.random_access(i, pad_to_power_of_two(v)?))
 }
 
 /// Helper for matrix element access, where a 'matrix' is a slice of
@@ -72,26 +67,27 @@ pub fn statement_matrix_ref(
     builder: &mut CircuitBuilder<F, D>,
     statement_matrix: &[Vec<StatementTarget>],
     i: Target,
-    j: Target
+    j: Target,
 ) -> Result<StatementTarget> {
     // Separate the statement matrix into a vector (of length 11) of
     // matrices of targets.
-    let transposed_target_matrices =
-        statement_matrix.iter().map(
-            |s_vec| s_vec.iter().map(
-                |s|
-                s.to_targets()
-                ).collect()
-        ).collect::<Vec<Vec<Vec<Target>>>>();
-    let target_matrices:Vec<Vec<Vec<Target>>> = (0..11).map( |i|
-        transposed_target_matrices.iter().map(
-            |m| m.iter().map( |v| v[i]
-                ).collect()
-            ).collect()
-    ).collect();
+    let transposed_target_matrices = statement_matrix
+        .iter()
+        .map(|s_vec| s_vec.iter().map(|s| s.to_targets()).collect())
+        .collect::<Vec<Vec<Vec<Target>>>>();
+    let target_matrices: Vec<Vec<Vec<Target>>> = (0..11)
+        .map(|i| {
+            transposed_target_matrices
+                .iter()
+                .map(|m| m.iter().map(|v| v[i]).collect())
+                .collect()
+        })
+        .collect();
     Ok(StatementTarget::from_targets(
-        target_matrices.iter().map(
-            |a| matrix_ref(builder, a, i, j)
-            ).collect::<Result<Vec<Target>>>()?.as_ref()
+        target_matrices
+            .iter()
+            .map(|a| matrix_ref(builder, a, i, j))
+            .collect::<Result<Vec<Target>>>()?
+            .as_ref(),
     ))
 }

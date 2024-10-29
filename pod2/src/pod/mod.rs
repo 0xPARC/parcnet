@@ -1,16 +1,18 @@
-use std::collections::HashMap;
-
 use anyhow::anyhow;
 use anyhow::Result;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::types::Field;
-<<<<<<< HEAD
 use serde::Deserialize;
 use serde::Serialize;
-=======
 use plonky2::field::types::PrimeField64;
->>>>>>> 740d329 (Circuit work)
+use std::collections::HashMap;
 
+use crate::pod::{
+    entry::Entry,
+    gadget::GadgetID,
+    payload::{HashablePayload, PODPayload},
+    value::ScalarOrVec,
+};
 use crate::signature::schnorr::{
     SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner,
 };
@@ -24,8 +26,9 @@ pub use operation::Operation as Op;
 pub use operation::OperationCmd as OpCmd;
 
 pub use statement::{AnchoredKey, Statement, StatementRef};
+use operation::OperationCmd as OpCmd;
+use statement::Statement;
 
-pub mod circuit;
 pub mod entry;
 pub mod gadget;
 pub mod operation;
@@ -33,7 +36,10 @@ pub mod origin;
 pub mod payload;
 pub mod statement;
 pub mod util;
-mod value;
+pub mod value;
+
+// submodule
+pub mod circuit;
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum PODProof {
