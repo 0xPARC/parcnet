@@ -127,7 +127,7 @@ impl SchnorrPODTarget {
             .statements_list
             .iter()
             .enumerate()
-            .filter(|(i, (s_name, _))| s_name == &pk_statement_name)
+            .filter(|(_, (s_name, _))| s_name == &pk_statement_name)
             .map(|(i, _)| i)
             .next()
             .ok_or(anyhow!(

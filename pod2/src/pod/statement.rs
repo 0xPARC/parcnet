@@ -1,16 +1,10 @@
-use core::fmt;
-use std::{collections::HashMap, fmt::Debug};
-
-use anyhow::{anyhow, Result};
-use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
-use serde::{Deserialize, Serialize};
 use anyhow::{anyhow, Result};
 use plonky2::field::{
     goldilocks_field::GoldilocksField,
     types::{Field, PrimeField64},
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Debug};
+use std::{collections::HashMap, fmt, fmt::Debug};
 
 use super::{
     entry::Entry,
@@ -21,7 +15,7 @@ use super::{
     POD,
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AnchoredKey(pub Origin, pub String);
 
 impl PartialEq for AnchoredKey {
