@@ -8,6 +8,7 @@ use plonky2::{
     },
     plonk::circuit_builder::CircuitBuilder,
 };
+use std::array;
 use std::iter::zip;
 use std::{collections::HashMap, marker::PhantomData};
 
@@ -157,9 +158,11 @@ impl OperationTarget {
 }
 
 /// OpExecutorGadget implements the OpsExecutorTrait
+/// - NP: NumPODs (NP = M+N)
+/// - NS: Num Statements
 pub struct OpExecutorGadget<'a, const NP: usize, const NS: usize>(PhantomData<&'a ()>);
 
-impl<'a, const NS: usize, const NP: usize> OpsExecutorTrait for OpExecutorGadget<'a, NP, NS> {
+impl<'a, const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget<'a, NP, NS> {
     /// Input consists of:
     /// - GPG input (pod list + origin renaming map), and
     /// - a list of operations.
@@ -181,26 +184,21 @@ impl<'a, const NS: usize, const NP: usize> OpsExecutorTrait for OpExecutorGadget
     /// (i.e. `builder.connect`ed) to the statements passed in to the
     /// inner and recursion circuits.
     type Targets = (
-        Vec<Vec<StatementTarget>>,
-        Vec<Vec<Target>>,
-        Vec<OperationTarget>,
-        Vec<StatementTarget>,
+        [[StatementTarget; NS]; NP],
+        [Vec<Target>; NP],
+        [OperationTarget; NS],
+        [StatementTarget; NS],
     );
 
     fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets> {
-        let statement_list_vec_target = (0..NP)
-            .map(|_| {
-                (0..NS)
-                    .map(|_| StatementTarget::new_virtual(builder))
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        let origin_id_map_target = (0..NP)
-            .map(|_| builder.add_virtual_targets(NS + 2))
-            .collect::<Vec<_>>();
-        let op_list_target = (0..NS)
-            .map(|_| OperationTarget::new_virtual(builder))
-            .collect::<Vec<_>>();
+        let statement_list_vec_target: [[StatementTarget; NS]; NP] = array::from_fn(|_| {
+            array::from_fn::<StatementTarget, NS, _>(|_| StatementTarget::new_virtual(builder))
+        });
+        let origin_id_map_target: [Vec<Target>; NP] =
+            array::from_fn(|_| builder.add_virtual_targets(NS + 2));
+
+        let op_list_target: [OperationTarget; NS] =
+            array::from_fn(|_| OperationTarget::new_virtual(builder));
 
         // TODO: Check that origin ID map has appropriate properties.
 
@@ -220,22 +218,19 @@ impl<'a, const NS: usize, const NP: usize> OpsExecutorTrait for OpExecutorGadget
             .collect::<Result<Vec<_>>>()?;
 
         // Apply ops.
-        let output_statement_list_target = op_list_target
-            .iter()
-            .map(|op| {
-                op.eval_with_gadget_id(
-                    builder,
-                    GadgetID::ORACLE,
-                    &remapped_statement_list_vec_target,
-                )
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let output_statement_list_target: Result<[StatementTarget; NS]> = array::try_from_fn(|i| {
+            op_list_target[i].eval_with_gadget_id(
+                builder,
+                GadgetID::ORACLE,
+                &remapped_statement_list_vec_target,
+            )
+        });
 
         Ok((
             statement_list_vec_target,
             origin_id_map_target,
             op_list_target,
-            output_statement_list_target,
+            output_statement_list_target?,
         ))
     }
 

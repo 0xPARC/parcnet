@@ -341,7 +341,6 @@ where
         let proof = builder.add_virtual_proof_with_pis(&data.common);
         builder.verify_proof::<C>(&proof, &verifier_data, &data.common);
     }
-    // let n_gates = builder.num_gates();
     let data = builder.build::<C>();
 
     // 3rd
@@ -367,6 +366,8 @@ where
             let _ = I::add_targets(&mut builder, &b)?;
         }
     }
+    // add the OpsExecutor targets
+    let _: O::Targets = O::add_targets(&mut builder)?;
 
     // proofs verify
     let verifier_data = builder.add_verifier_data_public_inputs();
