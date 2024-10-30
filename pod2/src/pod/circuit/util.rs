@@ -23,6 +23,7 @@ fn pad_to_power_of_two<A: Clone>(v: &[A]) -> Result<Vec<A>> {
     Ok([v.to_vec(), padding].concat())
 }
 
+/*
 /// Helper for random access. Includes a range check.
 pub fn vector_ref(builder: &mut CircuitBuilder<F, D>, v: &[Target], i: Target) -> Result<Target> {
     builder.range_check(i, NUM_BITS);
@@ -34,6 +35,28 @@ pub fn vector_ref(builder: &mut CircuitBuilder<F, D>, v: &[Target], i: Target) -
     );
     builder.range_check(expr_target, NUM_BITS);
     Ok(builder.random_access(i, pad_to_power_of_two(v)?))
+}
+*/
+
+/// Helper for dynamic vector reference. Includes a range check. Uses
+/// the inner product trick to get around random access limitations.
+pub fn vector_ref(builder: &mut CircuitBuilder<F, D>, v: &[Target], i: Target) -> Result<Target> {
+    builder.range_check(i, NUM_BITS);
+    // Form v.len() - 1 - i
+    let minus_ind_target = builder.neg(i);
+    let expr_target = builder.add_const(
+        minus_ind_target,
+        GoldilocksField::from_canonical_u64(v.len() as u64 - 1),
+    );
+    builder.range_check(expr_target, NUM_BITS);
+
+    let v_i = v.iter().enumerate().fold(builder.zero(), |sum, (j, v_j)| {
+        let j_target = builder.constant(GoldilocksField(j as u64));
+        let delta_ij = builder.is_equal(i, j_target).target;
+        builder.mul_add(delta_ij, *v_j, sum)
+    });
+
+    Ok(v_i)
 }
 
 /// Helper for matrix element access, where a 'matrix' is a slice of
