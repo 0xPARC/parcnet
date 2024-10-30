@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use plonky2::{
     field::{goldilocks_field::GoldilocksField, types::Field},
-    iop::target::Target,
+    iop::target::{BoolTarget, Target},
     plonk::circuit_builder::CircuitBuilder,
     util::log2_ceil,
 };
@@ -104,4 +104,11 @@ pub fn assert_less<const NUM_BITS: usize>(
     let x_plus_1 = builder.add_const(x, GoldilocksField(1));
     let expr = builder.sub(y, x_plus_1);
     builder.range_check(expr, NUM_BITS);
+}
+
+pub fn member(builder: &mut CircuitBuilder<F, D>, x: Target, v: &[Target]) -> BoolTarget {
+    v.iter().fold(builder._false(), |acc, y| {
+        let eq_x_y = builder.is_equal(x, *y);
+        builder.or(acc, eq_x_y)
+    })
 }

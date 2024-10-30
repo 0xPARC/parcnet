@@ -127,7 +127,7 @@ impl OperationTarget {
                 value: builder.zero(),
             }, // TransitiveEqualityFromStatements
             StatementTarget::not_equal(builder, statement1_target, statement2_target), // GtToNonequality. TODO
-                                                                                // TODO: Rest!
+                                                                                       // TODO: Rest!
         ];
 
         // Indicators of whether the conditions on the operands were satisfied.
@@ -165,7 +165,6 @@ impl OperationTarget {
             builder.and(origins_match, keys_match)
         };
 
-
         let op_is_valid = [
             builder._true(),                       // None - no checks needed.
             builder._true(),                       // NewEntry - no checks needed.
@@ -174,7 +173,7 @@ impl OperationTarget {
             builder.not(statements_1_and_2_equal), // NonequalityFromEntries - non-equality check
             statements_are_value_ofs,              // GtFromEntries - Type-check input statements
             builder.and(statements_are_equalities, statements_allow_transitivity), // TransitiveEqualityFromStatements
-            statement1_target.has_code(builder, Statement::GT) // GtToNonequality
+            statement1_target.has_code(builder, Statement::GT), // GtToNonequality
         ]
         .iter()
         .enumerate()
