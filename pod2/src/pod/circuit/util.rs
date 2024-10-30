@@ -129,6 +129,19 @@ pub fn assert_less<const NUM_BITS: usize>(
     builder.range_check(expr, NUM_BITS);
 }
 
+pub fn assert_less_if<const NUM_BITS: usize>(
+    builder: &mut CircuitBuilder<F, D>,
+    s: BoolTarget,
+    x: Target,
+    y: Target,
+) {
+    let zero_target = builder.zero();
+    let one_target = builder.one();
+    let lhs = builder.select(s, x, zero_target);
+    let rhs = builder.select(s, y, one_target);
+    assert_less::<NUM_BITS>(builder, lhs, rhs)
+}
+
 pub fn member(builder: &mut CircuitBuilder<F, D>, x: Target, v: &[Target]) -> BoolTarget {
     v.iter().fold(builder._false(), |acc, y| {
         let eq_x_y = builder.is_equal(x, *y);

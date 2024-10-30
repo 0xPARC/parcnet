@@ -425,8 +425,9 @@ mod tests {
             ),
             // COPY preceding op's output
             OpCmd(
-                Op::CopyStatement(StatementRef("_SELF", "VALUEOF:op3")), "op4"
-                ),
+                Op::CopyStatement(StatementRef("_SELF", "VALUEOF:op3")),
+                "op4",
+            ),
             // NOTEQUAL:yolo
             // OpCmd(
             //     Op::NonequalityFromEntries(

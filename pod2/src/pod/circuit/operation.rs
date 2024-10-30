@@ -29,7 +29,7 @@ use super::{
     entry::EntryTarget,
     origin::OriginTarget,
     statement::{StatementRefTarget, StatementTarget},
-    util::{assert_less},
+    util::{assert_less, assert_less_if},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -104,7 +104,7 @@ impl OperationTarget {
             self.operand2.pod_index,
             self.operand2.statement_index,
         )?;
-        let _statement3_target = statement_matrix_ref(
+        let statement3_target = statement_matrix_ref(
             builder,
             statement_targets,
             self.operand3.pod_index,
@@ -130,8 +130,27 @@ impl OperationTarget {
                 key3: builder.zero(),
                 value: builder.zero(),
             }, // TransitiveEqualityFromStatements
-            StatementTarget::not_equal(builder, statement1_target, statement2_target), // GtToNonequality. TODO
-                                                                                       // TODO: Rest!
+            StatementTarget::not_equal(builder, statement1_target, statement2_target), // GtToNonequality. TODO.
+            StatementTarget::contains(builder, statement1_target, statement2_target), // TODO: ContainsFromEntries.
+            StatementTarget::rename_contained_by(builder, statement1_target, statement2_target), // TODO: RenameContainedBy
+            StatementTarget::sum_of(
+                builder,
+                statement1_target,
+                statement2_target,
+                statement3_target,
+            ), // TODO: SumOf
+            StatementTarget::product_of(
+                builder,
+                statement1_target,
+                statement2_target,
+                statement3_target,
+            ), // TODO: ProductOf
+            StatementTarget::max_of(
+                builder,
+                statement1_target,
+                statement2_target,
+                statement3_target,
+            ), // TODO: MaxOf
         ];
 
         // Indicators of whether the conditions on the operands were satisfied.
@@ -146,12 +165,13 @@ impl OperationTarget {
 
         // Gt check. This is a constraint for now (if applicable).
         let gt_opcode_target = builder.constant(Op::<Statement>::GT_FROM_ENTRIES);
-        let zero_target = builder.zero();
-        let one_target = builder.one();
         let op_is_gt = builder.is_equal(self.op, gt_opcode_target);
-        let gt_rhs = builder.select(op_is_gt, statement2_target.value, zero_target);
-        let gt_lhs = builder.select(op_is_gt, statement1_target.value, one_target);
-        assert_less::<NUM_BITS>(builder, gt_rhs, gt_lhs);
+        assert_less_if::<NUM_BITS>(
+            builder,
+            op_is_gt,
+            statement2_target.value,
+            statement1_target.value,
+        );
 
         // Check whether statement 1 is (a == b) and statement 2 is (b == c)
         let statements_are_equalities = {
@@ -178,6 +198,11 @@ impl OperationTarget {
             statements_are_value_ofs,              // GtFromEntries - Type-check input statements
             builder.and(statements_are_equalities, statements_allow_transitivity), // TransitiveEqualityFromStatements
             statement1_target.has_code(builder, Statement::GT), // GtToNonequality
+            builder._true(),                                    // TODO: ContainsFromEntries
+            builder._true(),                                    // TODO: RenameContainedBy
+            builder._true(),                                    // TODO: SumOf
+            builder._true(),                                    // TODO: ProductOf
+            builder._true(),                                    // TODO: MaxOf
         ]
         .iter()
         .enumerate()
@@ -271,26 +296,32 @@ impl<'a, const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget
 
         // Apply ops.
         // Create output statement list target.
-        let output_statement_list_target: [StatementTarget; NS] = array::from_fn(|_| StatementTarget::new_virtual(builder));
+        let output_statement_list_target: [StatementTarget; NS] =
+            array::from_fn(|_| StatementTarget::new_virtual(builder));
         // Combine inputs and outputs.
         let input_and_output_statement_list_vec_target = [
             remapped_statement_list_vec_target,
-            vec![output_statement_list_target.to_vec()]].concat();
+            vec![output_statement_list_target.to_vec()],
+        ]
+        .concat();
         // Compute output statement list
-        let computed_output_statement_list_target: [StatementTarget; NS] = array::try_from_fn(|i| {
-            // TODO: Make sure current op does not reference itself or an
-            // as-yet unevaluated op.
-            op_list_target[i].eval_with_gadget_id(
-                builder,
-                GadgetID::ORACLE,
-                &input_and_output_statement_list_vec_target,
-            )
-        })?;
-        
+        let computed_output_statement_list_target: [StatementTarget; NS] =
+            array::try_from_fn(|i| {
+                // TODO: Make sure current op does not reference itself or an
+                // as-yet unevaluated op.
+                op_list_target[i].eval_with_gadget_id(
+                    builder,
+                    GadgetID::ORACLE,
+                    &input_and_output_statement_list_vec_target,
+                )
+            })?;
+
         // Connect targets
-        zip(output_statement_list_target, computed_output_statement_list_target).for_each(
-            |(a,b)| a.connect(builder, &b)
-            );        
+        zip(
+            output_statement_list_target,
+            computed_output_statement_list_target,
+        )
+        .for_each(|(a, b)| a.connect(builder, &b));
 
         Ok((
             statement_list_vec_target,
@@ -321,9 +352,14 @@ impl<'a, const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget
 
         // TODO: Abstract this away.
         // Determine output POD statements for the purposes of later reference
-        let output_pod = POD::execute_oracle_gadget(&input.0, &input.1.0)?; println!("{:?}", output_pod.payload.statements_list);
-        let input_and_output_pod_list = [input.0.pods_list.clone(), vec![("_SELF".to_string(), output_pod)]].concat();
-        
+        let output_pod = POD::execute_oracle_gadget(&input.0, &input.1 .0)?;
+        println!("{:?}", output_pod.payload.statements_list);
+        let input_and_output_pod_list = [
+            input.0.pods_list.clone(),
+            vec![("_SELF".to_string(), output_pod)],
+        ]
+        .concat();
+
         // Set operation targets
         let ref_index_map = StatementRef::index_map(&input_and_output_pod_list);
         zip(&targets.2, input.1.sort(&input_and_output_pod_list).0).try_for_each(
