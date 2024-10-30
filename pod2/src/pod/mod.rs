@@ -165,9 +165,9 @@ impl POD {
         }
     }
 
-    pub fn execute_cmds_with_gadget_id(
+    pub fn execute_cmds_with_gadget_id<'a>(
         input: &GPGInput,
-        cmds: &[OpCmd<'static>],
+        cmds: &[OpCmd<'a>],
         gadget_id: GadgetID,
     ) -> Result<PODPayload> {
         let mut statements = input.remap_origin_ids_by_name()?;
