@@ -9,7 +9,7 @@ pub use opexecutor::OpExecutorGadget;
 pub use plonky_pod::PlonkyButNotPlonkyGadget;
 pub use schnorr_pod::SchnorrPODGadget;
 
-#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
 pub enum GadgetID {
     NONE = 0,
     SCHNORR16 = 1,

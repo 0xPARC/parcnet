@@ -35,6 +35,7 @@ pub mod value;
 
 // submodule
 pub mod circuit;
+pub use origin::Origin;
 
 pub const SIGNER_PK_KEY: &str = "_signer";
 

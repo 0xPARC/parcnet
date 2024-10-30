@@ -17,14 +17,20 @@ use async_recursion::async_recursion;
 use plonky2::field::{goldilocks_field::GoldilocksField, types::PrimeField64};
 
 use pod2::pod::{
-    entry::Entry, payload::HashablePayload, statement::StatementRef, value::ScalarOrVec, GPGInput,
-    Op, OpCmd, Statement, POD,
+    entry::Entry,
+    gadget::GadgetID,
+    origin::Origin,
+    payload::HashablePayload,
+    statement::{AnchoredKey, StatementRef},
+    value::ScalarOrVec,
+    GPGInput, Op, OpCmd, Statement, POD,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ORef {
     S,
     P(String),
+    Q(usize),
 }
 
 impl From<ORef> for String {
@@ -32,6 +38,33 @@ impl From<ORef> for String {
         match oref {
             ORef::S => SELF_ORIGIN_NAME.to_string(),
             ORef::P(s) => s,
+            ORef::Q(_) => "query".to_string(),
+        }
+    }
+}
+
+impl From<ORef> for Origin {
+    fn from(oref: ORef) -> Self {
+        match oref {
+            ORef::S => Origin::SELF,
+            ORef::P(name) => Origin::new(GoldilocksField(0), name.clone(), GadgetID::ORACLE), // TOOD: figure out if its fine to have Id 0
+            ORef::Q(id) => Origin::new(
+                GoldilocksField(id as u64),
+                "query".to_string(),
+                GadgetID::ORACLE,
+            ),
+        }
+    }
+}
+
+impl From<Origin> for ORef {
+    fn from(origin: Origin) -> Self {
+        if origin.is_self() {
+            ORef::S
+        } else if origin.origin_name == "query" {
+            ORef::Q(origin.origin_id.to_canonical_u64() as usize)
+        } else {
+            ORef::P(origin.origin_name)
         }
     }
 }
@@ -102,6 +135,14 @@ pub enum Value {
     SRef(SRef),
     Operation(Box<Operation>),
     List(Vec<Value>),
+    Pattern(Box<QueryPattern>),
+}
+
+#[derive(Clone, Debug)]
+pub enum QueryPattern {
+    Constant(GoldilocksField),
+    Reference(SRef),
+    Operation(Operation),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -118,6 +159,14 @@ impl OpType {
             "*" => Ok(OpType::Multiply),
             "max" => Ok(OpType::Max),
             _ => Err(anyhow!("Unknown operation type: {}", s)),
+        }
+    }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            OpType::Add => "+",
+            OpType::Multiply => "*",
+            OpType::Max => "max",
         }
     }
 }
@@ -187,6 +236,130 @@ impl Operation {
             OpType::Multiply => Op::ProductOf(result_ref.into(), op1.into(), op2.into()),
             OpType::Max => Op::MaxOf(result_ref.into(), op1.into(), op2.into()),
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct PodQueryBuilder {
+    // statements is a list of statements that we will match on
+    // the usize is the origin_id and the String is the statement name
+    statement_table: HashMap<(usize, String), Statement>,
+    // srefs are the bindings we are interested in.
+    srefs: Vec<SRef>,
+    // might not be a good idea to
+    current_origin_id: usize,
+    next_statement_id: usize,
+    tmp_counter: usize,
+}
+
+impl PodQueryBuilder {
+    fn new() -> Self {
+        Self {
+            statement_table: HashMap::new(),
+            srefs: Vec::new(),
+            current_origin_id: 1,
+            next_statement_id: 0,
+            tmp_counter: 0,
+        }
+    }
+
+    // fn add_value_match_to_srefs(&mut self, key: &str) -> SRef {
+    //     let statement_key = format!("{}:{}", PREDICATE_VALUEOF, key);
+    //     let sref = SRef(ORef::Q(self.current_origin_id), statement_key.clone());
+    //     self.srefs.push(sref.clone());
+    //     sref
+    // }
+
+    fn add_constant_to_statements_table(&mut self, value: GoldilocksField) -> SRef {
+        let key = format!(
+            "{}{}",
+            STATEMENT_PREFIX_CONSTANT.to_string(),
+            value.to_canonical_u64()
+        );
+        let statement_key = format!("{}:{}", PREDICATE_VALUEOF, key);
+        self.statement_table.insert(
+            (self.current_origin_id, statement_key.clone()),
+            Statement::ValueOf(
+                AnchoredKey(ORef::Q(self.current_origin_id).into(), key.clone()),
+                ScalarOrVec::Scalar(value),
+            ),
+        );
+        SRef(ORef::Q(self.current_origin_id), statement_key)
+    }
+
+    fn add_scalar_match(&mut self, key: &str, value: GoldilocksField) {
+        let statement_key = format!("{}:{}", PREDICATE_VALUEOF, key);
+        self.statement_table.insert(
+            (self.current_origin_id, statement_key.clone()),
+            Statement::ValueOf(
+                AnchoredKey(ORef::Q(self.current_origin_id).into(), key.to_string()),
+                ScalarOrVec::Scalar(value),
+            ),
+        );
+        self.srefs
+            .push(SRef(ORef::Q(self.current_origin_id), statement_key));
+    }
+
+    fn add_sref_match(&mut self, key: &str, sref: SRef) {
+        let statement_key = format!("{}:{}", PREDICATE_VALUEOF, key);
+        self.statement_table.insert(
+            (self.current_origin_id, statement_key.clone()),
+            Statement::ValueOf(
+                AnchoredKey(ORef::Q(self.current_origin_id).into(), key.to_string()),
+                ScalarOrVec::Scalar(GoldilocksField(0)), // Placeholder, matching will be done via statement refs
+            ),
+        );
+        self.srefs.push(sref);
+    }
+    fn add_operation(&mut self, op: Op<StatementRef>) {
+        let statement_id = self.next_statement_id();
+
+        // Convert Op to Statement based on operation type
+        let statement = match op {
+            Op::SumOf(result, left, right) => Statement::SumOf(
+                self.convert_statement_ref(result),
+                self.convert_statement_ref(left),
+                self.convert_statement_ref(right),
+            ),
+            Op::ProductOf(result, left, right) => Statement::ProductOf(
+                self.convert_statement_ref(result),
+                self.convert_statement_ref(left),
+                self.convert_statement_ref(right),
+            ),
+            Op::MaxOf(result, left, right) => Statement::MaxOf(
+                self.convert_statement_ref(result),
+                self.convert_statement_ref(left),
+                self.convert_statement_ref(right),
+            ),
+            _ => todo!(), // Add other operation types as needed
+        };
+
+        self.statement_table
+            .insert((self.current_origin_id, statement_id), statement);
+    }
+
+    fn convert_statement_ref(&self, sref: StatementRef) -> AnchoredKey {
+        // Convert StatementRef to AnchoredKey
+        AnchoredKey(
+            Origin::new(
+                GoldilocksField(self.current_origin_id as u64),
+                sref.0.to_string(),
+                GadgetID::ORACLE,
+            ),
+            sref.1.to_string(),
+        )
+    }
+
+    fn next_statement_id(&mut self) -> String {
+        let id = format!("{}{}", STATEMENT_PREFIX_OTHER, self.next_statement_id);
+        self.next_statement_id += 1;
+        id
+    }
+
+    fn next_tmp_id(&mut self) -> usize {
+        let id = self.tmp_counter;
+        self.tmp_counter += 1;
+        id
     }
 }
 
@@ -433,7 +606,31 @@ impl Expr {
                     Expr::Atom(_, op) => {
                         // Handle operation which can be tracked inside PODs
                         if let Ok(op_type) = OpType::from_str(op) {
-                            return self.eval_operation(op_type, &exprs[1..], env).await;
+                            if let Some(ref _builder) = env.current_builder {
+                                // We're in pod creation context - use existing eval_operation
+                                return self.eval_operation(op_type, &exprs[1..], env).await;
+                            } else {
+                                // We're in query context - handle pattern creation
+                                if exprs.len() != 3 {
+                                    return Err(anyhow!("Operations require exactly two operands"));
+                                }
+                                let op1 = exprs[1].eval(env.clone()).await?;
+                                let op2 = exprs[2].eval(env.clone()).await?;
+
+                                match (&op1, &op2) {
+                                    (Value::Scalar(l), Value::Scalar(r)) => {
+                                        let operation = Operation::from((op_type, op1, op2));
+                                        return Ok(Value::Scalar(operation.eval()?));
+                                    }
+                                    _ => {
+                                        let operation =
+                                            Operation::from((op_type, op1.clone(), op2.clone()));
+                                        return Ok(Value::Pattern(Box::new(
+                                            QueryPattern::Operation(operation),
+                                        )));
+                                    }
+                                }
+                            }
                         }
                         match op.as_str() {
                             "createpod" => {
@@ -446,7 +643,7 @@ impl Expr {
                                 if exprs.len() < 2 {
                                     return Err(anyhow!("pod? requires at least one argument"));
                                 }
-                                return self.eval_pod_query(&exprs[1..], env).await;
+                                self.eval_pod_query(&exprs[1..], env).await
                             }
                             "define" => {
                                 if exprs.len() != 3 {
@@ -712,8 +909,13 @@ impl Expr {
                                     return Err(anyhow!("Source pod not found in input pods"));
                                 }
                             }
+                            _ => todo!(),
                         },
-                        _ => return Err(anyhow!("Can't assign a non scalar to pod entry")),
+                        _ => {
+                            return Err(anyhow!(
+                                "Can't assign a non scalar or non SRef to POD entry"
+                            ))
+                        }
                     }
                 }
                 _ => return Err(anyhow!("Expected key-value pair")),
@@ -722,69 +924,44 @@ impl Expr {
         let pod = builder.lock().unwrap().finalize()?;
         Ok(Value::PodRef(pod))
     }
-    async fn eval_pod_query(&self, parts: &[Expr], env: Env) -> Result<Value> {
-        let store = env.pod_store.lock().unwrap();
-        'outer: for pod in store.pods.iter() {
-            let pod_hash = format!("{:?}", pod.payload.hash_payload());
-            let pod_id = format!("{}{}", POD_PREFIX, pod_hash);
+    async fn eval_pod_query(&self, args: &[Expr], env: Env) -> Result<Value> {
+        let mut query = PodQueryBuilder::new();
 
-            // Skip if this pod has already been used as an input pod
-            if let Some(ref builder) = env.current_builder {
-                let builder = builder.lock().unwrap();
-                if builder.input_pods.contains_key(&pod_id) {
-                    continue 'outer;
-                }
-            }
-
-            let mut matched_refs = Vec::new();
-            for part in parts {
-                match part {
-                    Expr::Atom(_, key) => {
-                        // Find a ValueOf statement on _SELF that matches the key we are looking for
-                        if let Some(statement_key) = pod
-                            .payload
-                            .statements_map
-                            .iter()
-                            .find(|(_, s)| {
-                                s.value_of_anchored_key()
-                                    .and_then(|k| Some(k.0.is_self() && k.1 == *key))
-                                    .filter(|&x| x)
-                                    .unwrap_or(false)
-                            })
-                            .map(|(key, _s)| key)
-                        {
-                            matched_refs.push(SRef(
-                                // the origin will be corrected later
-                                ORef::P("_placeholder".to_string()),
-                                statement_key.clone(),
-                            ));
-                        } else {
-                            continue 'outer;
-                        }
+        for arg in args {
+            match arg {
+                Expr::List(_, pair) => {
+                    if pair.len() != 2 {
+                        return Err(anyhow!("Query patterns must be pairs"));
                     }
-                    Expr::List(_, _pattern) => todo!(),
+
+                    let key = match &pair[0] {
+                        Expr::Atom(_, k) => k.clone(),
+                        _ => return Err(anyhow!("Key must be an atom")),
+                    };
+
+                    let pattern = pair[1].eval(env.clone()).await?;
+
+                    match pattern {
+                        Value::Pattern(p) => {
+                            let sref = add_pattern_to_query(*p, &mut query)?;
+                            query.add_sref_match(&key, sref);
+                        }
+                        Value::Scalar(s) => {
+                            query.add_scalar_match(&key, s);
+                        }
+                        Value::SRef(sref) => {
+                            query.add_sref_match(&key, sref);
+                        }
+                        _ => return Err(anyhow!("Invalid pattern type")),
+                    }
                 }
-            }
-            if let Some(ref builder) = env.current_builder {
-                let mut builder = builder.lock().unwrap();
-                let pod_id = builder.register_input_pod(pod);
-                let srefs: Vec<SRef> = matched_refs
-                    .into_iter()
-                    .map(|sref| SRef::new(pod_id.clone(), sref.1))
-                    .collect();
-                // If only one key was queried, return single SRef
-                // Otherwise return a List of SRefs
-                return if srefs.len() == 1 {
-                    Ok(Value::SRef(srefs.into_iter().next().unwrap()))
-                } else {
-                    Ok(Value::List(srefs.into_iter().map(Value::SRef).collect()))
-                };
-            } else {
-                return Err(anyhow!("pod? not in createpod context"));
+                _ => return Err(anyhow!("Query arguments must be key-value pairs")),
             }
         }
-        return Err(anyhow!("No pod found matching statements"));
+
+        find_matching_pod(query, env).await
     }
+
     async fn eval_operation(&self, op_type: OpType, operands: &[Expr], env: Env) -> Result<Value> {
         if operands.len() != 2 {
             return Err(anyhow!("Operations require exactly two operands"));
@@ -884,6 +1061,215 @@ fn get_value_from_sref(sref: &SRef, env: &Env) -> Result<GoldilocksField> {
     }
 }
 
+fn add_pattern_to_query(pattern: QueryPattern, query: &mut PodQueryBuilder) -> Result<SRef> {
+    match pattern {
+        QueryPattern::Constant(value) => Ok(query.add_constant_to_statements_table(value)),
+        QueryPattern::Reference(sref) => Ok(sref),
+        QueryPattern::Operation(operation) => {
+            let result_sref = SRef(
+                ORef::Q(query.current_origin_id),
+                format!("tmp_{}", query.next_tmp_id()),
+            );
+
+            // Extract operands
+            let (op1, op2) = match &operation {
+                Operation::Sum(a, b) | Operation::Product(a, b) | Operation::Max(a, b) => (a, b),
+            };
+
+            // Convert operands to SRefs
+            let op1_sref = value_to_sref(op1, query)?;
+            let op2_sref = value_to_sref(op2, query)?;
+
+            // Add operation to query
+            let op_type = match operation {
+                Operation::Sum(_, _) => OpType::Add,
+                Operation::Product(_, _) => OpType::Multiply,
+                Operation::Max(_, _) => OpType::Max,
+            };
+
+            query.add_operation(Operation::into_pod_op(
+                op_type,
+                result_sref.clone(),
+                op1_sref,
+                op2_sref,
+            ));
+
+            Ok(result_sref)
+        }
+    }
+}
+
+fn value_to_sref(value: &Value, query: &mut PodQueryBuilder) -> Result<SRef> {
+    match value {
+        Value::Scalar(s) => Ok(query.add_constant_to_statements_table(*s)),
+        Value::SRef(sref) => Ok(sref.clone()),
+        Value::Pattern(p) => add_pattern_to_query(*p.clone(), query),
+        _ => Err(anyhow!("Cannot convert value to SRef")),
+    }
+}
+
+async fn find_matching_pod(query: PodQueryBuilder, env: Env) -> Result<Value> {
+    let store = env.pod_store.lock().unwrap();
+
+    'pod_loop: for pod in store.pods.iter() {
+        let mut id_mapping = HashMap::new(); // Maps (origin_id, statement_name) -> SRef
+
+        // Try to match all statements in pattern
+        for ((origin_id, statement_key), query_statement) in &query.statement_table {
+            if !statement_matches(query_statement, pod, &mut id_mapping, *origin_id)? {
+                continue 'pod_loop;
+            }
+        }
+
+        // Found a match - return the requested SRefs
+        if query.srefs.len() == 1 {
+            let sref = &query.srefs[0];
+            if let ORef::Q(id) = sref.0 {
+                // Map the query ref to actual pod ref
+                if let Some(mapped_sref) = id_mapping.get(&(id, sref.1.clone())) {
+                    return Ok(Value::SRef(mapped_sref.clone()));
+                }
+            }
+            // If not a query ref or not mapped, return as is
+            return Ok(Value::SRef(sref.clone()));
+        } else {
+            return Ok(Value::List(
+                query
+                    .srefs
+                    .iter()
+                    .map(|sref| {
+                        if let ORef::Q(id) = sref.0 {
+                            if let Some(mapped_sref) = id_mapping.get(&(id, sref.1.clone())) {
+                                Value::SRef(mapped_sref.clone())
+                            } else {
+                                Value::SRef(sref.clone())
+                            }
+                        } else {
+                            Value::SRef(sref.clone())
+                        }
+                    })
+                    .collect(),
+            ));
+        }
+    }
+
+    Err(anyhow!("No pod found matching statements"))
+}
+
+fn statement_matches(
+    query_statement: &Statement,
+    pod: &POD,
+    id_mapping: &mut HashMap<(usize, String), SRef>,
+    origin_id: usize,
+) -> Result<bool> {
+    match query_statement {
+        Statement::ValueOf(query_key, query_value) => {
+            // Try to find a matching ValueOf statement in the pod
+            for (pod_statement_key, pod_statement) in &pod.payload.statements_map {
+                if let Statement::ValueOf(pod_anchored_key, pod_value) = pod_statement {
+                    // For scalar value queries, match the actual value
+                    if let (ScalarOrVec::Scalar(query_scalar), ScalarOrVec::Scalar(pod_scalar)) =
+                        (query_value, pod_value)
+                    {
+                        if query_scalar == pod_scalar {
+                            // Add mapping from query key to pod statement
+                            id_mapping.insert(
+                                (origin_id, query_key.1.clone()),
+                                SRef(
+                                    ORef::P(pod_anchored_key.0.origin_name.clone()),
+                                    pod_statement_key.clone(),
+                                ),
+                            );
+                            return Ok(true);
+                        }
+                    }
+                }
+            }
+            Ok(false)
+        }
+        Statement::SumOf(result, left, right) => {
+            match_operation(pod, id_mapping, origin_id, result, left, right, |s| {
+                matches!(s, Statement::SumOf(_, _, _))
+            })
+        }
+        Statement::ProductOf(result, left, right) => {
+            match_operation(pod, id_mapping, origin_id, result, left, right, |s| {
+                matches!(s, Statement::ProductOf(_, _, _))
+            })
+        }
+        Statement::MaxOf(result, left, right) => {
+            match_operation(pod, id_mapping, origin_id, result, left, right, |s| {
+                matches!(s, Statement::MaxOf(_, _, _))
+            })
+        }
+        _ => Ok(false),
+    }
+}
+
+fn match_operation(
+    pod: &POD,
+    id_mapping: &mut HashMap<(usize, String), SRef>,
+    origin_id: usize,
+    result: &AnchoredKey,
+    left: &AnchoredKey,
+    right: &AnchoredKey,
+    is_matching_op: impl Fn(&Statement) -> bool,
+) -> Result<bool> {
+    for (pod_statement_key, pod_statement) in &pod.payload.statements_map {
+        if is_matching_op(pod_statement) {
+            let (pod_result, pod_left, pod_right) = match pod_statement {
+                Statement::SumOf(r, l, r2)
+                | Statement::ProductOf(r, l, r2)
+                | Statement::MaxOf(r, l, r2) => (r, l, r2),
+                _ => continue,
+            };
+
+            // Match operands recursively
+            if operands_match(left, pod_left, id_mapping, origin_id)?
+                && operands_match(right, pod_right, id_mapping, origin_id)?
+            {
+                // Add mapping for result
+                id_mapping.insert(
+                    (origin_id, result.1.clone()),
+                    SRef(
+                        ORef::P(pod_result.0.origin_name.clone()),
+                        pod_statement_key.clone(),
+                    ),
+                );
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn operands_match(
+    query_key: &AnchoredKey,
+    pod_key: &AnchoredKey,
+    id_mapping: &mut HashMap<(usize, String), SRef>,
+    origin_id: usize,
+) -> Result<bool> {
+    let query_oref = ORef::from(query_key.0.clone());
+    match query_oref {
+        ORef::Q(_) => {
+            if let Some(mapped_sref) = id_mapping.get(&(origin_id, query_key.1.clone())) {
+                // If we've seen this query key before, check it matches
+                let mapped_sref_origin: Origin = mapped_sref.0.clone().into();
+                Ok(pod_key.0.origin_name == mapped_sref_origin.origin_name
+                    && pod_key.1 == mapped_sref.1)
+            } else {
+                // First time seeing this query key, add mapping
+                id_mapping.insert(
+                    (origin_id, query_key.1.clone()),
+                    SRef(ORef::P(pod_key.0.origin_name.clone()), query_key.1.clone()),
+                );
+                Ok(true)
+            }
+        }
+        _ => Ok(query_key == pod_key),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -900,6 +1286,12 @@ mod tests {
                 }
             })
             .and_then(|(_, s)| s.value().ok())
+    }
+    async fn setup_env() -> (Env, Arc<Mutex<MyPods>>) {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+        (env, pod_store)
     }
     #[test]
     fn test_parse() {
@@ -1141,6 +1533,238 @@ mod tests {
                     assert_eq!(
                         get_self_entry_value(&pod, "a").unwrap(),
                         ScalarOrVec::Scalar(GoldilocksField(11))
+                    );
+                    Ok(())
+                }
+                _ => Err(anyhow!("Expected PodRef")),
+            }
+        } else {
+            Err(anyhow!("Failed to create test pod"))
+        }
+    }
+    #[tokio::test]
+    async fn test_simple_scalar_query() -> Result<()> {
+        let (env, pod_store) = setup_env().await;
+
+        // Create pod with simple scalar value
+        let pod = eval("[createpod test_pod x 10]", env.clone()).await?;
+        if let Value::PodRef(pod) = pod {
+            pod_store.lock().unwrap().add_pod(pod);
+        }
+
+        // Query for exact value match
+        let result = eval("[pod? [x 10]]", env.clone()).await?;
+        match result {
+            Value::SRef(sref) => {
+                assert!(sref.1.contains("VALUEOF:x"));
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected SRef")),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_operation_query() -> Result<()> {
+        let (env, pod_store) = setup_env().await;
+
+        // Create pod with operation result
+        let pod = eval("[createpod test_pod x [+ 10 20]]", env.clone()).await?;
+        if let Value::PodRef(pod) = pod {
+            pod_store.lock().unwrap().add_pod(pod);
+        }
+
+        // Query using same operation
+        let result = eval("[pod? [x [+ 10 20]]]", env.clone()).await?;
+        assert!(matches!(result, Value::SRef(_)));
+
+        // Query using final value
+        let result = eval("[pod? [x 30]]", env.clone()).await?;
+        assert!(matches!(result, Value::SRef(_)));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_multiple_value_query() -> Result<()> {
+        let (env, pod_store) = setup_env().await;
+
+        // Create pod with multiple values
+        let pod = eval("[createpod test_pod x 10 y 20]", env.clone()).await?;
+        if let Value::PodRef(pod) = pod {
+            pod_store.lock().unwrap().add_pod(pod);
+        }
+
+        // Query for multiple values
+        let result = eval("[pod? [x 10] [y 20]]", env.clone()).await?;
+        match result {
+            Value::List(values) => {
+                assert_eq!(values.len(), 2);
+                assert!(matches!(&values[0], Value::SRef(_)));
+                assert!(matches!(&values[1], Value::SRef(_)));
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected List")),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_refer_to_other_keys_query() -> Result<()> {
+        let (env, pod_store) = setup_env().await;
+
+        // Create pod with multiple values
+        let pod = eval("[createpod test_pod x 10 y [+ 10 x]]", env.clone()).await?;
+        if let Value::PodRef(pod) = pod {
+            pod_store.lock().unwrap().add_pod(pod);
+        }
+
+        // Query for multiple values
+        let result = eval("[pod? [x 10] [y [+ 10 x]]]", env.clone()).await?;
+        match result {
+            Value::List(values) => {
+                assert_eq!(values.len(), 2);
+                assert!(matches!(&values[0], Value::SRef(_)));
+                assert!(matches!(&values[1], Value::SRef(_)));
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected List")),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_nested_operation_query() -> Result<()> {
+        let (env, pod_store) = setup_env().await;
+
+        // Create pod with nested operations
+        let pod = eval(
+            "[createpod test_pod result [+ [* 10 2] [* 3 4]]]",
+            env.clone(),
+        )
+        .await?;
+        if let Value::PodRef(pod) = pod {
+            pod_store.lock().unwrap().add_pod(pod);
+        }
+
+        // Query using same nested operation structure
+        let result = eval("[pod? [result [+ [* 10 2] [* 3 4]]]]", env.clone()).await?;
+        assert!(matches!(result, Value::SRef(_)));
+
+        // Query using final value
+        let result = eval("[pod? [result 32]]", env.clone()).await?;
+        assert!(matches!(result, Value::SRef(_)));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_recursive_pod_query() -> Result<()> {
+        let (env, pod_store) = setup_env().await;
+
+        // Create two pods with related values
+        let pod1 = eval("[createpod pod1 value 10]", env.clone()).await?;
+        if let Value::PodRef(pod1) = pod1 {
+            pod_store.lock().unwrap().add_pod(pod1);
+        }
+
+        let pod2 = eval("[createpod pod2 result [+ [pod? value] 5]]", env.clone()).await?;
+        if let Value::PodRef(pod2) = pod2 {
+            pod_store.lock().unwrap().add_pod(pod2);
+        }
+
+        // Query for pod that references first pod's value
+        let result = eval("[pod? [result 15]]", env.clone()).await?;
+        assert!(matches!(result, Value::SRef(_)));
+
+        // Query using the same structure
+        let result = eval("[pod? [result [+ [pod? value] 5]]]", env.clone()).await?;
+        assert!(matches!(result, Value::SRef(_)));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_no_match_query() -> Result<()> {
+        let (env, pod_store) = setup_env().await;
+
+        // Create pod
+        let pod = eval("[createpod test_pod x 10]", env.clone()).await?;
+        if let Value::PodRef(pod) = pod {
+            pod_store.lock().unwrap().add_pod(pod);
+        }
+
+        // Query for non-existent value
+        let result = eval("[pod? [x 20]]", env.clone()).await;
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_max_operation_query() -> Result<()> {
+        let (env, pod_store) = setup_env().await;
+
+        // Create pod with max operation
+        let pod = eval("[createpod test_pod result [max 30 20]]", env.clone()).await?;
+        if let Value::PodRef(pod) = pod {
+            pod_store.lock().unwrap().add_pod(pod);
+        }
+
+        // Query using same operation
+        let result = eval("[pod? [result [max 30 20]]]", env.clone()).await?;
+        assert!(matches!(result, Value::SRef(_)));
+
+        // Query using final value
+        let result = eval("[pod? [result 30]]", env.clone()).await?;
+        assert!(matches!(result, Value::SRef(_)));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_pod_query_operation_matchin() -> Result<()> {
+        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+
+        let pod1 = eval(
+            "[createpod test_pod1 value1 10 value2 [+ 10 value1] value3 [* 2 value2]]",
+            env.clone(),
+        )
+        .await?;
+        if let Value::PodRef(pod1) = pod1 {
+            pod_store.lock().unwrap().add_pod(pod1);
+
+            let result = eval(
+                "[createpod final
+                    [define x [pod? [value3 [* 2 [+ 10 value1]]]]]
+                    a [+ x 1]]",
+                env.clone(),
+            )
+            .await?;
+
+            match result {
+                Value::PodRef(pod) => {
+                    assert_eq!(
+                        get_self_entry_value(&pod, "a").unwrap(),
+                        ScalarOrVec::Scalar(GoldilocksField(21))
+                    );
+                }
+                _ => return Err(anyhow!("Expected PodRef")),
+            }
+
+            // Both of these queries should work
+            let result = eval(
+                "[createpod final
+                    [define x [pod? [value3 [* 2 value2]]]]
+                    a [+ x 1]]",
+                env.clone(),
+            )
+            .await?;
+
+            match result {
+                Value::PodRef(pod) => {
+                    assert_eq!(
+                        get_self_entry_value(&pod, "a").unwrap(),
+                        ScalarOrVec::Scalar(GoldilocksField(21))
                     );
                     Ok(())
                 }
