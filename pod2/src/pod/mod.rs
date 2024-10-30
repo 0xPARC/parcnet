@@ -119,11 +119,22 @@ impl POD {
         }
     }
 
+    fn pad_entries(entries: &[Entry]) -> Vec<Entry> {
+        let mut padded_entries = entries.to_vec();
+        for i in padded_entries.len()..25 {
+            padded_entries.push(Entry {
+                key: format!("~DUMMY_KEY_{}", i),
+                value: ScalarOrVec::Scalar(GoldilocksField(0)),
+            });
+        }
+        padded_entries
+    }
+
     pub fn execute_schnorr_gadget(entries: &[Entry], sk: &SchnorrSecretKey) -> Self {
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
         let protocol = SchnorrSigner::new();
 
-        let kv_pairs = [
+        let mut kv_pairs = [
             entries.to_vec(),
             vec![Entry {
                 key: SIGNER_PK_KEY.to_string(),
@@ -131,6 +142,8 @@ impl POD {
             }],
         ]
         .concat();
+
+        kv_pairs = POD::pad_entries(&kv_pairs);
 
         let statement_map: HashMap<String, Statement> = kv_pairs
             .iter()
@@ -152,14 +165,29 @@ impl POD {
         }
     }
 
+    fn pad_op_cmds<'a>(cmds: &[OpCmd<'a>]) -> (Vec<OpCmd<'a>>, Vec<String>) {
+        // This indicates 'a must live at least as long as 'static
+        let mut padded_cmds = cmds.iter().map(|c| c.clone()).collect::<Vec<OpCmd>>();
+        let mut keys = Vec::new();
+        for i in padded_cmds.len()..25 {
+            let key = format!("~DUMMY_KEY_{}", i);
+            let dummy_entry = Entry::new_from_scalar(&key, GoldilocksField(0));
+            padded_cmds.push(OpCmd(Op::NewEntry(dummy_entry), &key));
+            keys.push(key.clone())
+        }
+        (padded_cmds, keys)
+    }
+
     pub fn execute_cmds_with_gadget_id(
         input: &GPGInput,
-        cmds: &[OpCmd],
+        cmds: &[OpCmd<'static>],
         gadget_id: GadgetID,
     ) -> Result<PODPayload> {
         let mut statements = input.remap_origin_ids_by_name()?;
         statements.insert("_SELF".to_string(), HashMap::new());
-        for cmd in cmds {
+
+        let padded_cmds = POD::pad_op_cmds(cmds);
+        for cmd in padded_cmds {
             let OpCmd(op, output_name) = cmd;
             let new_statement = op.execute(gadget_id, &statements)?;
             statements.get_mut("_SELF").unwrap().insert(
@@ -170,7 +198,7 @@ impl POD {
         Ok(PODPayload::new(statements.get("_SELF").unwrap()))
     }
 
-    pub fn execute_oracle_gadget(input: &GPGInput, cmds: &[OpCmd]) -> Result<Self> {
+    pub fn execute_oracle_gadget(input: &GPGInput, cmds: &[OpCmd<'static>]) -> Result<Self> {
         let out_payload = POD::execute_cmds_with_gadget_id(input, cmds, GadgetID::ORACLE)?;
         // println!("{:?}", out_payload);
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
