@@ -165,19 +165,6 @@ impl POD {
         }
     }
 
-    fn pad_op_cmds<'a>(cmds: &[OpCmd<'a>]) -> (Vec<OpCmd<'a>>, Vec<String>) {
-        // This indicates 'a must live at least as long as 'static
-        let mut padded_cmds = cmds.iter().map(|c| c.clone()).collect::<Vec<OpCmd>>();
-        let mut keys = Vec::new();
-        for i in padded_cmds.len()..25 {
-            let key = format!("~DUMMY_KEY_{}", i);
-            let dummy_entry = Entry::new_from_scalar(&key, GoldilocksField(0));
-            padded_cmds.push(OpCmd(Op::NewEntry(dummy_entry), &key));
-            keys.push(key.clone())
-        }
-        (padded_cmds, keys)
-    }
-
     pub fn execute_cmds_with_gadget_id(
         input: &GPGInput,
         cmds: &[OpCmd<'static>],
@@ -186,8 +173,15 @@ impl POD {
         let mut statements = input.remap_origin_ids_by_name()?;
         statements.insert("_SELF".to_string(), HashMap::new());
 
-        let padded_cmds = POD::pad_op_cmds(cmds);
-        for cmd in padded_cmds {
+        /* Pad */
+        let mut padded_cmds = cmds.iter().map(|c| c.clone()).collect::<Vec<OpCmd>>();
+        let keys = (padded_cmds.len()..25).map(|i| format!("~DUMMY_KEY_{}", i)).collect::<Vec<_>>();
+        for i in padded_cmds.len()..25 {
+            let dummy_entry = Entry::new_from_scalar(&keys[i], GoldilocksField(0));
+            padded_cmds.push(OpCmd(Op::NewEntry(dummy_entry), &keys[i]));
+        }
+        
+        for cmd in padded_cmds.iter() {
             let OpCmd(op, output_name) = cmd;
             let new_statement = op.execute(gadget_id, &statements)?;
             statements.get_mut("_SELF").unwrap().insert(
