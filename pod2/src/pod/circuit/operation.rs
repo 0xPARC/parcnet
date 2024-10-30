@@ -311,7 +311,7 @@ impl<'a, const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget
                 // as-yet unevaluated op.
                 op_list_target[i].eval_with_gadget_id(
                     builder,
-                    GadgetID::ORACLE,
+                    GadgetID::PLONKY,
                     &input_and_output_statement_list_vec_target,
                 )
             })?;
@@ -352,19 +352,30 @@ impl<'a, const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget
 
         // TODO: Abstract this away.
         // Determine output POD statements for the purposes of later reference
-        let output_pod = POD::execute_oracle_gadget(&input.0, &input.1 .0)?;
-        println!("{:?}", output_pod.payload.statements_list);
-        let input_and_output_pod_list = [
-            input.0.pods_list.clone(),
-            vec![("_SELF".to_string(), output_pod)],
+        let output_pod_payload =
+            POD::execute_cmds_with_gadget_id(&input.0, &input.1 .0, GadgetID::PLONKY)?;
+        println!("{:?}", output_pod_payload.statements_list);
+        let input_and_output_pod_payload_list = [
+            input
+                .0
+                .pods_list
+                .iter()
+                .map(|(name, p)| (name.clone(), p.payload.clone()))
+                .collect::<Vec<(String, PODPayload)>>()
+                .clone(),
+            vec![("_SELF".to_string(), output_pod_payload)],
         ]
         .concat();
 
         // Set operation targets
-        let ref_index_map = StatementRef::index_map(&input_and_output_pod_list);
-        zip(&targets.2, input.1.sort(&input_and_output_pod_list).0).try_for_each(
-            |(op_target, OperationCmd(op, _))| op_target.set_witness(pw, &op, &ref_index_map),
-        )?;
+        let ref_index_map = StatementRef::index_map(&input_and_output_pod_payload_list);
+        zip(
+            &targets.2,
+            input.1.sort(&input_and_output_pod_payload_list).0,
+        )
+        .try_for_each(|(op_target, OperationCmd(op, _))| {
+            op_target.set_witness(pw, &op, &ref_index_map)
+        })?;
 
         // Check output statement list target
         zip(&targets.3, output).try_for_each(|(s_target, (_, s))| s_target.set_witness(pw, s))
@@ -438,6 +449,13 @@ mod tests {
             &SchnorrSecretKey { sk: 20 },
         );
 
+        let pod_payloads_list = [
+            (schnorr_pod1_name.clone(), schnorr_pod1.payload.clone()),
+            (schnorr_pod2_name.clone(), schnorr_pod2.payload.clone()),
+            (schnorr_pod3_name.clone(), schnorr_pod3.payload.clone()),
+            (schnorr_pod4_name.clone(), schnorr_pod4.payload.clone()),
+        ];
+
         let pods_list = [
             (schnorr_pod1_name.clone(), schnorr_pod1),
             (schnorr_pod2_name.clone(), schnorr_pod2),
@@ -482,10 +500,10 @@ mod tests {
             ]),
         ]
         .into_iter()
-        .map(|op_list| op_list.sort(&pods_list))
+        .map(|op_list| op_list.sort(&pod_payloads_list))
         .collect::<Vec<_>>();
 
-        let ref_index_map = StatementRef::index_map(&pods_list);
+        let ref_index_map = StatementRef::index_map(&pod_payloads_list);
 
         let gpg_input = GPGInput::new(HashMap::from(pods_list.clone()), HashMap::new());
 
@@ -595,6 +613,13 @@ mod tests {
             &SchnorrSecretKey { sk: 20 },
         );
 
+        let pod_payloads_list = [
+            (schnorr_pod1_name.clone(), schnorr_pod1.payload.clone()),
+            (schnorr_pod2_name.clone(), schnorr_pod2.payload.clone()),
+            (schnorr_pod3_name.clone(), schnorr_pod3.payload.clone()),
+            (schnorr_pod4_name.clone(), schnorr_pod4.payload.clone()),
+        ];
+
         let pods_list = [
             (schnorr_pod1_name.clone(), schnorr_pod1),
             (schnorr_pod2_name.clone(), schnorr_pod2),
@@ -651,7 +676,7 @@ mod tests {
             ]),
         ]
         .into_iter()
-        .map(|op_list| op_list.sort(&pods_list))
+        .map(|op_list| op_list.sort(&pod_payloads_list))
         .collect::<Vec<_>>();
 
         let gpg_input = GPGInput::new(HashMap::from(pods_list.clone()), HashMap::new());
@@ -660,7 +685,8 @@ mod tests {
             let config = CircuitConfig::standard_recursion_config();
             let mut builder = CircuitBuilder::<F, D>::new(config);
             let mut pw: PartialWitness<F> = PartialWitness::new();
-            let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &op_list.0)?;
+            let pod_payload =
+                POD::execute_cmds_with_gadget_id(&gpg_input, &op_list.0, GadgetID::PLONKY)?;
 
             // circuit test
             let targets = OpExecutorGadget::<4, 3>::add_targets(&mut builder)?;
@@ -668,7 +694,7 @@ mod tests {
                 &mut pw,
                 &targets,
                 &(gpg_input.clone(), op_list),
-                &oracle_pod.payload.statements_list,
+                &pod_payload.statements_list,
             )?;
 
             let data = builder.build::<C>();

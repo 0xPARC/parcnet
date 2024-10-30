@@ -58,7 +58,7 @@ impl GPGTarget {
         ops: Vec<OperationTarget>,
     ) -> Result<Vec<StatementTarget>> {
         ops.iter()
-            .map(|op| op.eval_with_gadget_id(builder, GadgetID::ORACLE, &self.statements))
+            .map(|op| op.eval_with_gadget_id(builder, GadgetID::PLONKY, &self.statements))
             .collect()
     }
 }

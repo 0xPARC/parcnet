@@ -234,9 +234,9 @@ where
         };
 
         // Output Plonky POD should have this as its statement_list in its payload.
-        let output_statements: StatementList = POD::execute_oracle_gadget(&gpg_input, &op_list.0)?
-            .payload
-            .statements_list;
+        let output_statements: StatementList =
+            POD::execute_cmds_with_gadget_id(&gpg_input, &op_list.0, GadgetID::PLONKY)?
+                .statements_list;
 
         // Verify SchnorrPODs in circuit by routing the first `M` elements of `padded_pod_list`
         // (ignoring the string part of the tuple) and the first `M` elements of `selectors` into the

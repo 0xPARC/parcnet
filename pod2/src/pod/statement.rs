@@ -10,6 +10,7 @@ use super::{
     entry::Entry,
     gadget::GadgetID,
     origin::Origin,
+    payload::PODPayload,
     util::hash_string_to_field,
     value::{HashableEntryValue, ScalarOrVec},
     POD,
@@ -338,12 +339,12 @@ impl<'a> StatementOrRef for StatementRef<'a> {
 }
 
 impl<'a> StatementRef<'a> {
-    pub fn index_map(pods_list: &'a [(String, POD)]) -> HashMap<Self, (usize, usize)> {
+    pub fn index_map(pods_list: &'a [(String, PODPayload)]) -> HashMap<Self, (usize, usize)> {
         pods_list
             .iter()
             .enumerate()
-            .flat_map(|(pod_num, (pod_name, pod))| {
-                pod.payload.statements_list.iter().enumerate().map(
+            .flat_map(|(pod_num, (pod_name, pod_payload))| {
+                pod_payload.statements_list.iter().enumerate().map(
                     move |(statement_num, (statement_name, _))| {
                         (
                             StatementRef(pod_name, statement_name),

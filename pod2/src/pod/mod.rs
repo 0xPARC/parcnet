@@ -152,19 +152,26 @@ impl POD {
         }
     }
 
-    pub fn execute_oracle_gadget(input: &GPGInput, cmds: &[OpCmd]) -> Result<Self> {
+    pub fn execute_cmds_with_gadget_id(
+        input: &GPGInput,
+        cmds: &[OpCmd],
+        gadget_id: GadgetID,
+    ) -> Result<PODPayload> {
         let mut statements = input.remap_origin_ids_by_name()?;
         statements.insert("_SELF".to_string(), HashMap::new());
         for cmd in cmds {
             let OpCmd(op, output_name) = cmd;
-            let new_statement = op.execute(GadgetID::ORACLE, &statements)?;
+            let new_statement = op.execute(gadget_id, &statements)?;
             statements.get_mut("_SELF").unwrap().insert(
                 format!("{}:{}", new_statement.predicate(), output_name),
                 new_statement,
             );
         }
-        let out_statements = statements.get("_SELF").unwrap();
-        let out_payload = PODPayload::new(out_statements);
+        Ok(PODPayload::new(statements.get("_SELF").unwrap()))
+    }
+
+    pub fn execute_oracle_gadget(input: &GPGInput, cmds: &[OpCmd]) -> Result<Self> {
+        let out_payload = POD::execute_cmds_with_gadget_id(input, cmds, GadgetID::ORACLE)?;
         // println!("{:?}", out_payload);
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
         let protocol = SchnorrSigner::new();
@@ -197,7 +204,9 @@ impl POD {
         // here and will be passed as parameter, bcs the circuit_data takes a considerable amount
         // of time to compute. Need to think how we modify the interface to pass the circuit_data
         // to this method.
+        println!("building circuit data");
         let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS>::circuit_data()?;
+        println!("built circuit data");
         PlonkyButNotPlonkyGadget::<M, N, NS>::execute(
             circuit_data,
             &input.pods_list,
@@ -726,6 +735,115 @@ mod tests {
             println!("{:?}", statement);
         }
         assert!(oracle_pod2.verify::<3, 2, 2>()? == true);
+        Ok(())
+    }
+
+    #[test]
+    fn plonky_pod_from_schnorr() -> Result<()> {
+        println!("oracle_pod_from_schnorr_test");
+        // Start with some values.
+        let scalar1 = GoldilocksField(36);
+        let scalar2 = GoldilocksField(52);
+        let scalar3 = GoldilocksField(88);
+        let vector_value = vec![scalar1, scalar2];
+
+        // make entries
+        let entry1 = Entry::new_from_scalar("apple", scalar1);
+        let entry2 = Entry::new_from_scalar("banana", scalar2);
+        let entry3 = Entry::new_from_vec("vector entry", vector_value.clone());
+        let entry4 = Entry::new_from_scalar("scalar entry", scalar2);
+        let entry5 = Entry::new_from_scalar("foo", GoldilocksField(100));
+        let entry6 = Entry::new_from_scalar("baz", GoldilocksField(120));
+        let entry7 = Entry::new_from_scalar("bar", scalar2);
+        let entry9 = Entry::new_from_scalar("claimed sum", scalar3);
+
+        // two schnorr pods
+        let schnorr_pod1 = POD::execute_schnorr_gadget(
+            &vec![entry1.clone(), entry2.clone()],
+            &SchnorrSecretKey { sk: 25 },
+        );
+
+        let schnorr_pod2 = POD::execute_schnorr_gadget(
+            &vec![entry3.clone(), entry4.clone()],
+            &SchnorrSecretKey { sk: 42 },
+        );
+        // make a PlonkyPOD using from_pods called on the two schnorr PODs
+
+        // first make the GPG input
+
+        // make a map of named POD inputs
+        let mut named_input_pods = HashMap::new();
+        named_input_pods.insert("p1".to_string(), schnorr_pod1.clone());
+        named_input_pods.insert("schnorrPOD2".to_string(), schnorr_pod2.clone());
+
+        // make a map of (pod name, old origin name) to new origin name
+        let origin_renaming_map = HashMap::new();
+        // all the inputs are schnorr PODs whose only referenced origin is _SELF
+        // _SELF is taken care of automatically so origin_renaming_map can be empty
+
+        let gpg_input = GPGInput::new(named_input_pods, origin_renaming_map);
+
+        // make a list of the operations we want to call
+        let ops = vec![
+            OpCmd(
+                Op::CopyStatement(StatementRef("p1", "VALUEOF:apple")),
+                "p1-apple",
+            ),
+            OpCmd(
+                Op::CopyStatement(StatementRef("p1", "VALUEOF:banana")),
+                "p1-banana",
+            ),
+            OpCmd(
+                Op::CopyStatement(StatementRef("p1", "VALUEOF:_signer")),
+                "p1-signer",
+            ),
+        ];
+
+        let plonky_pod = POD::execute_plonky_gadget::<2, 2, 3>(&gpg_input, &ops).unwrap();
+        assert!(plonky_pod.verify::<2, 2, 3>()? == true);
+
+        // make another oracle POD which takes that oracle POD and a schnorr POD
+
+        // make the GPG input
+
+        // make a map of named POD inputs
+        let mut named_input_pods2 = HashMap::new();
+        named_input_pods2.insert("parent".to_string(), plonky_pod.clone());
+
+        // make a map of (pod name, old origin name) to new origin name
+        let mut origin_renaming_map2 = HashMap::new();
+        // let's keep the name of the first origin and shorten the name of the second origin
+        origin_renaming_map2.insert(("parent".to_string(), "p1".to_string()), "p1".to_string());
+        // origin_renaming_map2.insert(
+        //     ("parent".to_string(), "schnorrPOD2".to_string()),
+        //     "p2".to_string(),
+        // );
+
+        let gpg_input = GPGInput::new(named_input_pods2, origin_renaming_map2);
+
+        // make a list of the operations we want to call
+
+        let ops = vec![
+            OpCmd(Op::NewEntry(entry4.clone()), "new entry for equality"),
+            OpCmd(
+                Op::EqualityFromEntries(
+                    StatementRef("parent", "VALUEOF:p1-banana"),
+                    StatementRef("_SELF", "VALUEOF:new entry for equality"),
+                ),
+                "equality of banana and new entry",
+            ),
+            OpCmd(
+                Op::CopyStatement(StatementRef("parent", "VALUEOF:p1-signer")),
+                "p1-signer",
+            ),
+        ];
+
+        let plonky_pod2 = POD::execute_plonky_gadget::<2, 2, 3>(&gpg_input, &ops).unwrap();
+        for statement in plonky_pod2.payload.statements_list.iter() {
+            println!("{:?}", statement);
+        }
+        assert!(plonky_pod2.verify::<2, 2, 3>()? == true);
+
         Ok(())
     }
 

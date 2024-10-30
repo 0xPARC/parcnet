@@ -8,6 +8,7 @@ use std::{collections::HashMap, fmt::Debug};
 use super::{
     entry::Entry,
     gadget::GadgetID,
+    payload::PODPayload,
     statement::{Statement, StatementOrRef, StatementRef},
     value::ScalarOrVec,
     POD,
@@ -271,9 +272,9 @@ pub struct OpList<'a>(pub Vec<OperationCmd<'a>>);
 
 #[allow(dead_code)]
 impl<'a> OpList<'a> {
-    pub fn sort(&self, pods_list: &[(String, POD)]) -> Self {
+    pub fn sort(&self, pod_payloads_list: &[(String, PODPayload)]) -> Self {
         // Map from StatementRef to pair of the form (pod index, statement index)
-        let ref_index_map = StatementRef::index_map(pods_list);
+        let ref_index_map = StatementRef::index_map(pod_payloads_list);
 
         let mut sorted_opcmds = self.0.clone();
         let return_type = |op| {
@@ -282,7 +283,7 @@ impl<'a> OpList<'a> {
                 Operation::NewEntry(_) => 1,
                 Operation::CopyStatement(s_ref) => {
                     let (pod_index, statement_index) = ref_index_map.get(&s_ref).unwrap();
-                    pods_list[*pod_index].1.payload.statements_list[*statement_index]
+                    pod_payloads_list[*pod_index].1.statements_list[*statement_index]
                         .1
                         .code()
                         .to_canonical_u64()
@@ -309,12 +310,15 @@ impl<'a> OpList<'a> {
         });
         Self(sorted_opcmds)
     }
-    pub fn to_fields(&self, pods_list: &[(String, POD)]) -> Result<Vec<Vec<GoldilocksField>>> {
+    pub fn to_fields(
+        &self,
+        pod_payloads_list: &[(String, PODPayload)],
+    ) -> Result<Vec<Vec<GoldilocksField>>> {
         // Map from StatementRef to pair of the form (pod index, statement index)
-        let ref_index_map = StatementRef::index_map(pods_list);
+        let ref_index_map = StatementRef::index_map(pod_payloads_list);
 
         // Arrange OpCmds by output statement name and convert.
-        let sorted_oplist = self.sort(pods_list);
+        let sorted_oplist = self.sort(pod_payloads_list);
 
         sorted_oplist
             .0
