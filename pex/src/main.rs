@@ -105,6 +105,42 @@ async fn main() -> Result<()> {
                                 drop(store);
                                 env.pod_store.lock().unwrap().add_pod(pod);
                             }
+                            value if input.trim().starts_with("[pod?") => {
+                                println!("\n{}", "Matching POD:".green());
+                                let store = env.pod_store.lock().unwrap();
+
+                                // Function to extract statement refs
+                                let get_statement_refs = |val: &Value| -> Vec<String> {
+                                    match val {
+                                        Value::SRef(sref) => vec![sref.1.clone()],
+                                        Value::List(values) => values
+                                            .iter()
+                                            .filter_map(|v| {
+                                                if let Value::SRef(sref) = v {
+                                                    Some(sref.1.clone())
+                                                } else {
+                                                    None
+                                                }
+                                            })
+                                            .collect(),
+                                        _ => vec![],
+                                    }
+                                };
+
+                                let statement_refs = get_statement_refs(&value);
+
+                                // Find matching pod
+                                if let Some(pod) = store.pods.iter().find(|pod| {
+                                    statement_refs.iter().any(|ref_str| {
+                                        pod.payload
+                                            .statements_list
+                                            .iter()
+                                            .any(|(id, _)| id == ref_str)
+                                    })
+                                }) {
+                                    print_pod_details(pod, &store);
+                                }
+                            }
                             _ => println!("=> {:?}", result),
                         },
                         Err(e) => println!("{}: {}", "Error".red().bold(), e),
