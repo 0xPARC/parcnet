@@ -19,15 +19,17 @@ use crate::{
         operation::{OpList, Operation as Op, OperationCmd},
         payload::{PODPayload, StatementList},
         statement::StatementRef,
-        GPGInput,
+        GPGInput, Statement,
     },
     recursion::OpsExecutorTrait,
-    D, F,
+    D, F, NUM_BITS,
 };
 
 use super::{
     entry::EntryTarget,
+    origin::OriginTarget,
     statement::{StatementRefTarget, StatementTarget},
+    util::assert_less,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -106,26 +108,73 @@ impl OperationTarget {
         )?;
         let entry_target = self.entry;
 
-        // StatementTarget outputs of each of these ops.
+        // StatementTarget output of the ith opcode.
         let op_out = [
-            StatementTarget::none(builder),
-            StatementTarget::from_entry(builder, &entry_target, gadget_id),
-            statement1_target, // Copy
-            StatementTarget::equal(builder, statement1_target, statement2_target),
-            StatementTarget::not_equal(builder, statement1_target, statement2_target),
-            // TODO: Rest!
+            StatementTarget::none(builder),                                 // None
+            StatementTarget::from_entry(builder, &entry_target, gadget_id), // NewEntry
+            statement1_target,                                              // Copy
+            StatementTarget::equal(builder, statement1_target, statement2_target), // EqualityFromEntries
+            StatementTarget::not_equal(builder, statement1_target, statement2_target), // NonequalityFromEntries
+            StatementTarget::gt(builder, statement1_target, statement2_target), // GtFromEntries
+            StatementTarget {
+                predicate: builder.constant(Statement::EQUAL),
+                origin1: statement1_target.origin1,
+                key1: statement1_target.key1,
+                origin2: statement2_target.origin2,
+                key2: statement2_target.key2,
+                origin3: OriginTarget::none(builder),
+                key3: builder.zero(),
+                value: builder.zero(),
+            }, // TransitiveEqualityFromStatements
+            StatementTarget::not_equal(builder, statement1_target, statement2_target), // GtToNonequality. TODO
+                                                                                // TODO: Rest!
         ];
 
         // Indicators of whether the conditions on the operands were satisfied.
+        let statements_are_value_ofs = {
+            let s1_check = statement1_target.has_code(builder, Statement::VALUE_OF);
+            let s2_check = statement2_target.has_code(builder, Statement::VALUE_OF);
+            builder.and(s1_check, s2_check)
+        };
+
         let statements_1_and_2_equal =
             builder.is_equal(statement1_target.value, statement2_target.value);
+
+        // Gt check. This is a constraint for now (if applicable).
+        let gt_opcode_target = builder.constant(Op::<Statement>::GT_FROM_ENTRIES);
+        let zero_target = builder.zero();
+        let one_target = builder.one();
+        let op_is_gt = builder.is_equal(self.op, gt_opcode_target);
+        let gt_rhs = builder.select(op_is_gt, statement2_target.value, zero_target);
+        let gt_lhs = builder.select(op_is_gt, statement1_target.value, one_target);
+        assert_less::<NUM_BITS>(builder, gt_rhs, gt_lhs);
+
+        // Check whether statement 1 is (a == b) and statement 2 is (b == c)
+        let statements_are_equalities = {
+            let s1_check = statement1_target.has_code(builder, Statement::EQUAL);
+            let s2_check = statement2_target.has_code(builder, Statement::EQUAL);
+            builder.and(s1_check, s2_check)
+        };
+        // TODO
+        let statements_allow_transitivity = {
+            let origins_match = builder.is_equal(
+                statement1_target.origin2.origin_id,
+                statement2_target.origin1.origin_id,
+            );
+            let keys_match = builder.is_equal(statement1_target.key2, statement2_target.key1);
+            builder.and(origins_match, keys_match)
+        };
+
+
         let op_is_valid = [
-            builder._true(),
-            builder._true(),
-            builder._true(),
-            statements_1_and_2_equal, // equality check
-            builder.not(statements_1_and_2_equal), // non-equality check
-                                      // TODO: Rest!
+            builder._true(),                       // None - no checks needed.
+            builder._true(),                       // NewEntry - no checks needed.
+            builder._true(),                       // Copy - no checks needed.
+            statements_1_and_2_equal,              // EqualityFromEntries - equality check
+            builder.not(statements_1_and_2_equal), // NonequalityFromEntries - non-equality check
+            statements_are_value_ofs,              // GtFromEntries - Type-check input statements
+            builder.and(statements_are_equalities, statements_allow_transitivity), // TransitiveEqualityFromStatements
+            statement1_target.has_code(builder, Statement::GT) // GtToNonequality
         ]
         .iter()
         .enumerate()
@@ -528,7 +577,19 @@ mod tests {
                     ),
                     "op2",
                 ),
-                OpCmd(Op::None, "bop"),
+                // TODO: Fails with s4 in place of s3
+                OpCmd(
+                    Op::GtFromEntries(
+                        StatementRef(&schnorr_pod2_name, "VALUEOF:s3"),
+                        StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+                    ),
+                    "bop",
+                ),
+            ]),
+            OpList(vec![
+                OpCmd(Op::None, "cons"),
+                OpCmd(Op::None, "car"),
+                OpCmd(Op::None, "cdr"),
             ]),
         ]
         .into_iter()
