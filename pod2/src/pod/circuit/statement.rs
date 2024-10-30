@@ -184,6 +184,95 @@ impl StatementTarget {
             value: builder.zero(),
         }
     }
+
+    pub fn contains(
+        builder: &mut CircuitBuilder<F, D>,
+        statement1_target: StatementTarget,
+        statement2_target: StatementTarget,
+    ) -> Self {
+        Self {
+            predicate: builder.constant(Statement::CONTAINS),
+            origin1: statement1_target.origin1,
+            key1: statement1_target.key1,
+            origin2: statement2_target.origin1,
+            key2: statement2_target.key1,
+            origin3: OriginTarget::none(builder),
+            key3: builder.zero(),
+            value: builder.zero(),
+        }
+    }
+
+    pub fn rename_contained_by(
+        builder: &mut CircuitBuilder<F, D>,
+        statement1_target: StatementTarget,
+        statement2_target: StatementTarget,
+    ) -> Self {
+        Self {
+            predicate: builder.constant(Statement::CONTAINS),
+            origin1: statement2_target.origin2,
+            key1: statement2_target.key2,
+            origin2: statement1_target.origin2,
+            key2: statement1_target.key2,
+            origin3: OriginTarget::none(builder),
+            key3: builder.zero(),
+            value: builder.zero(),
+        }
+    }
+
+    pub fn sum_of(
+        builder: &mut CircuitBuilder<F, D>,
+        statement1_target: StatementTarget,
+        statement2_target: StatementTarget,
+        statement3_target: StatementTarget,
+    ) -> Self {
+        Self {
+            predicate: builder.constant(Statement::SUM_OF),
+            origin1: statement1_target.origin1,
+            key1: statement1_target.key1,
+            origin2: statement2_target.origin1,
+            key2: statement2_target.key1,
+            origin3: statement3_target.origin1,
+            key3: statement3_target.key1,
+            value: builder.zero(),
+        }
+    }
+
+    pub fn product_of(
+        builder: &mut CircuitBuilder<F, D>,
+        statement1_target: StatementTarget,
+        statement2_target: StatementTarget,
+        statement3_target: StatementTarget,
+    ) -> Self {
+        Self {
+            predicate: builder.constant(Statement::PRODUCT_OF),
+            origin1: statement1_target.origin1,
+            key1: statement1_target.key1,
+            origin2: statement2_target.origin1,
+            key2: statement2_target.key1,
+            origin3: statement3_target.origin1,
+            key3: statement3_target.key1,
+            value: builder.zero(),
+        }
+    }
+
+    pub fn max_of(
+        builder: &mut CircuitBuilder<F, D>,
+        statement1_target: StatementTarget,
+        statement2_target: StatementTarget,
+        statement3_target: StatementTarget,
+    ) -> Self {
+        Self {
+            predicate: builder.constant(Statement::MAX_OF),
+            origin1: statement1_target.origin1,
+            key1: statement1_target.key1,
+            origin2: statement2_target.origin1,
+            key2: statement2_target.key1,
+            origin3: statement3_target.origin1,
+            key3: statement3_target.key1,
+            value: builder.zero(),
+        }
+    }
+
     pub fn from_entry(
         builder: &mut CircuitBuilder<F, D>,
         entry_target: &EntryTarget,
