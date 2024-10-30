@@ -5318,6 +5318,7 @@ dependencies = [
  "anyhow",
  "async-recursion",
  "colored",
+ "constants",
  "eyre",
  "nu-ansi-term 0.50.1",
  "plonky2",

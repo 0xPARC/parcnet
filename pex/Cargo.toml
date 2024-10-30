@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 plonky2.workspace = true
+constants.workspace = true
 pod2.workspace = true
 anyhow.workspace = true
 async-recursion = "1.1.1"

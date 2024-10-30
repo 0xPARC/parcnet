@@ -10,6 +10,7 @@ use pex::repl::{
     reedline::{LispCompleter, LispHighlighter, LispValidator},
 };
 use pex::{Env, MyPods, Value};
+use pod2::signature::schnorr::SchnorrSecretKey;
 use reedline::{
     default_emacs_keybindings, ColumnarMenu, DefaultPrompt, DefaultPromptSegment, Emacs, KeyCode,
     KeyModifiers, MenuBuilder, Reedline, ReedlineEvent, ReedlineMenu, Signal,
@@ -19,7 +20,12 @@ use reedline::{
 async fn main() -> Result<()> {
     let shared = Arc::new(Mutex::new(HashMap::new()));
     let pod_store = Arc::new(Mutex::new(MyPods::default()));
-    let env = Env::new("repl_user".to_string(), shared, pod_store.clone());
+    let env = Env::new(
+        "repl_user".to_string(),
+        shared,
+        pod_store.clone(),
+        Some(SchnorrSecretKey { sk: 42 }),
+    );
 
     let commands = vec![
         "createpod".into(),
