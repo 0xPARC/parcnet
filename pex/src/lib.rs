@@ -16,9 +16,12 @@ use anyhow::{anyhow, Result};
 use async_recursion::async_recursion;
 use plonky2::field::{goldilocks_field::GoldilocksField, types::PrimeField64};
 
-use pod2::pod::{
-    AnchoredKey, Entry, GPGInput, GadgetID, HashablePayload, Op, OpCmd, Origin, ScalarOrVec,
-    Statement, StatementRef, POD,
+use pod2::{
+    pod::{
+        AnchoredKey, Entry, GPGInput, GadgetID, HashablePayload, Op, OpCmd, Origin, ScalarOrVec,
+        Statement, StatementRef, POD,
+    },
+    schnorr::SchnorrSecretKey,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -107,6 +110,7 @@ pub struct Env {
     pub current_query: Option<Arc<Mutex<PodQueryBuilder>>>,
     shared: Arc<Mutex<HashMap<u64, Value>>>,
     bindings: Arc<Mutex<HashMap<String, Value>>>,
+    sk: Option<SchnorrSecretKey>,
 }
 
 #[derive(Clone, Debug)]
@@ -540,63 +544,88 @@ impl PodBuilder {
         SRef::self_ref(format!("{}:{}", PREDICATE_VALUEOF, statement_name))
     }
 
-    pub fn finalize(&self) -> Result<POD> {
-        let mut origin_renaming_map = HashMap::new();
-        let mut used_origin_names = HashSet::new();
-        let mut next_id = 1;
+    pub fn finalize(&self, env: &Env) -> Result<POD> {
+        let could_be_schnorr = self.input_pods.is_empty()
+            && self
+                .pending_operations
+                .iter()
+                .all(|(_, op)| matches!(op.0, Op::NewEntry(_)))
+            && env.sk.is_some();
 
-        for (pod_id, pod) in &self.input_pods {
-            // For _SELF origins, use the pod's payload hash
-            let pod_hash = pod.payload.hash_payload().to_string();
-            if !used_origin_names.insert(pod_hash.clone()) {
-                while used_origin_names.contains(&format!("origin_{}", next_id)) {
+        if could_be_schnorr {
+            // Convert pending operations into entries
+            let entries = self
+                .pending_operations
+                .iter()
+                .filter_map(|(_, op)| {
+                    if let Op::NewEntry(entry) = &op.0 {
+                        Some(entry.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            Ok(POD::execute_schnorr_gadget(&entries, &env.sk.unwrap()))
+        } else {
+            // Original Oracle POD creation logic
+            let mut origin_renaming_map = HashMap::new();
+            let mut used_origin_names = HashSet::new();
+            let mut next_id = 1;
+
+            for (pod_id, pod) in &self.input_pods {
+                // For _SELF origins, use the pod's payload hash
+                let pod_hash = pod.payload.hash_payload().to_string();
+                if !used_origin_names.insert(pod_hash.clone()) {
+                    while used_origin_names.contains(&format!("origin_{}", next_id)) {
+                        next_id += 1;
+                    }
+                    let fallback_name = format!("origin_{}", next_id);
+                    origin_renaming_map.insert(
+                        (pod_id.clone(), SELF_ORIGIN_NAME.to_string()),
+                        fallback_name.clone(),
+                    );
+                    used_origin_names.insert(fallback_name);
                     next_id += 1;
+                } else {
+                    origin_renaming_map.insert(
+                        (pod_id.clone(), SELF_ORIGIN_NAME.to_string()),
+                        format!("{}{}", POD_PREFIX, pod_hash),
+                    );
                 }
-                let fallback_name = format!("origin_{}", next_id);
-                origin_renaming_map.insert(
-                    (pod_id.clone(), SELF_ORIGIN_NAME.to_string()),
-                    fallback_name.clone(),
-                );
-                used_origin_names.insert(fallback_name);
-                next_id += 1;
-            } else {
-                origin_renaming_map.insert(
-                    (pod_id.clone(), SELF_ORIGIN_NAME.to_string()),
-                    format!("{}{}", POD_PREFIX, pod_hash),
-                );
-            }
 
-            for (_, statement) in &pod.payload.statements_list {
-                // Check all anchored keys in the statement
-                for anchored_key in statement.anchored_keys() {
-                    if !anchored_key.0.is_self() {
-                        let origin_name = anchored_key.0.origin_name.clone();
-                        if !used_origin_names.insert(origin_name.clone()) {
-                            // Name clash - fallback to incremental ID
-                            while used_origin_names.contains(&format!("origin_{}", next_id)) {
+                for (_, statement) in &pod.payload.statements_list {
+                    // Check all anchored keys in the statement
+                    for anchored_key in statement.anchored_keys() {
+                        if !anchored_key.0.is_self() {
+                            let origin_name = anchored_key.0.origin_name.clone();
+                            if !used_origin_names.insert(origin_name.clone()) {
+                                // Name clash - fallback to incremental ID
+                                while used_origin_names.contains(&format!("origin_{}", next_id)) {
+                                    next_id += 1;
+                                }
+                                let fallback_name = format!("origin_{}", next_id);
+                                origin_renaming_map
+                                    .insert((pod_id.clone(), origin_name), fallback_name.clone());
+                                used_origin_names.insert(fallback_name);
                                 next_id += 1;
+                            } else {
+                                // Can keep the original name
+                                origin_renaming_map
+                                    .insert((pod_id.clone(), origin_name.clone()), origin_name);
                             }
-                            let fallback_name = format!("origin_{}", next_id);
-                            origin_renaming_map
-                                .insert((pod_id.clone(), origin_name), fallback_name.clone());
-                            used_origin_names.insert(fallback_name);
-                            next_id += 1;
-                        } else {
-                            // Can keep the original name
-                            origin_renaming_map
-                                .insert((pod_id.clone(), origin_name.clone()), origin_name);
                         }
                     }
                 }
             }
+            let gpg_input = GPGInput::new(self.input_pods.clone(), origin_renaming_map);
+            let pending_ops: &[OpCmd] = &self
+                .pending_operations
+                .iter()
+                .map(|(_, ops)| ops.clone())
+                .collect::<Vec<OpCmd>>()[..];
+            POD::execute_oracle_gadget(&gpg_input, pending_ops)
         }
-        let gpg_input = GPGInput::new(self.input_pods.clone(), origin_renaming_map);
-        let pending_ops: &[OpCmd] = &self
-            .pending_operations
-            .iter()
-            .map(|(_, ops)| ops.clone())
-            .collect::<Vec<OpCmd>>()[..];
-        POD::execute_oracle_gadget(&gpg_input, pending_ops)
     }
 }
 
@@ -605,6 +634,7 @@ impl Env {
         user: User,
         shared: Arc<Mutex<HashMap<u64, Value>>>,
         pod_store: Arc<Mutex<MyPods>>,
+        sk: Option<SchnorrSecretKey>,
     ) -> Self {
         Self {
             user,
@@ -613,6 +643,7 @@ impl Env {
             current_builder: None,
             current_query: None,
             bindings: Arc::new(Mutex::new(HashMap::new())),
+            sk,
         }
     }
 
@@ -625,6 +656,7 @@ impl Env {
             current_builder: self.current_builder.clone(),
             current_query: self.current_query.clone(),
             bindings: Arc::new(Mutex::new(self.bindings.lock().unwrap().clone())),
+            sk: self.sk.clone(),
         }
     }
 
@@ -843,6 +875,7 @@ impl Expr {
                     // Existing number parsing
                     Ok(Value::Scalar(GoldilocksField(num)))
                 } else if env.current_query.is_some() {
+                    // Create an SRef to current pod being created
                     Ok(Value::SRef(SRef(
                         ORef::Q(
                             env.current_query
@@ -1057,7 +1090,7 @@ impl Expr {
                 }
             }
         }
-        let pod = builder.lock().unwrap().finalize()?;
+        let pod = builder.lock().unwrap().finalize(&env)?;
         Ok(Value::PodRef(pod))
     }
 
@@ -1559,7 +1592,12 @@ mod tests {
     async fn setup_env() -> (Env, Arc<Mutex<MyPods>>) {
         let shared = Arc::new(Mutex::new(HashMap::new()));
         let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+        let env = Env::new(
+            "test_user".to_string(),
+            shared,
+            pod_store.clone(),
+            Some(SchnorrSecretKey { sk: 42 }),
+        );
         (env, pod_store)
     }
     #[test]
@@ -1592,9 +1630,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_create_pod_simple() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store);
+        let (env, _) = setup_env().await;
 
         let result = eval("[createpod test_pod x [+ 40 2] y 123]", env).await?;
 
@@ -1616,9 +1652,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_pod_with_pod_basic() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+        let (env, pod_store) = setup_env().await;
         let first_pod_eval = eval("[createpod test_pod x [+ 40 2] y 12", env.clone()).await?;
         let first_pod = match first_pod_eval {
             Value::PodRef(pod) => pod,
@@ -1656,9 +1690,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_nested_pod() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+        let (env, pod_store) = setup_env().await;
         let first_pod_eval = eval("[createpod test_pod x 10]", env.clone()).await?;
         let first_pod = match first_pod_eval {
             Value::PodRef(pod) => pod,
@@ -1689,9 +1721,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_pod_query_unique_matching() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+        let (env, pod_store) = setup_env().await;
 
         // Create two identical pods
         let pod1 = eval("[createpod test_pod1 x 10]", env.clone()).await?;
@@ -1714,9 +1744,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_pod_query_fails_on_reuse() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+        let (env, pod_store) = setup_env().await;
 
         let pod1 = eval("[createpod test_pod1 x 10]", env.clone()).await?;
         if let Value::PodRef(pod1) = pod1 {
@@ -1826,9 +1854,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_pod_query_destructuring() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+        let (env, pod_store) = setup_env().await;
 
         // Create a pod with two values
         let pod1 = eval("[createpod test_pod1 x 10 y 20]", env.clone()).await?;
@@ -1865,9 +1891,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_pod_query_single_ref() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+        let (env, pod_store) = setup_env().await;
 
         // Create a pod with a single value
         let pod1 = eval("[createpod test_pod1 value1 10]", env.clone()).await?;
@@ -2131,9 +2155,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_pod_query_operation_matching() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+        let (env, pod_store) = setup_env().await;
 
         let pod1 = eval(
             "[createpod test_pod1 value1 10 value2 [+ 10 value1] value3 [* 2 value2]]",
@@ -2186,9 +2208,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_pod_refer_to_previously_created_key() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+        let (env, pod_store) = setup_env().await;
 
         // Create a pod with a single value
         let pod1 = eval("[createpod test_pod1 value1 10]", env.clone()).await?;
@@ -2221,9 +2241,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_pod_operations_with_refs() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store);
+        let (env, _) = setup_env().await;
 
         let result = eval(
             "[createpod test
@@ -2265,9 +2283,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_complex_pod_creation_with_defines() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store.clone());
+        let (env, pod_store) = setup_env().await;
 
         // First create a pod with some values we'll reference
         let source_pod = eval("[createpod source value1 10 value2 20]", env.clone()).await?;
@@ -2435,9 +2451,7 @@ mod tests {
     }
     #[tokio::test]
     async fn test_list_creation() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store);
+        let (env, _) = setup_env().await;
 
         let result = eval("[list 1 2 3 4]", env).await?;
 
@@ -2456,9 +2470,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_car() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store);
+        let (env, _) = setup_env().await;
 
         let result = eval("[car [list 42 2 3]]", env).await?;
 
@@ -2470,10 +2482,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_car_empty_list_error() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store);
-
+        let (env, _) = setup_env().await;
         let result = eval("[car [list]]", env).await;
         assert!(result.is_err());
         Ok(())
@@ -2481,10 +2490,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cdr() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store);
-
+        let (env, _) = setup_env().await;
         let result = eval("[cdr [list 1 2 3]]", env).await?;
 
         match result {
@@ -2500,9 +2506,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cdr_empty_list_error() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store);
+        let (env, _) = setup_env().await;
 
         let result = eval("[cdr [list]]", env).await;
         assert!(result.is_err());
@@ -2511,9 +2515,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cons() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store);
+        let (env, _) = setup_env().await;
 
         let result = eval("[cons 1 [list 2 3]]", env).await?;
 
@@ -2531,9 +2533,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cons_to_empty_list() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store);
+        let (env, _) = setup_env().await;
 
         let result = eval("[cons 42 [list]]", env).await?;
 
@@ -2549,9 +2549,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_nested_list_operations() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store);
+        let (env, _) = setup_env().await;
 
         let result = eval("[cons [car [list 1 2]] [cdr [list 3 4 5]]]", env).await?;
 
@@ -2569,9 +2567,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_with_arithmetic() -> Result<()> {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
-        let pod_store = Arc::new(Mutex::new(MyPods::default()));
-        let env = Env::new("test_user".to_string(), shared, pod_store);
+        let (env, _) = setup_env().await;
 
         let result = eval("[list [+ 1 2] [* 3 4] [max 5 2]]", env).await?;
 
