@@ -17,6 +17,7 @@ use plonky2::plonk::proof::Proof;
 use std::array;
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::time::Instant;
 
 use pod::circuit::pod::SchnorrPODGadget;
 use pod::entry::Entry;
@@ -24,8 +25,7 @@ use pod::gadget::GadgetID;
 use pod::operation::OpList;
 use pod::payload::{HashablePayload, PODPayload, StatementList};
 use pod::statement::Statement;
-use pod::PODProof;
-use pod::{GPGInput, POD};
+use pod::{GPGInput, PODProof, POD};
 use signature::schnorr::SchnorrSecretKey;
 
 pub type F = GoldilocksField;
@@ -245,19 +245,20 @@ where
             proof
         });
 
-        // TODO WIP: plonky2 proof generation:
+        // plonky2 proof generation:
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::new(config);
         let mut pw: PartialWitness<F> = PartialWitness::new();
 
-        // create the circuit (WIP)
+        // create the circuit
         let mut circuit = RecursionCircuit::<
             SchnorrPODGadget<NS>,
             OpExecutorGadget<'a, { M + N }, NS>,
             M,
             N,
         >::add_targets(&mut builder, verifier_data.clone())?;
-        //        set the circuit witness
+        // set the circuit witness
+        let start = Instant::now();
         circuit.set_targets(
             &mut pw,
             selectors,
@@ -266,9 +267,12 @@ where
             output_statements.clone(), // =OpsExecutor::Output
             &recursive_proofs,
         )?;
+        println!("circuit.set_targets(): {:?}", start.elapsed());
 
+        let start = Instant::now();
         let data = builder.build::<C>();
         let plonky2_proof = data.prove(pw)?;
+        println!("builder.build(): {:?}", start.elapsed());
 
         #[cfg(test)] // if running a test, verify the proof
         data.verify(plonky2_proof.clone())?;
@@ -290,14 +294,43 @@ where
             proof_type: GadgetID::PLONKY,
         })
     }
+
+    /// This is a helper method that just verifies the PlonkyProof contained inside the POD
+    pub fn verify_plonky_pod(verifier_data: VerifierCircuitData<F, C, D>, pod: POD) -> Result<()> {
+        let public_inputs = [
+            // add verifier_data as public inputs:
+            verifier_data.verifier_only.circuit_digest.elements.to_vec(),
+            verifier_data
+                .verifier_only
+                .constants_sigmas_cap
+                .0
+                .iter()
+                .flat_map(|e| e.elements)
+                .collect(),
+        ]
+        .concat();
+
+        // get the PlonkyProof from the pod.proof
+        let proof = match pod.proof.clone() {
+            PODProof::Plonky(p) => Ok(p),
+            _ => Err(anyhow!("Expected PODProof's Plonky variant")),
+        }?;
+
+        // verify the PlonkyProof
+        verifier_data.verify(plonky2::plonk::proof::ProofWithPublicInputs {
+            proof,
+            public_inputs: public_inputs.clone(),
+        })?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use anyhow::Result;
     use plonky2::field::goldilocks_field::GoldilocksField;
+    use std::collections::HashMap;
+    use std::time::Instant;
 
     use super::PlonkyButNotPlonkyGadget;
     use crate::{
@@ -383,11 +416,45 @@ mod tests {
         // get the circuit_data, this struct is reused for all the calls of
         // PlonkyButNotPlonkyGadget::execute
         let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS>::circuit_data()?;
+        let verifier_data = circuit_data.verifier_data();
 
-        let _new_pod =
-            PlonkyButNotPlonkyGadget::<M, N, NS>::execute(circuit_data, &pods_list, op_list, HashMap::new())?;
+        let start = Instant::now();
+        let new_pod = PlonkyButNotPlonkyGadget::<M, N, NS>::execute(
+            circuit_data,
+            &pods_list,
+            op_list,
+            HashMap::new(),
+        )?;
+        println!("PlonkyButNotPlonkyGadget::execute(): {:?}", start.elapsed());
+
+        // verify the new_pod's plonky2 proof
+        PlonkyButNotPlonkyGadget::<M, N, NS>::verify_plonky_pod(verifier_data, new_pod)?;
 
         // TODO do a 2nd iteration where the generated plonky2-pod is (recursively) verified
+        Ok(())
+    }
+
+    #[test]
+    fn test_empty_inputs_PlonkyButNotPlonkyGadget() -> Result<()> {
+        const M: usize = 3; // max num SchnorrPOD
+        const N: usize = 2; // max num Plonky2 recursive proof
+        const NS: usize = 3; // num statements
+
+        // let pods_list = prepare_pods();
+        let pods_list = vec![];
+        let op_list = OpList(vec![]);
+
+        let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS>::circuit_data()?;
+
+        let start = Instant::now();
+        let _new_pod = PlonkyButNotPlonkyGadget::<M, N, NS>::execute(
+            circuit_data,
+            &pods_list,
+            op_list,
+            HashMap::new(),
+        )?;
+        println!("PlonkyButNotPlonkyGadget::execute(): {:?}", start.elapsed());
+
         Ok(())
     }
 }
