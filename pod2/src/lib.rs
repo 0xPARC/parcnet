@@ -415,14 +415,16 @@ mod tests {
     fn test_PlonkyButNotPlonkyGadget() -> Result<()> {
         const M: usize = 3; // max num SchnorrPOD
         const N: usize = 2; // max num Plonky2 recursive proof
-        const NS: usize = 3; // num statements
+        const NS: usize = 25; // num statements
 
         let pods_list = prepare_pods();
 
         let schnorr_pod1_name = pods_list[0].0.clone();
         let schnorr_pod2_name = pods_list[1].0.clone();
 
-        let op_list = OpList(vec![
+        let padded_names = (0..22).map(|i| format!("dummy_out{}", i)).collect::<Vec<_>>();
+        
+        let op_list = OpList([vec![
             // NONE:pop
             OpCmd(Op::None, "pop"),
             // VALUEOF:op3
@@ -456,7 +458,7 @@ mod tests {
             //     ),
             //     "op2",
             // ),
-        ]);
+        ], padded_names.iter().map(|name| OpCmd(Op::None, name)).collect()].concat());
 
         // get the circuit_data, this struct is reused for all the calls of
         // PlonkyButNotPlonkyGadget::execute
