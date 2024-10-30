@@ -15,7 +15,7 @@ use super::{
     POD,
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash)]
 pub struct AnchoredKey(pub Origin, pub String);
 
 impl PartialEq for AnchoredKey {
