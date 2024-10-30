@@ -331,6 +331,19 @@ where
 
     /// This is a helper method that just verifies the PlonkyProof contained inside the POD
     pub fn verify_plonky_pod(verifier_data: VerifierCircuitData<F, C, D>, pod: POD) -> Result<()> {
+        // get the PlonkyProof from the pod.proof
+        let proof = match pod.proof.clone() {
+            PODProof::Plonky(p) => Ok(p),
+            _ => Err(anyhow!("Expected PODProof's Plonky variant")),
+        }?;
+        Self::verify_plonky_proof(verifier_data, proof)
+    }
+
+    /// This is a helper method that just verifies the given PlonkyProof
+    pub fn verify_plonky_proof(
+        verifier_data: VerifierCircuitData<F, C, D>,
+        proof: PlonkyProof,
+    ) -> Result<()> {
         let public_inputs = [
             // add verifier_data as public inputs:
             verifier_data.verifier_only.circuit_digest.elements.to_vec(),
@@ -343,12 +356,6 @@ where
                 .collect(),
         ]
         .concat();
-
-        // get the PlonkyProof from the pod.proof
-        let proof = match pod.proof.clone() {
-            PODProof::Plonky(p) => Ok(p),
-            _ => Err(anyhow!("Expected PODProof's Plonky variant")),
-        }?;
 
         // verify the PlonkyProof
         verifier_data.verify(plonky2::plonk::proof::ProofWithPublicInputs {
