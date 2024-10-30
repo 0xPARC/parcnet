@@ -111,6 +111,8 @@ impl<'a> StatementFormatter<'a> {
             ),
 
             Statement::Equal(op1, op2) => self.binary_op(op1, "=", op2),
+            Statement::Gt(op1, op2) => self.binary_op(op1, ">", op2),
+            Statement::NotEqual(op1, op2) => self.binary_op(op1, "!=", op2),
 
             Statement::ValueOf(key, value) => format!(
                 "{} {} = {}",
