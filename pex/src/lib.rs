@@ -92,6 +92,15 @@ impl From<SRef> for StatementRef {
     }
 }
 
+impl<'a> From<&'a SRef> for StatementRef<'static, 'static> {
+    fn from(sref: &'a SRef) -> StatementRef<'static, 'static> {
+        StatementRef(
+            Box::leak(sref.0.as_str().to_string().into_boxed_str()),
+            Box::leak(sref.1.clone().into_boxed_str()),
+        )
+    }
+}
+
 #[derive(Default)]
 pub struct MyPods {
     pub pods: Vec<POD>,
@@ -120,6 +129,7 @@ pub struct Env {
 pub struct PodBuilder {
     pub pending_operations: Vec<(String, OpCmd)>,
     pub input_pods: HashMap<String, POD>,
+    pub matched_statements: Vec<SRef>,
     pub next_origin_id: usize,
     pub next_result_key_id: usize,
     pub next_statement_id: usize,
@@ -470,6 +480,7 @@ impl PodBuilder {
     pub fn new() -> Self {
         Self {
             pending_operations: Vec::new(),
+            matched_statements: Vec::new(),
             input_pods: HashMap::new(),
             next_origin_id: 2,
             next_result_key_id: 0,
@@ -489,6 +500,10 @@ impl PodBuilder {
             self.input_pods.insert(name.clone(), pod.clone());
             name.clone()
         }
+    }
+
+    pub fn extend_matched_statements(&mut self, matched_statements: Vec<SRef>) {
+        self.matched_statements.extend(matched_statements);
     }
 
     pub fn next_result_key_id(&mut self) -> String {
@@ -537,7 +552,7 @@ impl PodBuilder {
         SRef::self_ref(format!("{}:{}", PREDICATE_VALUEOF, statement_name))
     }
 
-    pub fn finalize(&self, env: &Env) -> Result<POD> {
+    pub fn finalize(&mut self, env: &Env) -> Result<POD> {
         let could_be_schnorr = self.input_pods.is_empty()
             && self
                 .pending_operations
@@ -561,7 +576,6 @@ impl PodBuilder {
 
             Ok(POD::execute_schnorr_gadget::<{ NS }>(&entries, &env.sk.unwrap()).unwrap())
         } else {
-            // Original Oracle POD creation logic
             let mut origin_renaming_map = HashMap::new();
             let mut used_origin_names = HashSet::new();
             let mut next_id = 1;
@@ -611,6 +625,21 @@ impl PodBuilder {
                     }
                 }
             }
+
+            let mut copy_statements = Vec::new();
+            for matched_statement in &self.matched_statements {
+                let op = Op::CopyStatement(matched_statement.into());
+                let statement_id = format!(
+                    "from_{}_{}",
+                    matched_statement.0.as_str(),
+                    matched_statement.1.split(':').last().unwrap().to_string()
+                );
+                copy_statements.push((op, statement_id))
+            }
+            for (op, statement_id) in copy_statements {
+                self.add_operation(op, statement_id);
+            }
+
             let gpg_input = GPGInput::new(self.input_pods.clone(), origin_renaming_map);
             let pending_ops: &[OpCmd] = &self
                 .pending_operations
@@ -1348,9 +1377,15 @@ fn find_matching_pod(query: PodQueryBuilder, env: Env) -> Result<Value> {
                 continue;
             }
         }
-        if matches_constraints(pod, &constraints) {
+        if let Some(matched_statements) = matches_constraints(pod, &constraints) {
             if let Some(ref builder) = env.current_builder {
                 builder.lock().unwrap().register_input_pod(pod);
+            }
+            if let Some(ref builder) = env.current_builder {
+                builder
+                    .lock()
+                    .unwrap()
+                    .extend_matched_statements(matched_statements);
             }
 
             let refs: Vec<Value> = query
@@ -1388,7 +1423,11 @@ fn find_matching_pod(query: PodQueryBuilder, env: Env) -> Result<Value> {
     Err(anyhow!("No matching pod found"))
 }
 
-fn matches_constraints(pod: &POD, constraints: &[QueryConstraint]) -> bool {
+fn matches_constraints(pod: &POD, constraints: &[QueryConstraint]) -> Option<Vec<SRef>> {
+    // We collect statements that are implictly copied here
+    // For now this includes constants matched in operations & asserts; and the operation and asserts statement themselves
+    // We do not copy constraints on HashKey and ExactValue given are returned out of the pod? and it's on the user to decided what to do with them (compute new stuff, keep them using the `keep` keyword, etc)
+    let mut matched_statements = Vec::new();
     for constraint in constraints {
         match constraint {
             QueryConstraint::HasKey { key } => {
@@ -1399,7 +1438,7 @@ fn matches_constraints(pod: &POD, constraints: &[QueryConstraint]) -> bool {
                         false
                     }
                 }) {
-                    return false;
+                    return None;
                 }
             }
             QueryConstraint::ExactValue { key, value } => {
@@ -1410,7 +1449,7 @@ fn matches_constraints(pod: &POD, constraints: &[QueryConstraint]) -> bool {
                         false
                     }
                 }) {
-                    return false;
+                    return None;
                 }
             }
             QueryConstraint::Operation {
@@ -1422,16 +1461,25 @@ fn matches_constraints(pod: &POD, constraints: &[QueryConstraint]) -> bool {
                     .payload
                     .statements_list
                     .iter()
-                    .filter_map(|(_, stmt)| matches_operation_constraint(pod, operation, stmt))
+                    .filter_map(|(id, stmt)| {
+                        matches_operation_constraint(pod, operation, stmt, &mut matched_statements)
+                            .map(|result_ak| (id.clone(), result_ak))
+                    })
                     .collect::<Vec<_>>();
 
                 // Verify that one of the matching operations has its result
                 // stored under result_key
                 if !matching_ops
                     .iter()
-                    .any(|result_ak| &result_ak.1 == result_key)
+                    .any(|(_, result_ak)| &result_ak.1 == result_key)
                 {
-                    return false;
+                    return None;
+                }
+
+                // Add the operation statement itself
+                if let Some((stmt_id, _)) = matching_ops.first() {
+                    matched_statements
+                        .push(SRef(ORef::P(PodBuilder::pod_id(pod)), stmt_id.clone()));
                 }
             }
             QueryConstraint::Assert {
@@ -1443,18 +1491,31 @@ fn matches_constraints(pod: &POD, constraints: &[QueryConstraint]) -> bool {
                     .payload
                     .statements_list
                     .iter()
-                    .filter_map(|(_, stmt)| {
-                        matches_assert_constraint(pod, *assert_type, operands, stmt)
+                    .filter_map(|(id, stmt)| {
+                        matches_assert_constraint(
+                            pod,
+                            *assert_type,
+                            operands,
+                            stmt,
+                            &mut matched_statements,
+                        )
+                        .map(|_| id.clone())
                     })
                     .collect::<Vec<_>>();
 
                 if matching_asserts.is_empty() {
-                    return false;
+                    return None;
+                }
+
+                // Add the assert statement itself
+                if let Some(stmt_id) = matching_asserts.first() {
+                    matched_statements
+                        .push(SRef(ORef::P(PodBuilder::pod_id(pod)), stmt_id.clone()));
                 }
             }
         }
     }
-    true
+    Some(matched_statements)
 }
 
 fn matches_assert_constraint(
@@ -1462,6 +1523,7 @@ fn matches_assert_constraint(
     assert_type: AssertType,
     operands: &(Box<OperandConstraint>, Box<OperandConstraint>),
     statement: &Statement,
+    matched_statements: &mut Vec<SRef>,
 ) -> Option<bool> {
     let (op1, op2) = match (assert_type, statement) {
         (AssertType::Gt, Statement::Gt(l, r))
@@ -1472,8 +1534,11 @@ fn matches_assert_constraint(
 
     let (op1_constraint, op2_constraint) = operands;
 
-    if let Some(left_res) = matches_operand_constraint(pod, op1_constraint, op1) {
-        if let Some(right_res) = matches_operand_constraint(pod, op2_constraint, op2) {
+    if let Some(left_res) = matches_operand_constraint(pod, op1_constraint, op1, matched_statements)
+    {
+        if let Some(right_res) =
+            matches_operand_constraint(pod, op2_constraint, op2, matched_statements)
+        {
             if op1 == &left_res && op2 == &right_res {
                 return Some(true);
             }
@@ -1487,6 +1552,7 @@ fn matches_operation_constraint(
     pod: &POD,
     op_constraint: &OperationConstraint,
     statement: &Statement,
+    matched_statements: &mut Vec<SRef>,
 ) -> Option<AnchoredKey> {
     let (result, left, right) = match (op_constraint.op_type, statement) {
         (OpType::Add, Statement::SumOf(res, l, r))
@@ -1497,18 +1563,17 @@ fn matches_operation_constraint(
 
     let (op1, op2) = &op_constraint.operands;
 
-    if let Some(left_res) = matches_operand_constraint(pod, op1, left) {
-        if let Some(right_res) = matches_operand_constraint(pod, op2, right) {
+    if let Some(left_res) = matches_operand_constraint(pod, op1, left, matched_statements) {
+        if let Some(right_res) = matches_operand_constraint(pod, op2, right, matched_statements) {
             if left == &left_res && right == &right_res {
                 return Some(result.clone());
             }
         }
     }
 
-    // Try reverse order
-    // TODO separate commutative and non commutative operations
-    if let Some(left_res) = matches_operand_constraint(pod, op2, left) {
-        if let Some(right_res) = matches_operand_constraint(pod, op1, right) {
+    // Try reverse order for commutative operations
+    if let Some(left_res) = matches_operand_constraint(pod, op2, left, matched_statements) {
+        if let Some(right_res) = matches_operand_constraint(pod, op1, right, matched_statements) {
             if left == &left_res && right == &right_res {
                 return Some(result.clone());
             }
@@ -1522,6 +1587,7 @@ fn matches_operand_constraint(
     pod: &POD,
     constraint: &OperandConstraint,
     operand: &AnchoredKey,
+    matched_statements: &mut Vec<SRef>,
 ) -> Option<AnchoredKey> {
     match constraint {
         OperandConstraint::EntryRef(key) => {
@@ -1532,9 +1598,10 @@ fn matches_operand_constraint(
             }
         }
         OperandConstraint::Constant(value) => {
-            pod.payload.statements_list.iter().find_map(|(_, stmt)| {
+            pod.payload.statements_list.iter().find_map(|(id, stmt)| {
                 if let Statement::ValueOf(ak, val) = stmt {
                     if ak == operand && val == value {
+                        matched_statements.push(SRef(ORef::P(PodBuilder::pod_id(pod)), id.clone()));
                         Some(ak.clone())
                     } else {
                         None
@@ -1545,13 +1612,17 @@ fn matches_operand_constraint(
             })
         }
         OperandConstraint::Operation(op) => {
-            for (_, stmt) in &pod.payload.statements_list {
+            for (id, stmt) in &pod.payload.statements_list {
                 match stmt {
                     Statement::SumOf(res, _, _)
                     | Statement::ProductOf(res, _, _)
                     | Statement::MaxOf(res, _, _) => {
                         if operand == res {
-                            if let Some(matched_res) = matches_operation_constraint(pod, op, stmt) {
+                            if let Some(matched_res) =
+                                matches_operation_constraint(pod, op, stmt, matched_statements)
+                            {
+                                matched_statements
+                                    .push(SRef(ORef::P(PodBuilder::pod_id(pod)), id.clone()));
                                 return Some(matched_res);
                             }
                         }
