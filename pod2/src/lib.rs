@@ -21,7 +21,7 @@ use pod::circuit::pod::SchnorrPODGadget;
 use pod::entry::Entry;
 use pod::gadget::GadgetID;
 use pod::operation::OpList;
-use pod::payload::{PODPayload, StatementList};
+use pod::payload::{HashablePayload, PODPayload, StatementList};
 use pod::statement::Statement;
 use pod::PODProof;
 use pod::{GPGInput, POD};
@@ -159,8 +159,9 @@ where
             proof_type: GadgetID::PLONKY,
         };
 
+        // Note: One statement is reserved for the signer's public key.
         let dummy_schnorr_pod = POD::execute_schnorr_gadget(
-            &(0..NS)
+            &(0..(NS-1))
                 .map(|i| Entry::new_from_scalar(&format!("Dummy entry {}", i), GoldilocksField(0)))
                 .collect::<Vec<_>>(),
             &SchnorrSecretKey { sk: 0 },
@@ -250,8 +251,7 @@ where
             M,
             N,
         >::add_targets(&mut builder, verifier_data.clone())?;
-        /*
-        // set the circuit witness
+        //        set the circuit witness
         circuit.set_targets(
             &mut pw,
             selectors,
@@ -264,9 +264,9 @@ where
         let data = builder.build::<C>();
         let plonky2_proof = data.prove(pw)?;
 
+        
         #[cfg(test)] // if running a test, verify the proof
         data.verify(plonky2_proof.clone())?;
-        */
 
         // Check operations in circuit by routing `gpg_input` and
         // `output_statements` into the op executor.
@@ -281,17 +281,9 @@ where
                 statements_list: output_statements.clone(),
                 statements_map: output_statements.into_iter().collect(),
             },
-            proof: PODProof::Plonky(dummy_proof),
+            proof: PODProof::Plonky(plonky2_proof.proof),
             proof_type: GadgetID::PLONKY,
         })
-        /*
-        // Actually want to return
-            Ok(output_plonky_pod)
-        // Where output_plonky_pod.payload.statements_map =
-        // output_statements (_._.statements_map can be deduced from this)
-        // and output_plonky_pod.proof = PODProof::Plonky(proof), where
-        // `proof` is the Plonky2 proof obtained above.
-         */
     }
 }
 
