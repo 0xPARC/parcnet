@@ -2,7 +2,7 @@ use anyhow::Result;
 use plonky2::{
     field::{goldilocks_field::GoldilocksField, types::Field},
     iop::{
-        target::Target,
+        target::{BoolTarget, Target},
         witness::{PartialWitness, WitnessWrite},
     },
     plonk::circuit_builder::CircuitBuilder,
@@ -167,6 +167,23 @@ impl StatementTarget {
             value: builder.zero(),
         }
     }
+
+    pub fn gt(
+        builder: &mut CircuitBuilder<F, D>,
+        statement1_target: StatementTarget,
+        statement2_target: StatementTarget,
+    ) -> Self {
+        Self {
+            predicate: builder.constant(Statement::GT),
+            origin1: statement1_target.origin1,
+            key1: statement1_target.key1,
+            origin2: statement2_target.origin1,
+            key2: statement2_target.key1,
+            origin3: OriginTarget::none(builder),
+            key3: builder.zero(),
+            value: builder.zero(),
+        }
+    }
     pub fn from_entry(
         builder: &mut CircuitBuilder<F, D>,
         entry_target: &EntryTarget,
@@ -184,6 +201,15 @@ impl StatementTarget {
                 .map(|x| builder.constant(x))
                 .collect::<Vec<_>>(),
         )
+    }
+
+    pub fn has_code(
+        &self,
+        builder: &mut CircuitBuilder<F, D>,
+        code: GoldilocksField,
+    ) -> BoolTarget {
+        let code_target = builder.constant(code);
+        builder.is_equal(self.predicate, code_target)
     }
 
     pub fn connect(&self, builder: &mut CircuitBuilder<F, D>, statement_target: &Self) {

@@ -32,6 +32,10 @@ pub type C = PoseidonGoldilocksConfig;
 pub const D: usize = 2;
 pub type PlonkyProof = Proof<F, PoseidonGoldilocksConfig, D>;
 
+// For the purposes of inequality checks, we assume values are of type
+// u32.
+pub const NUM_BITS: usize = 32;
+
 pub mod pod;
 pub mod recursion;
 pub mod signature;
@@ -161,7 +165,7 @@ where
 
         // Note: One statement is reserved for the signer's public key.
         let dummy_schnorr_pod = POD::execute_schnorr_gadget(
-            &(0..(NS-1))
+            &(0..(NS - 1))
                 .map(|i| Entry::new_from_scalar(&format!("Dummy entry {}", i), GoldilocksField(0)))
                 .collect::<Vec<_>>(),
             &SchnorrSecretKey { sk: 0 },
@@ -264,7 +268,6 @@ where
         let data = builder.build::<C>();
         let plonky2_proof = data.prove(pw)?;
 
-        
         #[cfg(test)] // if running a test, verify the proof
         data.verify(plonky2_proof.clone())?;
 

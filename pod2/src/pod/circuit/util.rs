@@ -89,3 +89,19 @@ pub fn statement_matrix_ref(
             .as_ref(),
     ))
 }
+
+/// Less than assertion for targets known to fit within `num_bits` bits. This assumption is
+/// also checked here.
+pub fn assert_less<const NUM_BITS: usize>(
+    builder: &mut CircuitBuilder<F, D>,
+    x: Target,
+    y: Target,
+) {
+    // Check that targets fit within `NUM_BITS` bits.
+    builder.range_check(x, NUM_BITS);
+    builder.range_check(y, NUM_BITS);
+    // Check that `y-(x+1)` fits within `NUM_BITS` bits.
+    let x_plus_1 = builder.add_const(x, GoldilocksField(1));
+    let expr = builder.sub(y, x_plus_1);
+    builder.range_check(expr, NUM_BITS);
+}
