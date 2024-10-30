@@ -1,13 +1,13 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use colored::*;
 use eyre::Result;
-use pex::repl::{
-    display::print_pod_details,
-    reedline::{LispCompleter, LispHighlighter, LispValidator},
+use pex::{
+    repl::{
+        display::print_pod_details,
+        reedline::{LispCompleter, LispHighlighter, LispValidator},
+    },
+    InMemoryStore,
 };
 use pex::{Env, MyPods, Value};
 use pod2::signature::schnorr::SchnorrSecretKey;
@@ -18,13 +18,14 @@ use reedline::{
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let shared = Arc::new(Mutex::new(HashMap::new()));
+    let shared = Arc::new(InMemoryStore::new());
     let pod_store = Arc::new(Mutex::new(MyPods::default()));
     let env = Env::new(
         "repl_user".to_string(),
         shared,
         pod_store.clone(),
         Some(SchnorrSecretKey { sk: 42 }),
+        None,
     );
 
     let commands = vec![
