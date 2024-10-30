@@ -13,7 +13,7 @@ use super::{
     value::{HashableEntryValue, ScalarOrVec},
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct AnchoredKey(pub Origin, pub String);
 
 impl AnchoredKey {

@@ -23,6 +23,8 @@ pub use operation::OperationCmd as OpCmd;
 
 pub use statement::{AnchoredKey, Statement, StatementRef};
 
+pub use origin::Origin;
+
 //mod circuit;
 mod entry;
 mod gadget;
