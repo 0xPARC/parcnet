@@ -17,7 +17,7 @@ use crate::pod::{
 use crate::signature::schnorr::{
     SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner,
 };
-use crate::PlonkyProof;
+use crate::{PlonkyButNotPlonkyGadget, PlonkyProof};
 
 pub use operation::Operation as Op;
 pub use operation::OperationCmd as OpCmd;
@@ -52,7 +52,13 @@ pub struct POD {
 }
 
 impl POD {
-    pub fn verify(&self) -> Result<bool> {
+    /// M: number of PODs
+    /// N: number of Plonky PODs
+    /// NS: number of Statements
+    pub fn verify<const M: usize, const N: usize, const NS: usize>(&self) -> Result<bool>
+    where
+        [(); M + N]:,
+    {
         match &self.proof {
             PODProof::Schnorr(p) => {
                 if self.proof_type != GadgetID::SCHNORR16 {
@@ -94,7 +100,21 @@ impl POD {
                 ))
             }
             PODProof::Plonky(p) => {
-                todo!();
+                // ensure that the amount of statements match the NS parameter
+                assert_eq!(NS, self.payload.statements_list.len());
+
+                // TODO the verifier_data currently is computed here on the fly, but it will not be
+                // computed here and will be passed as parameter, bcs the circuit_data (needed to
+                // get the verifier_data on the fly) takes a considerable amount of time to
+                // compute. Need to think how we modify the interface to pass the verifier_data to
+                // this method.
+                let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS>::circuit_data()?;
+                let verifier_data = circuit_data.verifier_data();
+                PlonkyButNotPlonkyGadget::<M, N, NS>::verify_plonky_proof(
+                    verifier_data,
+                    p.clone(),
+                )?;
+                Ok(true)
             }
         }
     }
@@ -166,8 +186,24 @@ impl POD {
             proof_type: GadgetID::ORACLE,
         })
     }
-    pub fn execute_plonky_gadget(input: &GPGInput, cmds: &[OpCmd]) -> Result<Self> {
-        todo!();
+    pub fn execute_plonky_gadget<const M: usize, const N: usize, const NS: usize>(
+        input: &GPGInput,
+        cmds: &[OpCmd],
+    ) -> Result<Self>
+    where
+        [(); M + N]:,
+    {
+        // TODO the circuit_data currently is computed here on the fly, but it will not be computed
+        // here and will be passed as parameter, bcs the circuit_data takes a considerable amount
+        // of time to compute. Need to think how we modify the interface to pass the circuit_data
+        // to this method.
+        let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS>::circuit_data()?;
+        PlonkyButNotPlonkyGadget::<M, N, NS>::execute(
+            circuit_data,
+            &input.pods_list,
+            crate::OpList(cmds.to_vec()),
+            input.origin_renaming_map.clone(),
+        )
     }
 }
 
@@ -495,8 +531,8 @@ mod tests {
             &SchnorrSecretKey { sk: 42 },
         );
 
-        assert!(schnorr_pod1.verify()?);
-        assert!(schnorr_pod2.verify()?);
+        assert!(schnorr_pod1.verify::<3, 2, 2>()?);
+        assert!(schnorr_pod2.verify::<3, 2, 2>()?);
 
         let mut schnorr_pod3 =
             POD::execute_schnorr_gadget(&vec![entry1.clone()], &SchnorrSecretKey { sk: 25 });
@@ -509,7 +545,7 @@ mod tests {
         schnorr_pod3.payload.statements_list[1].1 = other_statement;
 
         // now signature shouldn't verify
-        assert!(!(schnorr_pod3.verify()?));
+        assert!(!(schnorr_pod3.verify::<3, 2, 2>()?));
 
         Ok(())
     }
@@ -613,7 +649,7 @@ mod tests {
         ];
 
         let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &ops).unwrap();
-        assert!(oracle_pod.verify()? == true);
+        assert!(oracle_pod.verify::<3, 2, 2>()? == true);
 
         // make another oracle POD which takes that oracle POD and a schnorr POD
 
@@ -689,7 +725,7 @@ mod tests {
         for statement in oracle_pod2.payload.statements_list.iter() {
             println!("{:?}", statement);
         }
-        assert!(oracle_pod2.verify()? == true);
+        assert!(oracle_pod2.verify::<3, 2, 2>()? == true);
         Ok(())
     }
 
@@ -799,7 +835,7 @@ mod tests {
         ];
 
         let bob_tf = POD::execute_oracle_gadget(&bob_tf_input, &bob_tf_ops).unwrap();
-        assert!(bob_tf.verify()? == true);
+        assert!(bob_tf.verify::<3, 2, 2>()? == true);
 
         // make the "bob trusted friend" POD
         let mut charlie_tf_input_pods = HashMap::new();
@@ -864,7 +900,7 @@ mod tests {
         ];
 
         let charlie_tf = POD::execute_oracle_gadget(&charlie_tf_input, &charlie_tf_ops).unwrap();
-        assert!(charlie_tf.verify()? == true);
+        assert!(charlie_tf.verify::<3, 2, 2>()? == true);
 
         // make the "great boy" POD
         let age_bound_entry = Entry::new_from_scalar("known_attestors", GoldilocksField(17));
@@ -1022,7 +1058,7 @@ mod tests {
         ];
 
         let alice_grb = POD::execute_oracle_gadget(&grb_input, &grb_ops).unwrap();
-        assert!(alice_grb.verify()? == true);
+        assert!(alice_grb.verify::<3, 2, 2>()? == true);
 
         for statement in alice_grb.payload.statements_list {
             println!("{:?}", statement);
@@ -1158,7 +1194,7 @@ mod tests {
         ];
 
         let sum_pod = POD::execute_oracle_gadget(&sum_pod_input, &sum_pod_ops).unwrap();
-        assert!(sum_pod.verify()? == true);
+        assert!(sum_pod.verify::<3, 2, 2>()? == true);
 
         // [defpod sum-pod
         //   result 25
@@ -1193,7 +1229,7 @@ mod tests {
         ];
 
         let product_pod = POD::execute_oracle_gadget(&product_pod_input, &product_pod_ops).unwrap();
-        assert!(product_pod.verify()? == true);
+        assert!(product_pod.verify::<3, 2, 2>()? == true);
 
         // [defpod product-pod
         //   result 1200
@@ -1304,7 +1340,7 @@ mod tests {
         ];
 
         let final_pod = POD::execute_oracle_gadget(&final_pod_input, &final_pod_ops).unwrap();
-        assert!(final_pod.verify()? == true);
+        assert!(final_pod.verify::<3, 2, 2>()? == true);
 
         // If you are curious what the statements in this POD are
         // for statement in final_pod.payload.statements_list {
