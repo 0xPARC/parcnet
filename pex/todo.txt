@@ -1,4 +1,4 @@
-[ ] pod? with an operation tree for a key
+[x] pod? with an operation tree for a key
 [x] [createpod [define x [pod? x]] first-key [max [* x 5] 20]]
 [ ] recursive pod? (pod? within pod?)
 [ ] create schnorr pod when there are only K/V
