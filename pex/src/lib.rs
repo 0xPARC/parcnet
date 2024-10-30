@@ -2,6 +2,7 @@ mod constants;
 mod macros;
 pub mod repl;
 
+use async_trait::async_trait;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
@@ -111,15 +112,101 @@ impl MyPods {
 
 pub type User = String;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub struct ScriptId(String);
+
+impl ScriptId {
+    pub fn from_script(script: &str) -> Self {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(script.as_bytes());
+        let result = hasher.finalize();
+        Self(hex::encode(result))
+    }
+}
+
+#[async_trait]
+pub trait SharedStore: Send + Sync {
+    async fn get_value(&self, script_id: &ScriptId, aid: u64) -> Option<Value>;
+    fn set_value(&self, script_id: &ScriptId, aid: u64, value: Value);
+    async fn get_pod(&self, id: &String) -> Option<POD>;
+    fn store_pod(&self, pod: POD) -> String;
+}
+
+pub struct InMemoryStore {
+    values: Arc<Mutex<HashMap<(ScriptId, u64), Value>>>,
+    pods: Arc<Mutex<HashMap<String, POD>>>,
+}
+
+impl InMemoryStore {
+    pub fn new() -> Self {
+        Self {
+            values: Arc::new(Mutex::new(HashMap::new())),
+            pods: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+}
+
+#[async_trait]
+impl SharedStore for InMemoryStore {
+    async fn get_value(&self, script_id: &ScriptId, id: u64) -> Option<Value> {
+        let mut counter = 0;
+        loop {
+            if let Some(v) = self
+                .values
+                .lock()
+                .unwrap()
+                .get(&(script_id.clone(), id))
+                .cloned()
+            {
+                return Some(v);
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            counter += 1;
+            if counter > 10 {
+                return None;
+            }
+        }
+    }
+
+    fn set_value(&self, script_id: &ScriptId, id: u64, value: Value) {
+        self.values
+            .lock()
+            .unwrap()
+            .insert((script_id.clone(), id), value);
+    }
+
+    async fn get_pod(&self, id: &String) -> Option<POD> {
+        let mut counter = 0;
+        loop {
+            if let Some(v) = self.pods.lock().unwrap().get(id).cloned() {
+                return Some(v);
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            counter += 1;
+            if counter > 10 {
+                return None;
+            }
+        }
+    }
+
+    fn store_pod(&self, pod: POD) -> String {
+        let id = PodBuilder::pod_id(&pod);
+        self.pods.lock().unwrap().insert(id.clone(), pod);
+        id
+    }
+}
+
+#[derive(Clone)]
 pub struct Env {
     user: User,
     pub pod_store: Arc<Mutex<MyPods>>,
     pub current_builder: Option<Arc<Mutex<PodBuilder>>>,
     pub current_query: Option<Arc<Mutex<PodQueryBuilder>>>,
-    shared: Arc<Mutex<HashMap<u64, Value>>>,
+    shared: Arc<dyn SharedStore>,
     bindings: Arc<Mutex<HashMap<String, Value>>>,
     sk: Option<SchnorrSecretKey>,
+    script_id: Option<ScriptId>,
 }
 
 #[derive(Clone, Debug)]
@@ -661,9 +748,10 @@ impl PodBuilder {
 impl Env {
     pub fn new(
         user: User,
-        shared: Arc<Mutex<HashMap<u64, Value>>>,
+        shared: Arc<dyn SharedStore>,
         pod_store: Arc<Mutex<MyPods>>,
         sk: Option<SchnorrSecretKey>,
+        script_id: Option<ScriptId>,
     ) -> Self {
         Self {
             user,
@@ -673,6 +761,7 @@ impl Env {
             current_query: None,
             bindings: Arc::new(Mutex::new(HashMap::new())),
             sk,
+            script_id,
         }
     }
 
@@ -686,19 +775,19 @@ impl Env {
             current_query: self.current_query.clone(),
             bindings: Arc::new(Mutex::new(self.bindings.lock().unwrap().clone())),
             sk: self.sk.clone(),
+            script_id: self.script_id.clone(),
         }
     }
 
     pub async fn get_remote(&self, id: u64) -> Option<Value> {
-        loop {
-            if let Some(v) = self.shared.lock().unwrap().get(&id).cloned() {
-                return Some(v);
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
+        self.shared
+            .get_value(self.script_id.as_ref().unwrap(), id)
+            .await
     }
+
     pub fn set_remote(&self, id: u64, value: Value) {
-        self.shared.lock().unwrap().insert(id, value);
+        self.shared
+            .set_value(self.script_id.as_ref().unwrap(), id, value);
     }
     pub fn get_binding(&self, name: &str) -> Option<Value> {
         self.bindings.lock().unwrap().get(name).cloned()
@@ -754,6 +843,10 @@ fn parse(tokens: &mut Vec<Token>) -> Result<Expr> {
 }
 
 pub async fn eval(source: &str, env: Env) -> Result<Value> {
+    let env = Env {
+        script_id: Some(ScriptId::from_script(source)),
+        ..env
+    };
     parse(&mut scan(source))?.eval(env).await
 }
 
@@ -772,7 +865,7 @@ impl Expr {
                     return Err(anyhow!("Empty expression"));
                 }
                 match &exprs[0] {
-                    Expr::Atom(_, op) => {
+                    Expr::Atom(aid, op) => {
                         // Handle asserts which can be tracked inside PODs
                         if let Ok(assert_type) = AssertType::from_str(op) {
                             return self.eval_assert(assert_type, &exprs[1..], env).await;
@@ -782,11 +875,93 @@ impl Expr {
                             return self.eval_operation(op_type, &exprs[1..], env).await;
                         } else {
                             match op.as_str() {
+                                "from" => {
+                                    let user_name = if let Expr::Atom(_, op) = &exprs[1] {
+                                        Some(op)
+                                    } else {
+                                        None
+                                    };
+                                    if let Some(user) = user_name {
+                                        if user == &env.user {
+                                            let res = exprs[2].eval(env.clone()).await?;
+                                            env.set_remote(*aid, res.clone());
+                                            Ok(res)
+                                        } else {
+                                            let remote_value =
+                                                env.get_remote(*aid).await.ok_or_else(|| {
+                                                    anyhow!("couldn't find on the remote")
+                                                })?;
+
+                                            match &remote_value {
+                                                // Value::PodRef(pod_id) => {
+                                                //     if let Some(pod) =
+                                                //         env.shared.get_pod(pod_id).await
+                                                //     {
+                                                //         env.pod_store.lock().unwrap().add_pod(pod);
+                                                //     }
+                                                // }
+                                                Value::SRef(sref) => {
+                                                    if let ORef::P(pod_id) = &sref.0 {
+                                                        if let Some(pod) =
+                                                            env.shared.get_pod(pod_id).await
+                                                        {
+                                                            env.pod_store
+                                                                .lock()
+                                                                .unwrap()
+                                                                .add_pod(pod.clone());
+                                                            if let Some(ref builder) =
+                                                                env.current_builder
+                                                            {
+                                                                builder
+                                                                    .lock()
+                                                                    .unwrap()
+                                                                    .register_input_pod(&pod);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                Value::List(values) => {
+                                                    // Handle lists of SRefs from pod queries
+                                                    for value in values {
+                                                        if let Value::SRef(sref) = value {
+                                                            if let ORef::P(pod_id) = &sref.0 {
+                                                                if let Some(pod) =
+                                                                    env.shared.get_pod(pod_id).await
+                                                                {
+                                                                    env.pod_store
+                                                                        .lock()
+                                                                        .unwrap()
+                                                                        .add_pod(pod.clone());
+                                                                    if let Some(ref builder) =
+                                                                        env.current_builder
+                                                                    {
+                                                                        builder
+                                                                            .lock()
+                                                                            .unwrap()
+                                                                            .register_input_pod(
+                                                                                &pod,
+                                                                            );
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                _ => {}
+                                            }
+                                            Ok(remote_value)
+                                        }
+                                    } else {
+                                        return Err(anyhow!(
+                                            "first argument to 'from' must be a user"
+                                        ));
+                                    }
+                                }
                                 "createpod" => {
                                     if exprs.len() < 2 {
                                         return Err(anyhow!("createpod requires a body"));
                                     }
-                                    return self.eval_create_pod(&exprs[1..], env).await;
+                                    self.eval_create_pod(&exprs[1..], env).await
                                 }
                                 "pod?" => {
                                     if exprs.len() < 2 {
@@ -1376,7 +1551,6 @@ fn get_value_from_sref(sref: &SRef, env: &Env) -> Result<GoldilocksField> {
 fn find_matching_pod(query: PodQueryBuilder, env: Env) -> Result<Value> {
     let constraints = query.build_constraints();
     let store = env.pod_store.lock().unwrap();
-
     for pod in store.pods.iter() {
         let pod_id = PodBuilder::pod_id(pod);
 
@@ -1395,6 +1569,7 @@ fn find_matching_pod(query: PodQueryBuilder, env: Env) -> Result<Value> {
                     .unwrap()
                     .extend_matched_statements(matched_statements);
             }
+            env.shared.store_pod(pod.clone());
 
             let refs: Vec<Value> = query
                 .srefs
@@ -1661,13 +1836,14 @@ mod tests {
             .and_then(|(_, s)| s.value().ok())
     }
     async fn setup_env() -> (Env, Arc<Mutex<MyPods>>) {
-        let shared = Arc::new(Mutex::new(HashMap::new()));
+        let shared = Arc::new(InMemoryStore::new());
         let pod_store = Arc::new(Mutex::new(MyPods::default()));
         let env = Env::new(
             "test_user".to_string(),
             shared,
             pod_store.clone(),
             Some(SchnorrSecretKey { sk: 42 }),
+            None,
         );
         (env, pod_store)
     }
@@ -2519,6 +2695,181 @@ mod tests {
             .to_string()
             .contains("No matching pod found"));
         Ok(())
+    }
+    #[tokio::test]
+    async fn test_basic_from_operation() -> Result<()> {
+        let shared = Arc::new(InMemoryStore::new());
+
+        // Create Alice's environment
+        let alice_env = Env::new(
+            "alice".to_string(),
+            shared.clone(),
+            Arc::new(Mutex::new(MyPods::default())),
+            Some(SchnorrSecretKey { sk: 42 }),
+            None,
+        );
+
+        // Create Bob's environment
+        let bob_env = Env::new(
+            "bob".to_string(),
+            shared.clone(),
+            Arc::new(Mutex::new(MyPods::default())),
+            Some(SchnorrSecretKey { sk: 43 }),
+            None,
+        );
+
+        // Alice creates a value
+        eval("[from alice 42]", alice_env.clone()).await?;
+
+        // Bob retrieves Alice's value
+        eval("[from alice 42]", bob_env.clone()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_cross_user_pod_query() -> Result<()> {
+        let shared = Arc::new(InMemoryStore::new());
+        let alice_pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let bob_pod_store = Arc::new(Mutex::new(MyPods::default()));
+
+        // Create environments for Alice and Bob
+        let alice_env = Env::new(
+            "alice".to_string(),
+            shared.clone(),
+            alice_pod_store.clone(),
+            Some(SchnorrSecretKey { sk: 42 }),
+            None,
+        );
+
+        let bob_env = Env::new(
+            "bob".to_string(),
+            shared.clone(),
+            bob_pod_store.clone(),
+            Some(SchnorrSecretKey { sk: 43 }),
+            None,
+        );
+
+        // First, Alice creates her initial pod
+        let alice_pod = eval("[createpod source x 40]", alice_env.clone()).await?;
+        if let Value::PodRef(pod) = alice_pod.clone() {
+            // Clone here
+            alice_pod_store.lock().unwrap().add_pod(pod);
+        }
+
+        // Both Alice and Bob run the exact same script
+        let script = r#"[createpod test
+            [define x [from alice [pod? [x]]]]
+            new_value [+ x 2]]"#;
+
+        // Alice runs it - she'll execute the pod? query and share the result
+        let alice_result = eval(script, alice_env.clone()).await?;
+        if let Value::PodRef(pod) = alice_result.clone() {
+            // Clone here
+            alice_pod_store.lock().unwrap().add_pod(pod);
+        }
+
+        // Bob runs the same script - he'll use Alice's shared query result
+        let bob_result = eval(script, bob_env.clone()).await?;
+        if let Value::PodRef(pod) = bob_result.clone() {
+            // Clone here
+            bob_pod_store.lock().unwrap().add_pod(pod.clone()); // Clone here too
+
+            assert_eq!(
+                get_self_entry_value(&pod, "new_value").unwrap(),
+                ScalarOrVec::Scalar(GoldilocksField(42))
+            );
+            Ok(())
+        } else {
+            Err(anyhow!("Expected PodRef"))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_from_wrong_user() -> Result<()> {
+        let shared = Arc::new(InMemoryStore::new());
+
+        let alice_env = Env::new(
+            "alice".to_string(),
+            shared.clone(),
+            Arc::new(Mutex::new(MyPods::default())),
+            Some(SchnorrSecretKey { sk: 42 }),
+            None,
+        );
+
+        // Try to get a value from Bob that doesn't exist
+        let result = eval("[from bob 42]", alice_env.clone()).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("couldn't find on the remote"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_complex_cross_user_pod_query() -> Result<()> {
+        let shared = Arc::new(InMemoryStore::new());
+        let alice_pod_store = Arc::new(Mutex::new(MyPods::default()));
+        let bob_pod_store = Arc::new(Mutex::new(MyPods::default()));
+
+        let alice_env = Env::new(
+            "alice".to_string(),
+            shared.clone(),
+            alice_pod_store.clone(),
+            Some(SchnorrSecretKey { sk: 42 }),
+            None,
+        );
+
+        let bob_env = Env::new(
+            "bob".to_string(),
+            shared.clone(),
+            bob_pod_store.clone(),
+            Some(SchnorrSecretKey { sk: 43 }),
+            None,
+        );
+
+        // Alice creates a complex pod
+        let alice_pod = eval(
+            "[createpod test
+                x 40
+                y [+ x 5]
+                z [* y 2]
+                [> y 42]]",
+            alice_env.clone(),
+        )
+        .await?;
+        if let Value::PodRef(pod) = alice_pod {
+            alice_pod_store.lock().unwrap().add_pod(pod);
+        }
+
+        // Alice shares the pod query result
+        eval(
+            "[createpod test
+                [define result [from alice [pod? [z] [> y 42]]]]
+                new_value [+ result 10]]",
+            alice_env.clone(),
+        )
+        .await?;
+        // Bob creates a pod using Alice's complex pod query result
+        let result = eval(
+            "[createpod test
+                [define result [from alice [pod? [z] [> y 42]]]]
+                new_value [+ result 10]]",
+            bob_env.clone(),
+        )
+        .await?;
+
+        match result {
+            Value::PodRef(pod) => {
+                assert_eq!(
+                    get_self_entry_value(&pod, "new_value").unwrap(),
+                    ScalarOrVec::Scalar(GoldilocksField(100)) // (40 + 5) * 2 + 10 = 100
+                );
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected PodRef")),
+        }
     }
     #[tokio::test]
     async fn test_list_creation() -> Result<()> {
