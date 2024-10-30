@@ -223,19 +223,28 @@ impl GPGInput {
                     .position(|(name, _)| name == pod_name)
                     .ok_or(anyhow!("Error: POD {} missing from list!", pod_name))?;
                 let (_, pod) = &self.pods_list[pod_index];
-                let origin_id = pod
-                    .payload
-                    .statements_list
-                    .iter()
-                    .flat_map(|(_, s)| {
-                        s.anchored_keys()
-                            .iter()
-                            .map(|anchkey| anchkey.clone().0)
-                            .collect::<Vec<_>>()
-                    })
-                    .find(|o| &o.origin_name == origin_name)
-                    .ok_or(anyhow!("Origin {} missing from POD list!", origin_name))?
-                    .origin_id;
+                let origin_id = if origin_name == "NONE" {
+                    GoldilocksField(0)
+                } else if origin_name == "_SELF" {
+                    GoldilocksField(1)
+                } else {
+                    pod.payload
+                        .statements_list
+                        .iter()
+                        .flat_map(|(_, s)| {
+                            s.anchored_keys()
+                                .iter()
+                                .map(|anchkey| anchkey.clone().0)
+                                .collect::<Vec<_>>()
+                        })
+                        .find(|o| &o.origin_name == origin_name)
+                        .ok_or(anyhow!(
+                            "Origin {} missing from the list of statements of POD '{}'!",
+                            origin_name,
+                            pod_name
+                        ))?
+                        .origin_id
+                };
                 Ok((
                     (pod_index, origin_id.to_canonical_u64() as usize),
                     *new_origin_name_to_id_map
