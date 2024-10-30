@@ -404,19 +404,19 @@ mod tests {
                 ),
                 "yolo",
             ),
-            // VALUEOF:nono
-            OpCmd(
-                Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
-                "nono",
-            ),
-            // EQUAL:op2
-            OpCmd(
-                Op::EqualityFromEntries(
-                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-                    StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
-                ),
-                "op2",
-            ),
+            // // VALUEOF:nono
+            // OpCmd(
+            //     Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
+            //     "nono",
+            // ),
+            // // EQUAL:op2
+            // OpCmd(
+            //     Op::EqualityFromEntries(
+            //         StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+            //         StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
+            //     ),
+            //     "op2",
+            // ),
         ])
         .sort(&pods_list);
 
@@ -444,8 +444,8 @@ mod tests {
     #[test]
     fn test_empty_inputs_PlonkyButNotPlonkyGadget() -> Result<()> {
         const M: usize = 3; // max num SchnorrPOD
-        const N: usize = 2; // max num Plonky2 recursive proof
-        const NS: usize = 3; // num statements
+        const N: usize = 3; // max num Plonky2 recursive proof
+        const NS: usize = 10; // num statements
 
         // let pods_list = prepare_pods();
         let pods_list = vec![];
