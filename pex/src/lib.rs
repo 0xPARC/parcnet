@@ -50,7 +50,7 @@ impl From<ORef> for Origin {
             ORef::P(name) => Origin::new(GoldilocksField(0), name.clone(), GadgetID::ORACLE), // TOOD: figure out if its fine to have Id 0
             ORef::Q(id) => Origin::new(
                 GoldilocksField(id as u64),
-                "query".to_string(),
+                format!("query_{}", id),
                 GadgetID::ORACLE,
             ),
         }
@@ -69,7 +69,7 @@ impl From<Origin> for ORef {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SRef(pub ORef, pub String);
 
 impl SRef {
@@ -94,14 +94,6 @@ pub struct MyPods {
 }
 
 impl MyPods {
-    pub fn find(&self, key: &str) -> Option<&Statement> {
-        for pod in &self.pods {
-            if let Some(value) = pod.payload.statements_map.get(key) {
-                return Some(value);
-            }
-        }
-        None
-    }
     pub fn add_pod(&mut self, pod: POD) {
         self.pods.push(pod);
     }
@@ -114,6 +106,7 @@ pub struct Env {
     user: User,
     pub pod_store: Arc<Mutex<MyPods>>,
     pub current_builder: Option<Arc<Mutex<PodBuilder>>>,
+    pub current_query: Option<Arc<Mutex<PodQueryBuilder>>>,
     shared: Arc<Mutex<HashMap<u64, Value>>>,
     bindings: Arc<Mutex<HashMap<String, Value>>>,
 }
@@ -133,16 +126,8 @@ pub enum Value {
     Scalar(GoldilocksField),
     PodRef(POD),
     SRef(SRef),
-    Operation(Box<Operation>),
+    Operation(Box<Operation>), // Box because Operation can contain Operation
     List(Vec<Value>),
-    Pattern(Box<QueryPattern>),
-}
-
-#[derive(Clone, Debug)]
-pub enum QueryPattern {
-    Constant(GoldilocksField),
-    Reference(SRef),
-    Operation(Operation),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -162,13 +147,13 @@ impl OpType {
         }
     }
 
-    fn as_str(&self) -> &'static str {
-        match self {
-            OpType::Add => "+",
-            OpType::Multiply => "*",
-            OpType::Max => "max",
-        }
-    }
+    // fn as_str(&self) -> &'static str {
+    //     match self {
+    //         OpType::Add => "+",
+    //         OpType::Multiply => "*",
+    //         OpType::Max => "max",
+    //     }
+    // }
 }
 
 impl From<(OpType, Value, Value)> for Operation {
@@ -240,126 +225,110 @@ impl Operation {
 }
 
 #[derive(Clone, Debug)]
-struct PodQueryBuilder {
-    // statements is a list of statements that we will match on
-    // the usize is the origin_id and the String is the statement name
-    statement_table: HashMap<(usize, String), Statement>,
-    // srefs are the bindings we are interested in.
+pub struct PodQueryBuilder {
+    // srefs are the bindings we are interested in
     srefs: Vec<SRef>,
-    // might not be a good idea to
+    constraints: Vec<QueryConstraint>,
     current_origin_id: usize,
-    next_statement_id: usize,
-    tmp_counter: usize,
+}
+
+#[derive(Debug, Clone)]
+enum QueryConstraint {
+    HasKey {
+        key: String,
+    },
+    ExactValue {
+        key: String,
+        value: ScalarOrVec,
+    },
+    Operation {
+        result_key: String,
+        operation: OperationConstraint,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct OperationConstraint {
+    op_type: OpType,
+    operands: (Box<OperandConstraint>, Box<OperandConstraint>),
+}
+
+#[derive(Debug, Clone)]
+enum OperandConstraint {
+    EntryRef(String),
+    Constant(ScalarOrVec),
+    Operation(Box<OperationConstraint>),
 }
 
 impl PodQueryBuilder {
     fn new() -> Self {
         Self {
-            statement_table: HashMap::new(),
             srefs: Vec::new(),
+            constraints: Vec::new(),
             current_origin_id: 1,
-            next_statement_id: 0,
-            tmp_counter: 0,
         }
     }
 
-    // fn add_value_match_to_srefs(&mut self, key: &str) -> SRef {
-    //     let statement_key = format!("{}:{}", PREDICATE_VALUEOF, key);
-    //     let sref = SRef(ORef::Q(self.current_origin_id), statement_key.clone());
-    //     self.srefs.push(sref.clone());
-    //     sref
-    // }
-
-    fn add_constant_to_statements_table(&mut self, value: GoldilocksField) -> SRef {
-        let key = format!(
-            "{}{}",
-            STATEMENT_PREFIX_CONSTANT.to_string(),
-            value.to_canonical_u64()
-        );
-        let statement_key = format!("{}:{}", PREDICATE_VALUEOF, key);
-        self.statement_table.insert(
-            (self.current_origin_id, statement_key.clone()),
-            Statement::ValueOf(
-                AnchoredKey(ORef::Q(self.current_origin_id).into(), key.clone()),
-                ScalarOrVec::Scalar(value),
-            ),
-        );
-        SRef(ORef::Q(self.current_origin_id), statement_key)
-    }
-
-    fn add_scalar_match(&mut self, key: &str, value: GoldilocksField) {
-        let statement_key = format!("{}:{}", PREDICATE_VALUEOF, key);
-        self.statement_table.insert(
-            (self.current_origin_id, statement_key.clone()),
-            Statement::ValueOf(
-                AnchoredKey(ORef::Q(self.current_origin_id).into(), key.to_string()),
-                ScalarOrVec::Scalar(value),
-            ),
-        );
-        self.srefs
-            .push(SRef(ORef::Q(self.current_origin_id), statement_key));
-    }
-
-    fn add_sref_match(&mut self, key: &str, sref: SRef) {
-        let statement_key = format!("{}:{}", PREDICATE_VALUEOF, key);
-        self.statement_table.insert(
-            (self.current_origin_id, statement_key.clone()),
-            Statement::ValueOf(
-                AnchoredKey(ORef::Q(self.current_origin_id).into(), key.to_string()),
-                ScalarOrVec::Scalar(GoldilocksField(0)), // Placeholder, matching will be done via statement refs
-            ),
-        );
-        self.srefs.push(sref);
-    }
-    fn add_operation(&mut self, op: Op<StatementRef>) {
-        let statement_id = self.next_statement_id();
-
-        // Convert Op to Statement based on operation type
-        let statement = match op {
-            Op::SumOf(result, left, right) => Statement::SumOf(
-                self.convert_statement_ref(result),
-                self.convert_statement_ref(left),
-                self.convert_statement_ref(right),
-            ),
-            Op::ProductOf(result, left, right) => Statement::ProductOf(
-                self.convert_statement_ref(result),
-                self.convert_statement_ref(left),
-                self.convert_statement_ref(right),
-            ),
-            Op::MaxOf(result, left, right) => Statement::MaxOf(
-                self.convert_statement_ref(result),
-                self.convert_statement_ref(left),
-                self.convert_statement_ref(right),
-            ),
-            _ => todo!(), // Add other operation types as needed
+    fn add_operation(&mut self, op: &Operation) -> Result<OperandConstraint> {
+        let (op1, op2) = match op {
+            Operation::Sum(v1, v2) | Operation::Product(v1, v2) | Operation::Max(v1, v2) => {
+                (v1, v2)
+            }
         };
 
-        self.statement_table
-            .insert((self.current_origin_id, statement_id), statement);
+        let op1_constraint = self.add_value(op1)?;
+        let op2_constraint = self.add_value(op2)?;
+
+        let op_type = match op {
+            Operation::Sum(_, _) => OpType::Add,
+            Operation::Product(_, _) => OpType::Multiply,
+            Operation::Max(_, _) => OpType::Max,
+        };
+
+        Ok(OperandConstraint::Operation(Box::new(
+            OperationConstraint {
+                op_type,
+                operands: (Box::new(op1_constraint), Box::new(op2_constraint)),
+            },
+        )))
     }
 
-    fn convert_statement_ref(&self, sref: StatementRef) -> AnchoredKey {
-        // Convert StatementRef to AnchoredKey
-        AnchoredKey(
-            Origin::new(
-                GoldilocksField(self.current_origin_id as u64),
-                sref.0.to_string(),
-                GadgetID::ORACLE,
-            ),
-            sref.1.to_string(),
-        )
+    fn add_value(&mut self, value: &Value) -> Result<OperandConstraint> {
+        match value {
+            Value::Scalar(s) => Ok(OperandConstraint::Constant(ScalarOrVec::Scalar(*s))),
+            Value::Operation(op) => self.add_operation(op),
+            Value::SRef(sref) => {
+                let key = sref.1.split(':').last().unwrap().to_string();
+                Ok(OperandConstraint::EntryRef(key))
+            }
+            _ => Err(anyhow!("Invalid value type")),
+        }
     }
 
-    fn next_statement_id(&mut self) -> String {
-        let id = format!("{}{}", STATEMENT_PREFIX_OTHER, self.next_statement_id);
-        self.next_statement_id += 1;
-        id
+    fn add_key_constraint(&mut self, key: String) {
+        self.constraints.push(QueryConstraint::HasKey { key });
     }
 
-    fn next_tmp_id(&mut self) -> usize {
-        let id = self.tmp_counter;
-        self.tmp_counter += 1;
-        id
+    fn add_constraint(&mut self, key: String, constraint: OperandConstraint) {
+        match constraint {
+            OperandConstraint::Constant(value) => {
+                self.constraints
+                    .push(QueryConstraint::ExactValue { key, value });
+            }
+            OperandConstraint::Operation(op) => {
+                self.constraints.push(QueryConstraint::Operation {
+                    result_key: key,
+                    operation: *op,
+                });
+            }
+            OperandConstraint::EntryRef(_) => {
+                self.constraints.push(QueryConstraint::HasKey { key });
+            }
+        }
+    }
+
+    fn build_constraints(&self) -> Vec<QueryConstraint> {
+        self.constraints.clone()
     }
 }
 
@@ -505,6 +474,7 @@ impl Env {
             shared,
             pod_store,
             current_builder: None,
+            current_query: None,
             bindings: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -516,6 +486,7 @@ impl Env {
             shared: self.shared.clone(),
             pod_store: self.pod_store.clone(),
             current_builder: self.current_builder.clone(),
+            current_query: self.current_query.clone(),
             bindings: Arc::new(Mutex::new(self.bindings.lock().unwrap().clone())),
         }
     }
@@ -606,133 +577,118 @@ impl Expr {
                     Expr::Atom(_, op) => {
                         // Handle operation which can be tracked inside PODs
                         if let Ok(op_type) = OpType::from_str(op) {
-                            if let Some(ref _builder) = env.current_builder {
-                                // We're in pod creation context - use existing eval_operation
-                                return self.eval_operation(op_type, &exprs[1..], env).await;
-                            } else {
-                                // We're in query context - handle pattern creation
-                                if exprs.len() != 3 {
-                                    return Err(anyhow!("Operations require exactly two operands"));
-                                }
-                                let op1 = exprs[1].eval(env.clone()).await?;
-                                let op2 = exprs[2].eval(env.clone()).await?;
-
-                                match (&op1, &op2) {
-                                    (Value::Scalar(l), Value::Scalar(r)) => {
-                                        let operation = Operation::from((op_type, op1, op2));
-                                        return Ok(Value::Scalar(operation.eval()?));
+                            return self.eval_operation(op_type, &exprs[1..], env).await;
+                        } else {
+                            match op.as_str() {
+                                "createpod" => {
+                                    if exprs.len() < 2 {
+                                        return Err(anyhow!("createpod requires a body"));
                                     }
-                                    _ => {
-                                        let operation =
-                                            Operation::from((op_type, op1.clone(), op2.clone()));
-                                        return Ok(Value::Pattern(Box::new(
-                                            QueryPattern::Operation(operation),
-                                        )));
+                                    return self.eval_create_pod(&exprs[1..], env).await;
+                                }
+                                "pod?" => {
+                                    if exprs.len() < 2 {
+                                        return Err(anyhow!("pod? requires at least one argument"));
                                     }
+                                    self.eval_pod_query(&exprs[1..], env).await
                                 }
-                            }
-                        }
-                        match op.as_str() {
-                            "createpod" => {
-                                if exprs.len() < 2 {
-                                    return Err(anyhow!("createpod requires a body"));
-                                }
-                                return self.eval_create_pod(&exprs[1..], env).await;
-                            }
-                            "pod?" => {
-                                if exprs.len() < 2 {
-                                    return Err(anyhow!("pod? requires at least one argument"));
-                                }
-                                self.eval_pod_query(&exprs[1..], env).await
-                            }
-                            "define" => {
-                                if exprs.len() != 3 {
-                                    return Err(anyhow!("define requires exactly two arguments"));
-                                }
-
-                                let value = exprs[2].eval(env.clone()).await?;
-
-                                match &exprs[1] {
-                                    // Single binding
-                                    Expr::Atom(_, name) => {
-                                        env.set_binding(name.clone(), value.clone());
-                                        Ok(value)
+                                "define" => {
+                                    if exprs.len() != 3 {
+                                        return Err(anyhow!(
+                                            "define requires exactly two arguments"
+                                        ));
                                     }
 
-                                    // List destructuring
-                                    Expr::List(_, names) => {
-                                        if let Value::List(values) = value {
-                                            if names.len() != values.len() {
-                                                return Err(anyhow!(
-                                                    "Destructuring pattern length mismatch"
-                                                ));
-                                            }
+                                    let value = exprs[2].eval(env.clone()).await?;
 
-                                            for (name_expr, value) in
-                                                names.iter().zip(values.iter())
-                                            {
-                                                if let Expr::Atom(_, name) = name_expr {
-                                                    env.set_binding(name.clone(), value.clone());
-                                                } else {
+                                    match &exprs[1] {
+                                        // Single binding
+                                        Expr::Atom(_, name) => {
+                                            env.set_binding(name.clone(), value.clone());
+                                            Ok(value)
+                                        }
+
+                                        // List destructuring
+                                        Expr::List(_, names) => {
+                                            if let Value::List(values) = value {
+                                                if names.len() != values.len() {
                                                     return Err(anyhow!(
-                                                        "Invalid destructuring pattern"
+                                                        "Destructuring pattern length mismatch"
                                                     ));
                                                 }
+
+                                                for (name_expr, value) in
+                                                    names.iter().zip(values.iter())
+                                                {
+                                                    if let Expr::Atom(_, name) = name_expr {
+                                                        env.set_binding(
+                                                            name.clone(),
+                                                            value.clone(),
+                                                        );
+                                                    } else {
+                                                        return Err(anyhow!(
+                                                            "Invalid destructuring pattern"
+                                                        ));
+                                                    }
+                                                }
+                                                Ok(Value::List(values))
+                                            } else {
+                                                Err(anyhow!("Cannot destructure non-list value"))
                                             }
+                                        }
+                                    }
+                                }
+                                "list" => {
+                                    let mut values = Vec::new();
+                                    for expr in &exprs[1..] {
+                                        values.push(expr.eval(env.clone()).await?);
+                                    }
+                                    Ok(Value::List(values))
+                                }
+                                "car" => {
+                                    if exprs.len() != 2 {
+                                        return Err(anyhow!("car requires exactly one argument"));
+                                    }
+                                    match exprs[1].eval(env).await? {
+                                        Value::List(values) => values
+                                            .first()
+                                            .cloned()
+                                            .ok_or_else(|| anyhow!("Empty list")),
+                                        _ => Err(anyhow!("car requires a list argument")),
+                                    }
+                                }
+                                "cdr" => {
+                                    if exprs.len() != 2 {
+                                        return Err(anyhow!("cdr requires exactly one argument"));
+                                    }
+                                    match exprs[1].eval(env).await? {
+                                        Value::List(values) => {
+                                            if values.is_empty() {
+                                                Err(anyhow!("Empty list"))
+                                            } else {
+                                                Ok(Value::List(values[1..].to_vec()))
+                                            }
+                                        }
+                                        _ => Err(anyhow!("cdr requires a list argument")),
+                                    }
+                                }
+                                "cons" => {
+                                    if exprs.len() != 3 {
+                                        return Err(anyhow!("cons requires exactly two arguments"));
+                                    }
+                                    let head = exprs[1].eval(env.clone()).await?;
+                                    match exprs[2].eval(env).await? {
+                                        Value::List(mut values) => {
+                                            values.insert(0, head);
                                             Ok(Value::List(values))
-                                        } else {
-                                            Err(anyhow!("Cannot destructure non-list value"))
+                                        }
+                                        _ => {
+                                            Err(anyhow!("cons requires a list as second argument"))
                                         }
                                     }
                                 }
+                                op => Err(anyhow!("Unknown operation: {}", op)),
                             }
-                            "list" => {
-                                let mut values = Vec::new();
-                                for expr in &exprs[1..] {
-                                    values.push(expr.eval(env.clone()).await?);
-                                }
-                                Ok(Value::List(values))
-                            }
-                            "car" => {
-                                if exprs.len() != 2 {
-                                    return Err(anyhow!("car requires exactly one argument"));
-                                }
-                                match exprs[1].eval(env).await? {
-                                    Value::List(values) => {
-                                        values.first().cloned().ok_or_else(|| anyhow!("Empty list"))
-                                    }
-                                    _ => Err(anyhow!("car requires a list argument")),
-                                }
-                            }
-                            "cdr" => {
-                                if exprs.len() != 2 {
-                                    return Err(anyhow!("cdr requires exactly one argument"));
-                                }
-                                match exprs[1].eval(env).await? {
-                                    Value::List(values) => {
-                                        if values.is_empty() {
-                                            Err(anyhow!("Empty list"))
-                                        } else {
-                                            Ok(Value::List(values[1..].to_vec()))
-                                        }
-                                    }
-                                    _ => Err(anyhow!("cdr requires a list argument")),
-                                }
-                            }
-                            "cons" => {
-                                if exprs.len() != 3 {
-                                    return Err(anyhow!("cons requires exactly two arguments"));
-                                }
-                                let head = exprs[1].eval(env.clone()).await?;
-                                match exprs[2].eval(env).await? {
-                                    Value::List(mut values) => {
-                                        values.insert(0, head);
-                                        Ok(Value::List(values))
-                                    }
-                                    _ => Err(anyhow!("cons requires a list as second argument")),
-                                }
-                            }
-                            op => Err(anyhow!("Unknown operation: {}", op)),
                         }
                     }
                     _ => Err(anyhow!("First item must be an atom")),
@@ -745,6 +701,18 @@ impl Expr {
                 } else if let Ok(num) = a.parse::<u64>() {
                     // Existing number parsing
                     Ok(Value::Scalar(GoldilocksField(num)))
+                } else if env.current_query.is_some() {
+                    Ok(Value::SRef(SRef(
+                        ORef::Q(
+                            env.current_query
+                                .as_ref()
+                                .unwrap()
+                                .lock()
+                                .unwrap()
+                                .current_origin_id,
+                        ),
+                        format!("{}:{}", PREDICATE_VALUEOF, a),
+                    )))
                 } else {
                     Err(anyhow!("Unknown identifier: {}", a))
                 }
@@ -924,42 +892,60 @@ impl Expr {
         let pod = builder.lock().unwrap().finalize()?;
         Ok(Value::PodRef(pod))
     }
+
     async fn eval_pod_query(&self, args: &[Expr], env: Env) -> Result<Value> {
-        let mut query = PodQueryBuilder::new();
+        let query_builder = Arc::new(Mutex::new(PodQueryBuilder::new()));
+        let mut query_env = env.clone();
+        query_env.current_query = Some(query_builder.clone());
 
         for arg in args {
             match arg {
                 Expr::List(_, pair) => {
-                    if pair.len() != 2 {
-                        return Err(anyhow!("Query patterns must be pairs"));
-                    }
-
                     let key = match &pair[0] {
                         Expr::Atom(_, k) => k.clone(),
                         _ => return Err(anyhow!("Key must be an atom")),
                     };
 
-                    let pattern = pair[1].eval(env.clone()).await?;
+                    let current_origin_id = {
+                        let builder = query_builder.lock().unwrap();
+                        builder.current_origin_id
+                    };
 
-                    match pattern {
-                        Value::Pattern(p) => {
-                            let sref = add_pattern_to_query(*p, &mut query)?;
-                            query.add_sref_match(&key, sref);
-                        }
-                        Value::Scalar(s) => {
-                            query.add_scalar_match(&key, s);
-                        }
-                        Value::SRef(sref) => {
-                            query.add_sref_match(&key, sref);
-                        }
-                        _ => return Err(anyhow!("Invalid pattern type")),
+                    let statement_id = format!("{}:{}", PREDICATE_VALUEOF, key.clone());
+
+                    {
+                        let mut builder = query_builder.lock().unwrap();
+                        builder
+                            .srefs
+                            .push(SRef(ORef::Q(current_origin_id), statement_id.clone()));
+                        builder.add_key_constraint(key.clone());
+                        query_env.set_binding(
+                            key.clone(),
+                            Value::SRef(SRef(ORef::Q(current_origin_id), statement_id)),
+                        );
+                    }
+
+                    if pair.len() > 1 {
+                        let pattern = pair[1].eval(query_env.clone()).await?;
+                        let mut builder = query_builder.lock().unwrap();
+                        let constraint = builder.add_value(&pattern)?;
+                        builder.add_constraint(key, constraint);
+                    } else {
+                        let mut builder = query_builder.lock().unwrap();
+                        builder
+                            .add_constraint(key.clone(), OperandConstraint::EntryRef(key.clone()));
                     }
                 }
-                _ => return Err(anyhow!("Query arguments must be key-value pairs")),
+                _ => return Err(anyhow!("Invalid query syntax")),
             }
         }
 
-        find_matching_pod(query, env).await
+        let query = {
+            let builder = query_builder.lock().unwrap();
+            builder.clone()
+        };
+
+        find_matching_pod(query, env)
     }
 
     async fn eval_operation(&self, op_type: OpType, operands: &[Expr], env: Env) -> Result<Value> {
@@ -970,8 +956,14 @@ impl Expr {
         let op2 = operands[1].eval(env.clone()).await?;
 
         let operation: Operation = (op_type, op1.clone(), op2.clone()).into();
-
-        if let Some(ref builder) = env.current_builder {
+        if let Some(ref _query) = env.current_query {
+            match (&op1, &op2) {
+                (Value::Scalar(s1), Value::Scalar(s2)) => {
+                    Ok(Value::Scalar(operation.apply_operation(*s1, *s2)))
+                }
+                _ => Ok(Value::Operation(Box::new(operation))),
+            }
+        } else if let Some(ref builder) = env.current_builder {
             let result_value = operation.eval_with_env(&env)?;
             let mut builder = builder.lock().unwrap();
 
@@ -1061,148 +1053,175 @@ fn get_value_from_sref(sref: &SRef, env: &Env) -> Result<GoldilocksField> {
     }
 }
 
-fn add_pattern_to_query(pattern: QueryPattern, query: &mut PodQueryBuilder) -> Result<SRef> {
-    match pattern {
-        QueryPattern::Constant(value) => Ok(query.add_constant_to_statements_table(value)),
-        QueryPattern::Reference(sref) => Ok(sref),
-        QueryPattern::Operation(operation) => {
-            let result_sref = SRef(
-                ORef::Q(query.current_origin_id),
-                format!("tmp_{}", query.next_tmp_id()),
-            );
-
-            // Extract operands
-            let (op1, op2) = match &operation {
-                Operation::Sum(a, b) | Operation::Product(a, b) | Operation::Max(a, b) => (a, b),
-            };
-
-            // Convert operands to SRefs
-            let op1_sref = value_to_sref(op1, query)?;
-            let op2_sref = value_to_sref(op2, query)?;
-
-            // Add operation to query
-            let op_type = match operation {
-                Operation::Sum(_, _) => OpType::Add,
-                Operation::Product(_, _) => OpType::Multiply,
-                Operation::Max(_, _) => OpType::Max,
-            };
-
-            query.add_operation(Operation::into_pod_op(
-                op_type,
-                result_sref.clone(),
-                op1_sref,
-                op2_sref,
-            ));
-
-            Ok(result_sref)
-        }
-    }
-}
-
-fn value_to_sref(value: &Value, query: &mut PodQueryBuilder) -> Result<SRef> {
-    match value {
-        Value::Scalar(s) => Ok(query.add_constant_to_statements_table(*s)),
-        Value::SRef(sref) => Ok(sref.clone()),
-        Value::Pattern(p) => add_pattern_to_query(*p.clone(), query),
-        _ => Err(anyhow!("Cannot convert value to SRef")),
-    }
-}
-
-async fn find_matching_pod(query: PodQueryBuilder, env: Env) -> Result<Value> {
+fn find_matching_pod(query: PodQueryBuilder, env: Env) -> Result<Value> {
+    let constraints = query.build_constraints();
     let store = env.pod_store.lock().unwrap();
 
-    'pod_loop: for pod in store.pods.iter() {
-        let mut id_mapping = HashMap::new(); // Maps (origin_id, statement_name) -> SRef
+    for pod in store.pods.iter() {
+        let pod_id = PodBuilder::pod_id(pod);
 
-        // Try to match all statements in pattern
-        for ((origin_id, statement_key), query_statement) in &query.statement_table {
-            if !statement_matches(query_statement, pod, &mut id_mapping, *origin_id)? {
-                continue 'pod_loop;
+        if let Some(ref builder) = env.current_builder {
+            if builder.lock().unwrap().input_pods.contains_key(&pod_id) {
+                continue;
             }
         }
-
-        // Found a match - return the requested SRefs
-        if query.srefs.len() == 1 {
-            let sref = &query.srefs[0];
-            if let ORef::Q(id) = sref.0 {
-                // Map the query ref to actual pod ref
-                if let Some(mapped_sref) = id_mapping.get(&(id, sref.1.clone())) {
-                    return Ok(Value::SRef(mapped_sref.clone()));
-                }
+        if matches_constraints(pod, &constraints) {
+            if let Some(ref builder) = env.current_builder {
+                builder.lock().unwrap().register_input_pod(pod);
             }
-            // If not a query ref or not mapped, return as is
-            return Ok(Value::SRef(sref.clone()));
-        } else {
-            return Ok(Value::List(
-                query
-                    .srefs
-                    .iter()
-                    .map(|sref| {
-                        if let ORef::Q(id) = sref.0 {
-                            if let Some(mapped_sref) = id_mapping.get(&(id, sref.1.clone())) {
-                                Value::SRef(mapped_sref.clone())
+
+            let refs: Vec<Value> = query
+                .srefs
+                .iter()
+                .map(|sref| {
+                    // Find the actual statement ID in the pod for this key
+                    let key = sref.1.split(':').last().unwrap();
+                    let statement_id = pod
+                        .payload
+                        .statements_list
+                        .iter()
+                        .find(|(_, stmt)| {
+                            if let Statement::ValueOf(ak, _) = stmt {
+                                ak.1 == key
                             } else {
-                                Value::SRef(sref.clone())
+                                false
                             }
-                        } else {
-                            Value::SRef(sref.clone())
-                        }
-                    })
-                    .collect(),
-            ));
+                        })
+                        .map(|(id, _)| id.clone())
+                        .ok_or_else(|| anyhow!("Statement not found in pod for key {}", key))?;
+
+                    Ok(Value::SRef(SRef(ORef::P(pod_id.clone()), statement_id)))
+                })
+                .collect::<Result<Vec<Value>>>()?;
+
+            return if refs.len() == 1 {
+                Ok(refs.into_iter().next().unwrap())
+            } else {
+                Ok(Value::List(refs))
+            };
         }
     }
 
-    Err(anyhow!("No pod found matching statements"))
+    Err(anyhow!("No matching pod found"))
 }
 
-fn statement_matches(
-    query_statement: &Statement,
-    pod: &POD,
-    id_mapping: &mut HashMap<(usize, String), SRef>,
-    origin_id: usize,
-) -> Result<bool> {
-    match query_statement {
-        Statement::ValueOf(query_key, query_value) => {
-            // Try to find a matching ValueOf statement in the pod
-            for (pod_statement_key, pod_statement) in &pod.payload.statements_map {
-                if let Statement::ValueOf(pod_anchored_key, pod_value) = pod_statement {
-                    // For scalar value queries, match the actual value
-                    if let (ScalarOrVec::Scalar(query_scalar), ScalarOrVec::Scalar(pod_scalar)) =
-                        (query_value, pod_value)
-                    {
-                        if query_scalar == pod_scalar {
-                            // Add mapping from query key to pod statement
-                            id_mapping.insert(
-                                (origin_id, query_key.1.clone()),
-                                SRef(
-                                    ORef::P(pod_anchored_key.0.origin_name.clone()),
-                                    pod_statement_key.clone(),
-                                ),
-                            );
-                            return Ok(true);
-                        }
+fn matches_constraints(pod: &POD, constraints: &[QueryConstraint]) -> bool {
+    for constraint in constraints {
+        match constraint {
+            QueryConstraint::HasKey { key } => {
+                if !pod.payload.statements_list.iter().any(|(_, stmt)| {
+                    if let Statement::ValueOf(ak, _) = stmt {
+                        &ak.1 == key
+                    } else {
+                        false
                     }
+                }) {
+                    return false;
                 }
             }
-            Ok(false)
+            QueryConstraint::ExactValue { key, value } => {
+                if !pod.payload.statements_list.iter().any(|(_, stmt)| {
+                    if let Statement::ValueOf(ak, v) = stmt {
+                        &ak.1 == key && v == value
+                    } else {
+                        false
+                    }
+                }) {
+                    return false;
+                }
+            }
+            QueryConstraint::Operation {
+                result_key,
+                operation,
+            } => {
+                let has_matching_op =
+                    pod.payload.statements_list.iter().any(|(_, stmt)| {
+                        matches_operation_constraint(pod, operation, stmt).is_some()
+                    });
+
+                if !has_matching_op {
+                    return false;
+                }
+            }
         }
-        Statement::SumOf(result, left, right) => {
-            match_operation(pod, id_mapping, origin_id, result, left, right, |s| {
-                matches!(s, Statement::SumOf(_, _, _))
-            })
+    }
+    true
+}
+
+fn matches_operation_constraint(
+    pod: &POD,
+    op_constraint: &OperationConstraint,
+    statement: &Statement,
+) -> Option<AnchoredKey> {
+    let (result, left, right) = match (op_constraint.op_type, statement) {
+        (OpType::Add, Statement::SumOf(res, l, r))
+        | (OpType::Multiply, Statement::ProductOf(res, l, r))
+        | (OpType::Max, Statement::MaxOf(res, l, r)) => (res, l, r),
+        _ => return None,
+    };
+
+    let (op1, op2) = &op_constraint.operands;
+
+    if let Some(left_res) = matches_operand_constraint(pod, op1, left) {
+        if let Some(right_res) = matches_operand_constraint(pod, op2, right) {
+            if left == &left_res && right == &right_res {
+                return Some(result.clone());
+            }
         }
-        Statement::ProductOf(result, left, right) => {
-            match_operation(pod, id_mapping, origin_id, result, left, right, |s| {
-                matches!(s, Statement::ProductOf(_, _, _))
-            })
+    }
+
+    // Try reverse order
+    // TODO separate commutative and non commutative operations
+    if let Some(left_res) = matches_operand_constraint(pod, op2, left) {
+        if let Some(right_res) = matches_operand_constraint(pod, op1, right) {
+            if left == &left_res && right == &right_res {
+                return Some(result.clone());
+            }
         }
-        Statement::MaxOf(result, left, right) => {
-            match_operation(pod, id_mapping, origin_id, result, left, right, |s| {
-                matches!(s, Statement::MaxOf(_, _, _))
-            })
+    }
+
+    None
+}
+
+fn matches_operand_constraint(
+    pod: &POD,
+    constraint: &OperandConstraint,
+    operand: &AnchoredKey,
+) -> Option<AnchoredKey> {
+    match constraint {
+        OperandConstraint::EntryRef(key) => {
+            if &operand.1 == key {
+                Some(operand.clone())
+            } else {
+                None
+            }
         }
-        _ => Ok(false),
+        OperandConstraint::Constant(value) => {
+            if let Some((_, Statement::ValueOf(ak, v))) = pod.payload.statements_list.iter().find(
+                |(_, stmt)| matches!(stmt, Statement::ValueOf(ak, v) if ak == operand && v == value)
+            ) {
+                Some(ak.clone())
+            } else {
+                None
+            }
+        },
+        OperandConstraint::Operation(op) => {
+            for (_, stmt) in &pod.payload.statements_list {
+                match stmt {
+                    Statement::SumOf(res, _, _)
+                    | Statement::ProductOf(res, _, _)
+                    | Statement::MaxOf(res, _, _) => {
+                        if operand == res {
+                            if let Some(matched_res) = matches_operation_constraint(pod, op, stmt) {
+                                return Some(matched_res);
+                            }
+                        }
+                    }
+                    _ => continue,
+                }
+            }
+            None
+        }
     }
 }
 
@@ -1322,7 +1341,7 @@ mod tests {
         )
     }
     #[tokio::test]
-    async fn test_create_pod() -> Result<()> {
+    async fn test_create_pod_simple() -> Result<()> {
         let shared = Arc::new(Mutex::new(HashMap::new()));
         let pod_store = Arc::new(Mutex::new(MyPods::default()));
         let env = Env::new("test_user".to_string(), shared, pod_store);
@@ -1365,7 +1384,7 @@ mod tests {
         pod_store.lock().unwrap().add_pod(second_pod);
 
         let result = eval(
-            "[createpod final x [+ 40 2] y [+ [pod? x] 66] z [+ [pod? z] 66]]",
+            "[createpod final x [+ 40 2] y [+ [pod? [x]] 66] z_prime [+ [pod? [z]] 66]]",
             env.clone(),
         )
         .await?;
@@ -1397,14 +1416,15 @@ mod tests {
         };
         pod_store.lock().unwrap().add_pod(first_pod);
 
-        let second_pod_eval = eval("[createpod test_pod_2 z [+ [pod? x] 10]]", env.clone()).await?;
+        let second_pod_eval =
+            eval("[createpod test_pod_2 z [+ [pod? [x]] 10]]", env.clone()).await?;
         let second_pod = match second_pod_eval {
             Value::PodRef(pod) => pod,
             _ => panic!("Expected PodRef"),
         };
         pod_store.lock().unwrap().add_pod(second_pod);
 
-        let result = eval("[createpod final final-key [+ 10 [pod? z]]]", env.clone()).await?;
+        let result = eval("[createpod final final-key [+ 10 [pod? [z]]]]", env.clone()).await?;
 
         match result {
             Value::PodRef(pod) => {
@@ -1433,7 +1453,7 @@ mod tests {
 
             // This should succeed because it uses two different pods
             eval(
-                "[createpod final a [+ [pod? x] 1] b [+ [pod? x] 2]]",
+                "[createpod final a [+ [pod? [x]] 1] b [+ [pod? [x]] 2]]",
                 env.clone(),
             )
             .await?;
@@ -1455,14 +1475,14 @@ mod tests {
             // This should fail because there's only one pod with x=10,
             // but we're trying to match it twice
             let result = eval(
-                "[createpod final a [+ [pod? x] 1] b [+ [pod? x] 2]]",
+                "[createpod final a [+ [pod? [x]] 1] b [+ [pod? [x]] 2]]",
                 env.clone(),
             )
             .await;
 
             assert!(result.is_err());
             if let Err(e) = result {
-                assert!(e.to_string().contains("No pod found matching statements"));
+                assert!(e.to_string().contains("No matching pod found"));
             }
             Ok(())
         } else {
@@ -1483,7 +1503,7 @@ mod tests {
             // Test destructuring pod query results
             let result = eval(
                 "[createpod final
-                    [define [a b] [pod? x y]]
+                    [define [a b] [pod? [x] [y]]]
                     sum [+ a b]
                     double-x [* a 2]]",
                 env.clone(),
@@ -1522,7 +1542,7 @@ mod tests {
             // Test querying single value returns SRef directly, not in a list
             let result = eval(
                 "[createpod final
-                    [define x [pod? value1]]
+                    [define x [pod? [value1]]]
                     a [+ x 1]]",
                 env.clone(),
             )
@@ -1581,6 +1601,13 @@ mod tests {
         let result = eval("[pod? [x 30]]", env.clone()).await?;
         assert!(matches!(result, Value::SRef(_)));
 
+        // Query using a wrong value
+        let result = eval("[pod? [x 31]]", env.clone()).await;
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("No matching pod found"));
+        }
+
         Ok(())
     }
 
@@ -1608,17 +1635,33 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_refer_to_other_keys_query() -> Result<()> {
+    async fn test_refer_to_other_key_not_revealed_query() -> Result<()> {
         let (env, pod_store) = setup_env().await;
 
         // Create pod with multiple values
-        let pod = eval("[createpod test_pod x 10 y [+ 10 x]]", env.clone()).await?;
+        let pod = eval("[createpod test_pod x 11 y [+ 12 x]]", env.clone()).await?;
         if let Value::PodRef(pod) = pod {
             pod_store.lock().unwrap().add_pod(pod);
         }
 
         // Query for multiple values
-        let result = eval("[pod? [x 10] [y [+ 10 x]]]", env.clone()).await?;
+        let result = eval("[pod? [y [+ 12 x]]]", env.clone()).await?;
+        assert!(matches!(result, Value::SRef(_)));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_refer_to_other_keys_query() -> Result<()> {
+        let (env, pod_store) = setup_env().await;
+
+        // Create pod with multiple values
+        let pod = eval("[createpod test_pod x 11 y [+ 12 x]]", env.clone()).await?;
+        if let Value::PodRef(pod) = pod {
+            pod_store.lock().unwrap().add_pod(pod);
+        }
+
+        // Query for multiple values
+        let result = eval("[pod? [x 11] [y [+ 12 x]]]", env.clone()).await?;
         match result {
             Value::List(values) => {
                 assert_eq!(values.len(), 2);
@@ -1651,6 +1694,38 @@ mod tests {
         // Query using final value
         let result = eval("[pod? [result 32]]", env.clone()).await?;
         assert!(matches!(result, Value::SRef(_)));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_deeply_nested_operation_query() -> Result<()> {
+        let (env, pod_store) = setup_env().await;
+
+        // Create a pod with deeply nested operations
+        let pod = eval(
+            "[createpod test_pod
+                x 10
+                y 20
+                z 15
+                result [+ [* 2 x] [max y z]]]",
+            env.clone(),
+        )
+        .await?;
+
+        if let Value::PodRef(pod) = pod {
+            pod_store.lock().unwrap().add_pod(pod);
+
+            // Query matching the exact nested structure
+            let result = eval("[pod? [result [+ [* 2 x] [max y z]]]]", env.clone()).await?;
+            assert!(matches!(result, Value::SRef(_)));
+
+            // Also try querying with just the final value
+            let expected_value = (2 * 10) + 20; // [* 2 x] + max(y, z) = 20 + 20 = 40
+            let result = eval(&format!("[pod? [result {}]]", expected_value), env.clone()).await?;
+
+            assert!(matches!(result, Value::SRef(_)));
+        }
 
         Ok(())
     }
@@ -1720,7 +1795,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_pod_query_operation_matchin() -> Result<()> {
+    async fn test_pod_query_operation_matching() -> Result<()> {
         let shared = Arc::new(Mutex::new(HashMap::new()));
         let pod_store = Arc::new(Mutex::new(MyPods::default()));
         let env = Env::new("test_user".to_string(), shared, pod_store.clone());
@@ -1745,7 +1820,7 @@ mod tests {
                 Value::PodRef(pod) => {
                     assert_eq!(
                         get_self_entry_value(&pod, "a").unwrap(),
-                        ScalarOrVec::Scalar(GoldilocksField(21))
+                        ScalarOrVec::Scalar(GoldilocksField(41))
                     );
                 }
                 _ => return Err(anyhow!("Expected PodRef")),
@@ -1764,7 +1839,7 @@ mod tests {
                 Value::PodRef(pod) => {
                     assert_eq!(
                         get_self_entry_value(&pod, "a").unwrap(),
-                        ScalarOrVec::Scalar(GoldilocksField(21))
+                        ScalarOrVec::Scalar(GoldilocksField(41))
                     );
                     Ok(())
                 }
@@ -1788,7 +1863,7 @@ mod tests {
             // Test querying single value returns SRef directly, not in a list
             let result = eval(
                 "[createpod final
-                    [define x [pod? value1]]
+                    [define x [pod? [value1]]]
                     a 10
                     b [+ [* x 10] a]]",
                 env.clone(),
@@ -1867,7 +1942,7 @@ mod tests {
             // Now create a complex pod using defines and references
             let result = eval(
                 "[createpod test
-                    [define [x y] [pod? value1 value2]]
+                    [define [x y] [pod? [value1] [value2]]]
                     [define z 42]
                     key1 [+ x 10]
                     key2 [max y 100]
