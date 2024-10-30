@@ -2,8 +2,9 @@ use core::fmt;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Default)]
 pub enum GadgetID {
+    #[default]
     NONE = 0,
     SCHNORR16 = 1,
     ORACLE = 2,
