@@ -414,7 +414,7 @@ mod tests {
         // Input Schnorr PODs. For now, they must all have the same number
         // of statements.
         let num_statements = 3;
-        let schnorr_pod1_name = "Test POD 1".to_string();
+        let schnorr_pod1_name = "Test POD 1";
         let schnorr_pod1 = POD::execute_schnorr_gadget(
             &[
                 Entry::new_from_scalar("s1", GoldilocksField(55)),
@@ -422,7 +422,7 @@ mod tests {
             ],
             &SchnorrSecretKey { sk: 27 },
         );
-        let schnorr_pod2_name = "Test POD 2".to_string();
+        let schnorr_pod2_name = "Test POD 2";
         let schnorr_pod2 = POD::execute_schnorr_gadget(
             &[
                 Entry::new_from_scalar("s3", GoldilocksField(57)),
@@ -431,7 +431,7 @@ mod tests {
             &SchnorrSecretKey { sk: 29 },
         );
 
-        let schnorr_pod3_name = "Test POD 3".to_string();
+        let schnorr_pod3_name = "Test POD 3";
         let schnorr_pod3 = POD::execute_schnorr_gadget(
             &[
                 Entry::new_from_scalar("s0", GoldilocksField(57)),
@@ -440,7 +440,7 @@ mod tests {
             &SchnorrSecretKey { sk: 24 },
         );
 
-        let schnorr_pod4_name = "Test POD 4".to_string();
+        let schnorr_pod4_name = "Test POD 4";
         let schnorr_pod4 = POD::execute_schnorr_gadget(
             &[
                 Entry::new_from_scalar("who", GoldilocksField(7)),
@@ -450,17 +450,17 @@ mod tests {
         );
 
         let pod_payloads_list = [
-            (schnorr_pod1_name.clone(), schnorr_pod1.payload.clone()),
-            (schnorr_pod2_name.clone(), schnorr_pod2.payload.clone()),
-            (schnorr_pod3_name.clone(), schnorr_pod3.payload.clone()),
-            (schnorr_pod4_name.clone(), schnorr_pod4.payload.clone()),
+            (schnorr_pod1_name.to_string(), schnorr_pod1.payload.clone()),
+            (schnorr_pod2_name.to_string(), schnorr_pod2.payload.clone()),
+            (schnorr_pod3_name.to_string(), schnorr_pod3.payload.clone()),
+            (schnorr_pod4_name.to_string(), schnorr_pod4.payload.clone()),
         ];
 
         let pods_list = [
-            (schnorr_pod1_name.clone(), schnorr_pod1),
-            (schnorr_pod2_name.clone(), schnorr_pod2),
-            (schnorr_pod3_name.clone(), schnorr_pod3),
-            (schnorr_pod4_name.clone(), schnorr_pod4),
+            (schnorr_pod1_name.to_string(), schnorr_pod1),
+            (schnorr_pod2_name.to_string(), schnorr_pod2),
+            (schnorr_pod3_name.to_string(), schnorr_pod3),
+            (schnorr_pod4_name.to_string(), schnorr_pod4),
         ];
 
         // Ops
