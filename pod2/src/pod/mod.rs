@@ -95,7 +95,6 @@ impl POD {
             }
             PODProof::Plonky(p) => {
                 todo!();
-                // TODO add plonky2 proof verification
             }
         }
     }
@@ -146,7 +145,7 @@ impl POD {
         }
         let out_statements = statements.get("_SELF").unwrap();
         let out_payload = PODPayload::new(out_statements);
-        println!("{:?}", out_payload);
+        // println!("{:?}", out_payload);
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
         let protocol = SchnorrSigner::new();
         let payload_hash = out_payload.hash_payload();
@@ -166,6 +165,9 @@ impl POD {
             proof: PODProof::Oracle(proof),
             proof_type: GadgetID::ORACLE,
         })
+    }
+    pub fn execute_plonky_gadget(input: &GPGInput, cmds: &[OpCmd]) -> Result<Self> {
+        todo!();
     }
 }
 

@@ -89,6 +89,7 @@ where
             OpExecutorGadget<'a, { M + N }, NS>, // NP=M+N
             M,
             N,
+            NS,
         >::circuit_data()
     }
 
@@ -99,6 +100,7 @@ where
         op_list: OpList<'a>,
         origin_renaming_map: HashMap<(String, String), String>,
     ) -> Result<POD> {
+        let start_execute = Instant::now();
         // Check that the input data is valid, i.e. that we have at most M
         // SchnorrPODs and N PlonkyPODs in our list, *and each POD
         // contains exactly `NS` statements*.
@@ -153,12 +155,15 @@ where
         plonky_pods.sort_by(|a, b| a.0.cmp(&b.0));
 
         let verifier_data = circuit_data.verifier_data();
+        let start_dummy_proof = Instant::now();
         let dummy_proof = RecursionCircuit::<
             SchnorrPODGadget<NS>,
             OpExecutorGadget<'a, { M + N }, NS>,
             M,
             N,
+            NS,
         >::dummy_proof(circuit_data);
+        let time_dummy_proof = start_dummy_proof.elapsed();
 
         // TODO: Constructor
         let dummy_plonky_pod = POD {
@@ -258,14 +263,18 @@ where
         let mut pw: PartialWitness<F> = PartialWitness::new();
 
         // create the circuit
+        let start_add_targets = Instant::now();
         let mut circuit = RecursionCircuit::<
             SchnorrPODGadget<NS>,
             OpExecutorGadget<'a, { M + N }, NS>,
             M,
             N,
+            NS,
         >::add_targets(&mut builder, verifier_data.clone())?;
+        let time_add_targets = start_add_targets.elapsed();
+
         // set the circuit witness
-        let start = Instant::now();
+        let start_set_targets = Instant::now();
         circuit.set_targets(
             &mut pw,
             selectors,
@@ -274,12 +283,16 @@ where
             output_statements.clone(), // =OpsExecutor::Output
             &recursive_proofs,
         )?;
-        println!("circuit.set_targets(): {:?}", start.elapsed());
+        let time_set_targets = start_set_targets.elapsed();
 
-        let start = Instant::now();
+        let start_build = Instant::now();
+        let num_gates = builder.num_gates();
         let data = builder.build::<C>();
+        let time_build = start_build.elapsed();
+
+        let start_prove = Instant::now();
         let plonky2_proof = data.prove(pw)?;
-        println!("builder.build(): {:?}", start.elapsed());
+        let time_prove = start_prove.elapsed();
 
         #[cfg(test)] // if running a test, verify the proof
         data.verify(plonky2_proof.clone())?;
@@ -291,6 +304,20 @@ where
         // should be connected to the corresponding statement targets of
         // the SchnorrPOD and PlonkyPOD gadgets (in that order). These
         // can be connected using StatementTarget's `connect` method.
+
+        let time_execute = start_execute.elapsed();
+        println!(
+            "| {} | {} | {} | {:#.2?} | {:#.2?} | {:#.2?} | {:#.2?} | {:#.2?} | {:#.2?} |",
+            M,
+            N,
+            NS,
+            num_gates,
+            time_dummy_proof,
+            time_add_targets,
+            time_build,
+            time_prove,
+            time_execute,
+        );
 
         Ok(POD {
             payload: PODPayload {
@@ -442,12 +469,38 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_inputs_PlonkyButNotPlonkyGadget() -> Result<()> {
-        const M: usize = 3; // max num SchnorrPOD
-        const N: usize = 3; // max num Plonky2 recursive proof
-        const NS: usize = 10; // num statements
+    fn get_numbers_PlonkyButNotPlonkyGadget() -> Result<()> {
+        println!("| M | N | NS | num_gates | dummy_proof | add_targets | build | prove | total |");
+        println!(
+            "|--- | --- | --- | --------- | ----------- | ----------- | ----- | ----- | ------|"
+        );
 
-        // let pods_list = prepare_pods();
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 1, 1>()?;
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 1, 3>()?;
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 1, 5>()?;
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 1, 10>()?;
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 1, 25>()?;
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 2, 1>()?;
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 2, 3>()?;
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 2, 5>()?;
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 2, 10>()?;
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 2, 25>()?;
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 3, 1>()?;
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 3, 3>()?;
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 3, 5>()?;
+        // test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 3, 10>()?;
+        // test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 3, 25>()?;
+        Ok(())
+    }
+
+    fn test_empty_inputs_PlonkyButNotPlonkyGadget_opt<
+        const M: usize,  // max num SchnorrPOD
+        const N: usize,  // max num Plonky2 recursive proof
+        const NS: usize, // num statements
+    >() -> Result<()>
+    where
+        [(); M + N]:,
+    {
         let pods_list = vec![];
         let out_statement_names = (0..NS)
             .map(|i| format!("_DUMMYOUT{}", i))
@@ -461,14 +514,12 @@ mod tests {
 
         let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS>::circuit_data()?;
 
-        let start = Instant::now();
         let _new_pod = PlonkyButNotPlonkyGadget::<M, N, NS>::execute(
             circuit_data,
             &pods_list,
             op_list,
             HashMap::new(),
         )?;
-        println!("PlonkyButNotPlonkyGadget::execute(): {:?}", start.elapsed());
 
         Ok(())
     }
