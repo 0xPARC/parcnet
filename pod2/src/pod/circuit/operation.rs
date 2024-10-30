@@ -19,7 +19,7 @@ use crate::{
         operation::{OpList, Operation as Op, OperationCmd},
         payload::{PODPayload, StatementList},
         statement::StatementRef,
-        GPGInput, Statement,
+        GPGInput, Statement, POD,
     },
     recursion::OpsExecutorTrait,
     D, F, NUM_BITS,
@@ -29,7 +29,7 @@ use super::{
     entry::EntryTarget,
     origin::OriginTarget,
     statement::{StatementRefTarget, StatementTarget},
-    util::assert_less,
+    util::{assert_less},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -77,6 +77,10 @@ impl OperationTarget {
             &[operation_as_fields[7], operation_as_fields[8]],
         )?;
         Ok(())
+    }
+
+    pub fn operands(&self) -> Vec<StatementRefTarget> {
+        vec![self.operand1, self.operand2, self.operand3]
     }
 
     /// Operation evaluation. It is assumed that the provided
@@ -266,19 +270,33 @@ impl<'a, const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget
             .collect::<Result<Vec<_>>>()?;
 
         // Apply ops.
-        let output_statement_list_target: Result<[StatementTarget; NS]> = array::try_from_fn(|i| {
+        // Create output statement list target.
+        let output_statement_list_target: [StatementTarget; NS] = array::from_fn(|_| StatementTarget::new_virtual(builder));
+        // Combine inputs and outputs.
+        let input_and_output_statement_list_vec_target = [
+            remapped_statement_list_vec_target,
+            vec![output_statement_list_target.to_vec()]].concat();
+        // Compute output statement list
+        let computed_output_statement_list_target: [StatementTarget; NS] = array::try_from_fn(|i| {
+            // TODO: Make sure current op does not reference itself or an
+            // as-yet unevaluated op.
             op_list_target[i].eval_with_gadget_id(
                 builder,
                 GadgetID::ORACLE,
-                &remapped_statement_list_vec_target,
+                &input_and_output_statement_list_vec_target,
             )
-        });
+        })?;
+        
+        // Connect targets
+        zip(output_statement_list_target, computed_output_statement_list_target).for_each(
+            |(a,b)| a.connect(builder, &b)
+            );        
 
         Ok((
             statement_list_vec_target,
             origin_id_map_target,
             op_list_target,
-            output_statement_list_target?,
+            output_statement_list_target,
         ))
     }
 
@@ -301,9 +319,14 @@ impl<'a, const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget
             zip(target_row, row).try_for_each(|(target, value)| pw.set_target(*target, value))
         })?;
 
+        // TODO: Abstract this away.
+        // Determine output POD statements for the purposes of later reference
+        let output_pod = POD::execute_oracle_gadget(&input.0, &input.1.0)?; println!("{:?}", output_pod.payload.statements_list);
+        let input_and_output_pod_list = [input.0.pods_list.clone(), vec![("_SELF".to_string(), output_pod)]].concat();
+        
         // Set operation targets
-        let ref_index_map = StatementRef::index_map(&input.0.pods_list);
-        zip(&targets.2, input.1.sort(&input.0.pods_list).0).try_for_each(
+        let ref_index_map = StatementRef::index_map(&input_and_output_pod_list);
+        zip(&targets.2, input.1.sort(&input_and_output_pod_list).0).try_for_each(
             |(op_target, OperationCmd(op, _))| op_target.set_witness(pw, &op, &ref_index_map),
         )?;
 
