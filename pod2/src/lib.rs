@@ -141,6 +141,13 @@ where
             ));
         }
 
+        if op_list.0.len() != NS {
+            return Err(anyhow!(
+                "The operation list must contain exactly {} operations.",
+                NS
+            ));
+        }
+
         // Sort POD lists.
         schnorr_pods.sort_by(|a, b| a.0.cmp(&b.0));
         plonky_pods.sort_by(|a, b| a.0.cmp(&b.0));
@@ -442,7 +449,15 @@ mod tests {
 
         // let pods_list = prepare_pods();
         let pods_list = vec![];
-        let op_list = OpList(vec![]);
+        let out_statement_names = (0..NS)
+            .map(|i| format!("_DUMMYOUT{}", i))
+            .collect::<Vec<_>>();
+        let op_list = OpList(
+            out_statement_names
+                .iter()
+                .map(|name| OpCmd(Op::None, name))
+                .collect(),
+        );
 
         let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS>::circuit_data()?;
 
