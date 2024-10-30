@@ -423,14 +423,18 @@ mod tests {
                 Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
                 "op3",
             ),
-            // NOTEQUAL:yolo
+            // COPY preceding op's output
             OpCmd(
-                Op::NonequalityFromEntries(
-                    StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-                    StatementRef(&schnorr_pod1_name, "VALUEOF:s2"),
+                Op::CopyStatement(StatementRef("_SELF", "VALUEOF:op3")), "op4"
                 ),
-                "yolo",
-            ),
+            // NOTEQUAL:yolo
+            // OpCmd(
+            //     Op::NonequalityFromEntries(
+            //         StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+            //         StatementRef(&schnorr_pod1_name, "VALUEOF:s2"),
+            //     ),
+            //     "yolo",
+            // ),
             // // VALUEOF:nono
             // OpCmd(
             //     Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
@@ -444,8 +448,7 @@ mod tests {
             //     ),
             //     "op2",
             // ),
-        ])
-        .sort(&pods_list);
+        ]);
 
         // get the circuit_data, this struct is reused for all the calls of
         // PlonkyButNotPlonkyGadget::execute
