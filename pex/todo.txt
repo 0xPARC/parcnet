@@ -3,7 +3,7 @@
 [ ] recursive pod? (pod? within pod?)
 [ ] create schnorr pod when there are only K/V
 [ ] expose _signer on schnorr pod
-[ ] [asserts] in query and in createpod body
+[x] [asserts] in query and in createpod body
 [ ] [keep] for keeping entries from source pods
 [ ] support [from @user] so we can receive pods across the network. check that the pod received matches the query
 [ ] support [to @user] so we can send pods across the network

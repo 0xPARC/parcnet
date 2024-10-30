@@ -18,6 +18,12 @@ use super::{
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash)]
 pub struct AnchoredKey(pub Origin, pub String);
 
+impl Default for AnchoredKey {
+    fn default() -> Self {
+        AnchoredKey(Origin::default(), String::new())
+    }
+}
+
 impl PartialEq for AnchoredKey {
     fn eq(&self, ak: &AnchoredKey) -> bool {
         let AnchoredKey(self_origin, self_key) = self;

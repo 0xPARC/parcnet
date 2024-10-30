@@ -127,9 +127,123 @@ pub enum Value {
     PodRef(POD),
     SRef(SRef),
     Operation(Box<Operation>), // Box because Operation can contain Operation
+    Assert(Box<Assert>),
     List(Vec<Value>),
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum AssertType {
+    Gt,
+    // Lt,
+    Eq,
+    Neq,
+}
+
+impl AssertType {
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            ">" => Ok(AssertType::Gt),
+            // "<" => Ok(AssertType::Lt),
+            "=" => Ok(AssertType::Eq),
+            "!=" => Ok(AssertType::Neq),
+            _ => Err(anyhow!("Unknown operation type: {}", s)),
+        }
+    }
+}
+
+impl From<(AssertType, Value, Value)> for Assert {
+    fn from((assert_type, op1, op2): (AssertType, Value, Value)) -> Self {
+        match assert_type {
+            AssertType::Gt => Assert::Gt(op1, op2),
+            // AssertType::Lt => Assert::Lt(op1, op2),
+            AssertType::Eq => Assert::Eq(op1, op2),
+            AssertType::Neq => Assert::Neq(op1, op2),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum Assert {
+    Gt(Value, Value),
+    // Lt(Value, Value),
+    Eq(Value, Value),
+    Neq(Value, Value),
+}
+
+impl Assert {
+    fn extract_value(value: &Value, env: Option<&Env>) -> Result<GoldilocksField> {
+        match value {
+            Value::Scalar(s) => Ok(*s),
+            Value::SRef(r) if env.is_some() => get_value_from_sref(r, env.unwrap()),
+            _ => Err(anyhow!("Invalid operand type")),
+        }
+    }
+
+    fn evaluate_values(&self, env: Option<&Env>) -> Result<(GoldilocksField, GoldilocksField)> {
+        match self {
+            Assert::Gt(a, b) | Assert::Eq(a, b) | Assert::Neq(a, b) => {
+                let value1 = Self::extract_value(a, env)?;
+                let value2 = Self::extract_value(b, env)?;
+                Ok((value1, value2))
+            }
+        }
+    }
+
+    fn apply_assert(&self, value1: GoldilocksField, value2: GoldilocksField) -> GoldilocksField {
+        match self {
+            Assert::Gt(_, _) => {
+                if value1.to_canonical_u64() > value2.to_canonical_u64() {
+                    GoldilocksField(1)
+                } else {
+                    GoldilocksField(0)
+                }
+            }
+            // Assert::Lt(_, _) => {
+            //     if value1.to_canonical_u64() < value2.to_canonical_u64() {
+            //         GoldilocksField(1)
+            //     } else {
+            //         GoldilocksField(0)
+            //     }
+            // }
+            Assert::Eq(_, _) => {
+                if value1.to_canonical_u64() == value2.to_canonical_u64() {
+                    GoldilocksField(1)
+                } else {
+                    GoldilocksField(0)
+                }
+            }
+            Assert::Neq(_, _) => {
+                if value1.to_canonical_u64() != value2.to_canonical_u64() {
+                    GoldilocksField(1)
+                } else {
+                    GoldilocksField(0)
+                }
+            }
+        }
+    }
+
+    fn eval(&self) -> Result<GoldilocksField> {
+        let (value1, value2) = self.evaluate_values(None)?;
+        Ok(self.apply_assert(value1, value2))
+    }
+
+    fn predicate_from_op(assert_type: AssertType) -> String {
+        match assert_type {
+            AssertType::Gt => "GT".to_string(),
+            // AssertType::Lt => "",
+            AssertType::Eq => "EQUAL".to_string(),
+            AssertType::Neq => "NOTEQUAL".to_string(),
+        }
+    }
+    fn into_pod_op(assert_type: AssertType, op1: SRef, op2: SRef) -> Op<StatementRef> {
+        match assert_type {
+            AssertType::Gt => Op::GtFromEntries(op1.into(), op2.into()),
+            // AssertType::Lt => Op::LtFromEntries(op1.into(), op2.into()),
+            AssertType::Eq => Op::EqualityFromEntries(op1.into(), op2.into()),
+            AssertType::Neq => Op::NonequalityFromEntries(op1.into(), op2.into()),
+        }
+    }
+}
 #[derive(Clone, Copy, Debug)]
 pub enum OpType {
     Add,
@@ -237,6 +351,10 @@ enum QueryConstraint {
         result_key: String,
         operation: OperationConstraint,
     },
+    Assert {
+        assert_type: AssertType,
+        operands: (Box<OperandConstraint>, Box<OperandConstraint>),
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -259,6 +377,25 @@ impl PodQueryBuilder {
             constraints: Vec::new(),
             current_origin_id: 1,
         }
+    }
+    fn add_assert(&mut self, assert: &Assert) -> Result<()> {
+        let (op1, op2) = match assert {
+            Assert::Eq(v1, v2) | Assert::Neq(v1, v2) | Assert::Gt(v1, v2) => (v1, v2),
+        };
+        let op1_constraint = self.add_value(op1)?;
+        let op2_constraint = self.add_value(op2)?;
+
+        let assert_type = match assert {
+            Assert::Eq(_, _) => AssertType::Eq,
+            Assert::Neq(_, _) => AssertType::Neq,
+            Assert::Gt(_, _) => AssertType::Gt,
+        };
+
+        self.constraints.push(QueryConstraint::Assert {
+            assert_type,
+            operands: (Box::new(op1_constraint), Box::new(op2_constraint)),
+        });
+        Ok(())
     }
 
     fn add_operation(&mut self, op: &Operation) -> Result<OperandConstraint> {
@@ -567,8 +704,12 @@ impl Expr {
                 }
                 match &exprs[0] {
                     Expr::Atom(_, op) => {
+                        // Handle asserts which can be tracked inside PODs
+                        if let Ok(assert_type) = AssertType::from_str(op) {
+                            return self.eval_assert(assert_type, &exprs[1..], env).await;
+                        }
                         // Handle operation which can be tracked inside PODs
-                        if let Ok(op_type) = OpType::from_str(op) {
+                        else if let Ok(op_type) = OpType::from_str(op) {
                             return self.eval_operation(op_type, &exprs[1..], env).await;
                         } else {
                             match op.as_str() {
@@ -722,30 +863,46 @@ impl Expr {
             None
         };
         info!("creating pod {}", pod_name.expect("No pod name"));
-        // First evaluate all expressions that aren't key-value pairs
-        // This includes defines and other forms
+        // First process defines
         let mut i = 1;
         while i < body.len() {
             match &body[i] {
-                Expr::List(_, _) => {
-                    // Evaluate any list expression (define, etc)
-                    body[i].eval(pod_env.clone()).await?;
-                    i += 1;
-                }
-                Expr::Atom(_, _) => {
-                    // Found what should be start of k/v pairs
+                Expr::List(_, exprs) => {
+                    if let Some(Expr::Atom(_, op)) = exprs.first() {
+                        if op == "define" {
+                            body[i].eval(pod_env.clone()).await?;
+                            i += 1;
+                            continue;
+                        }
+                    }
                     break;
                 }
+                _ => break,
             }
         }
 
-        // Now process remaining expressions as key-value pairs
-        let remaining = &body[i..];
-        if remaining.len() % 2 != 0 {
+        // Then process key-value pairs until we hit an assertion or end
+        let mut j = i;
+        while j < body.len() {
+            match &body[j] {
+                Expr::List(_, exprs) => {
+                    if let Some(Expr::Atom(_, op)) = exprs.first() {
+                        if matches!(op.as_str(), ">" | "=" | "!=") {
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            }
+            j += 1;
+        }
+
+        let key_value_pairs = &body[i..j];
+        if key_value_pairs.len() % 2 != 0 {
             return Err(anyhow!("Odd number of key-value expressions"));
         }
 
-        for chunk in remaining.chunks(2) {
+        for chunk in key_value_pairs.chunks(2) {
             let (key_expr, value_expr) = (&chunk[0], &chunk[1]);
             match key_expr {
                 Expr::Atom(_, key) => {
@@ -881,6 +1038,15 @@ impl Expr {
                 _ => return Err(anyhow!("Expected key-value pair")),
             }
         }
+        for assertion in &body[j..] {
+            if let Expr::List(_, exprs) = assertion {
+                if let Some(Expr::Atom(_, op)) = exprs.first() {
+                    if matches!(op.as_str(), ">" | "=" | "!=") {
+                        assertion.eval(pod_env.clone()).await?;
+                    }
+                }
+            }
+        }
         let pod = builder.lock().unwrap().finalize()?;
         Ok(Value::PodRef(pod))
     }
@@ -890,6 +1056,7 @@ impl Expr {
         let mut query_env = env.clone();
         query_env.current_query = Some(query_builder.clone());
 
+        // First process all defines
         for arg in args {
             if let Expr::List(_, exprs) = arg {
                 if let Some(Expr::Atom(_, op)) = exprs.first() {
@@ -901,15 +1068,30 @@ impl Expr {
             }
         }
 
+        // Then process all other constraints (key-value pairs and assertions)
         for arg in args {
             match arg {
                 Expr::List(_, exprs) => {
                     if let Some(Expr::Atom(_, op)) = exprs.first() {
                         if op == "define" {
+                            continue; // Skip defines as we've already processed them
+                        }
+
+                        // Handle assertions
+                        if matches!(op.as_str(), ">" | "=" | "!=") {
+                            if exprs.len() != 3 {
+                                return Err(anyhow!("Assert requires exactly two operands"));
+                            }
+                            let assert_type = AssertType::from_str(op)?;
+                            let op1 = exprs[1].eval(query_env.clone()).await?;
+                            let op2 = exprs[2].eval(query_env.clone()).await?;
+                            let assert = (assert_type, op1, op2).into();
+                            query_builder.lock().unwrap().add_assert(&assert)?;
                             continue;
                         }
                     }
 
+                    // Handle key-value constraints
                     let key = match &exprs[0] {
                         Expr::Atom(_, k) => k.clone(),
                         _ => return Err(anyhow!("Key must be an atom")),
@@ -1022,6 +1204,64 @@ impl Expr {
             // We would also need to make get_value_from_sref work outside a builder context, by fetching the refs in the store directly
             // as an example if createpod returns a list of statementref (like pod?) that enables to then do further computation on it
             Ok(Value::Scalar(operation.eval()?))
+        }
+    }
+    async fn eval_assert(
+        &self,
+        assert_type: AssertType,
+        operands: &[Expr],
+        env: Env,
+    ) -> Result<Value> {
+        if operands.len() != 2 {
+            return Err(anyhow!("Asserts require exactly two operands"));
+        }
+        let op1 = operands[0].eval(env.clone()).await?;
+        let op2 = operands[1].eval(env.clone()).await?;
+
+        let assert: Assert = (assert_type, op1.clone(), op2.clone()).into();
+        if let Some(ref _query) = env.current_query {
+            match (&op1, &op2) {
+                (Value::Scalar(s1), Value::Scalar(s2)) => {
+                    Ok(Value::Scalar(assert.apply_assert(*s1, *s2)))
+                }
+                _ => Ok(Value::Assert(Box::new(assert))),
+            }
+        } else if let Some(ref builder) = env.current_builder {
+            let mut builder = builder.lock().unwrap();
+
+            // Create refs for any values that need tracking
+            match (&op1, &op2) {
+                (Value::SRef(_), _) | (_, Value::SRef(_)) => {
+                    // Convert operands to SRefs if they're scalars
+                    let op1_sref = match op1 {
+                        Value::Scalar(s) => builder.get_or_create_constant_ref(s),
+                        Value::SRef(r) => r,
+                        _ => return Err(anyhow!("Invalid operand type")),
+                    };
+
+                    let op2_sref = match op2 {
+                        Value::Scalar(s) => builder.get_or_create_constant_ref(s),
+                        Value::SRef(r) => r,
+                        _ => return Err(anyhow!("Invalid operand type")),
+                    };
+
+                    // We need to create a new entry for the result
+                    let pod_op = Assert::into_pod_op(assert_type, op1_sref, op2_sref);
+                    let op_statement_id = builder.next_statement_id();
+                    builder.add_operation(pod_op, op_statement_id.clone());
+                    let assert_sref = SRef::self_ref(format!(
+                        "{}:{}",
+                        Assert::predicate_from_op(assert_type),
+                        op_statement_id.clone()
+                    ));
+
+                    Ok(Value::SRef(assert_sref))
+                }
+                _ => Ok(Value::Scalar(assert.eval()?)),
+            }
+        } else {
+            // Direct evaluation
+            Ok(Value::Scalar(assert.eval()?))
         }
     }
 }
@@ -1160,9 +1400,53 @@ fn matches_constraints(pod: &POD, constraints: &[QueryConstraint]) -> bool {
                     return false;
                 }
             }
+            QueryConstraint::Assert {
+                assert_type,
+                operands,
+            } => {
+                // Find statements that match the assertion
+                let matching_asserts = pod
+                    .payload
+                    .statements_list
+                    .iter()
+                    .filter_map(|(_, stmt)| {
+                        matches_assert_constraint(pod, *assert_type, operands, stmt)
+                    })
+                    .collect::<Vec<_>>();
+
+                if matching_asserts.is_empty() {
+                    return false;
+                }
+            }
         }
     }
     true
+}
+
+fn matches_assert_constraint(
+    pod: &POD,
+    assert_type: AssertType,
+    operands: &(Box<OperandConstraint>, Box<OperandConstraint>),
+    statement: &Statement,
+) -> Option<bool> {
+    let (op1, op2) = match (assert_type, statement) {
+        (AssertType::Gt, Statement::Gt(l, r))
+        | (AssertType::Eq, Statement::Equal(l, r))
+        | (AssertType::Neq, Statement::NotEqual(l, r)) => (l, r),
+        _ => return None,
+    };
+
+    let (op1_constraint, op2_constraint) = operands;
+
+    if let Some(left_res) = matches_operand_constraint(pod, op1_constraint, op1) {
+        if let Some(right_res) = matches_operand_constraint(pod, op2_constraint, op2) {
+            if op1 == &left_res && op2 == &right_res {
+                return Some(true);
+            }
+        }
+    }
+
+    None
 }
 
 fn matches_operation_constraint(
@@ -2084,6 +2368,125 @@ mod tests {
         } else {
             Err(anyhow!("Failed to create source pod"))
         }
+    }
+    #[tokio::test]
+    async fn test_pod_with_assertions_after_kv() -> Result<()> {
+        let (env, _) = setup_env().await;
+
+        // Create a pod with assertions after key-value definitions
+        let result = eval(
+            "[createpod test
+                x 10
+                y [+ x 12]
+                z [* x 2]
+                [> y x]
+                [= z 20]
+                [!= y z]]",
+            env.clone(),
+        )
+        .await?;
+
+        match result {
+            Value::PodRef(pod) => {
+                assert_eq!(
+                    get_self_entry_value(&pod, "x").unwrap(),
+                    ScalarOrVec::Scalar(GoldilocksField(10))
+                );
+                assert_eq!(
+                    get_self_entry_value(&pod, "y").unwrap(),
+                    ScalarOrVec::Scalar(GoldilocksField(22))
+                );
+                assert_eq!(
+                    get_self_entry_value(&pod, "z").unwrap(),
+                    ScalarOrVec::Scalar(GoldilocksField(20))
+                );
+                Ok(())
+            }
+            _ => Err(anyhow!("Expected PodRef")),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_pod_with_failing_assertion_after_kv() -> Result<()> {
+        let (env, _) = setup_env().await;
+
+        // This should fail because y is not greater than z
+        let result = eval(
+            "[createpod test
+                x 10
+                y [+ x 5]
+                z [* x 2]
+                [> y z]]", // y=15, z=20, so this assertion fails
+            env.clone(),
+        )
+        .await;
+
+        assert!(result.is_err());
+        Ok(())
+    }
+    #[tokio::test]
+    async fn test_pod_query_with_operation_and_assert() -> Result<()> {
+        let (env, pod_store) = setup_env().await;
+
+        // Create a pod with operations and assertions
+        let source_pod = eval(
+            "[createpod source
+                y 15
+                x [+ y 2]
+                [> y 10]]",
+            env.clone(),
+        )
+        .await?;
+        if let Value::PodRef(source_pod) = source_pod {
+            pod_store.lock().unwrap().add_pod(source_pod);
+        }
+
+        // Query for pods matching both operation and assertion
+        let result = eval(
+            "[pod?
+                [x [+ y 2]]
+                [> y 10]]",
+            env.clone(),
+        )
+        .await?;
+
+        match result {
+            Value::SRef(_) => Ok(()),
+            _ => Err(anyhow!("Expected SRef")),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_pod_query_with_failing_assert() -> Result<()> {
+        let (env, pod_store) = setup_env().await;
+
+        // Create a pod that won't match the assertion
+        let source_pod = eval(
+            "[createpod source
+                y 5
+                x [+ y 2]]",
+            env.clone(),
+        )
+        .await?;
+        if let Value::PodRef(source_pod) = source_pod {
+            pod_store.lock().unwrap().add_pod(source_pod);
+        }
+
+        // Query should fail because there is no y > 5 statement (even if y is over 5; in a future version the POD store will be able to make this POD JIT)
+        let result = eval(
+            "[pod?
+                [x [+ y 2]]
+                [> y 5]]",
+            env.clone(),
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No matching pod found"));
+        Ok(())
     }
     #[tokio::test]
     async fn test_list_creation() -> Result<()> {
