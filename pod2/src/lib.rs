@@ -15,6 +15,7 @@ use plonky2::plonk::circuit_data::{
 use plonky2::plonk::config::PoseidonGoldilocksConfig;
 use plonky2::plonk::proof::Proof;
 use std::array;
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use pod::circuit::pod::SchnorrPODGadget;
@@ -96,6 +97,7 @@ where
         circuit_data: CircuitData<F, C, D>,
         input_pods: &[(String, POD)],
         op_list: OpList<'a>,
+        origin_renaming_map: HashMap<(String, String), String>,
     ) -> Result<POD> {
         // Check that the input data is valid, i.e. that we have at most M
         // SchnorrPODs and N PlonkyPODs in our list, *and each POD
@@ -209,7 +211,7 @@ where
         let gpg_input = {
             let sorted_gpg_input = GPGInput::new(
                 padded_pod_list.clone().into_iter().collect(),
-                std::collections::HashMap::new(),
+                origin_renaming_map,
             );
             GPGInput {
                 // TODO NOTE: this feels redundant usage of `GPGInput`, first we call
@@ -292,6 +294,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use anyhow::Result;
     use plonky2::field::goldilocks_field::GoldilocksField;
 
@@ -381,7 +385,7 @@ mod tests {
         let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS>::circuit_data()?;
 
         let _new_pod =
-            PlonkyButNotPlonkyGadget::<M, N, NS>::execute(circuit_data, &pods_list, op_list)?;
+            PlonkyButNotPlonkyGadget::<M, N, NS>::execute(circuit_data, &pods_list, op_list, HashMap::new())?;
 
         // TODO do a 2nd iteration where the generated plonky2-pod is (recursively) verified
         Ok(())
