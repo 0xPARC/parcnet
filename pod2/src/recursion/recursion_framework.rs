@@ -71,15 +71,17 @@ where
     I: InnerCircuitTrait,
     O: OpsExecutorTrait,
     [(); M + N]:,
-    // [(); O::NS]:,
 {
     /// returns the full-recursive CircuitData
     pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
         RecursionCircuit::<I, O, M, N, NS>::circuit_data()
     }
 
-    pub fn prepare_public_inputs(verifier_data: VerifierCircuitData<F, C, D>) -> Vec<F> {
-        RecursionCircuit::<I, O, M, N, NS>::prepare_public_inputs(verifier_data)
+    pub fn prepare_public_inputs(
+        verifier_data: VerifierCircuitData<F, C, D>,
+        public_inputs: Vec<F>,
+    ) -> Vec<F> {
+        RecursionCircuit::<I, O, M, N, NS>::prepare_public_inputs(verifier_data, public_inputs)
     }
 
     pub fn prove_node(
@@ -170,11 +172,9 @@ pub struct RecursionCircuit<
     const NS: usize,
 > where
     [(); M + N]:,
-    // [(); O::NS]:,
 {
     selectors_targ: [Target; M + N],
     inner_circuit_targ: [I::Targets; M],
-    // ops_executor_targ: [O::Targets; O::NS],
     ops_executor_targ: O::Targets,
     proofs_targ: [ProofWithPublicInputsTarget<D>; N],
     // the next two are common for all the given proofs. It is the data for this circuit itself
@@ -188,7 +188,6 @@ where
     I: InnerCircuitTrait,
     O: OpsExecutorTrait,
     [(); M + N]:,
-    // [(); O::NS]:,
 {
     /// returns the full-recursive CircuitData
     pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
@@ -214,8 +213,12 @@ where
         dummy_proof_pis.proof
     }
 
-    pub fn prepare_public_inputs(verifier_data: VerifierCircuitData<F, C, D>) -> Vec<F> {
+    pub fn prepare_public_inputs(
+        verifier_data: VerifierCircuitData<F, C, D>,
+        public_inputs: Vec<F>,
+    ) -> Vec<F> {
         [
+            public_inputs,
             // add verifier_data as public inputs:
             verifier_data.verifier_only.circuit_digest.elements.to_vec(),
             verifier_data
@@ -281,11 +284,13 @@ where
     pub fn set_targets(
         &mut self,
         pw: &mut PartialWitness<F>,
-        // if selectors[i]==0: verify InnerCircuit. if selectors[i]==1: verify recursive_proof[i]
+        // the first M selectors correspond to the M InnerCircuits, and the following N selectors
+        // correspond to the N PlonkyProofs verifications. If the selector is set to 1, it enables
+        // the verification (either of the InnerCircuit or the Plonky2Proof verification).
         selectors: [F; M + N],
         inner_circuit_input: [I::Input; M],
         ops_executor_input: O::Input,
-        ops_executor_output: O::Output,
+        ops_executor_output: O::Output, // public inputs
         recursive_proofs: &[PlonkyProof; N],
     ) -> Result<()> {
         for i in 0..(M + N) {
@@ -293,11 +298,16 @@ where
         }
 
         // set the InnerCircuit related values
+        let mut ic_pubinp: Vec<Vec<F>> = vec![];
         for i in 0..M {
-            I::set_targets(pw, &self.inner_circuit_targ[i], &inner_circuit_input[i])?;
+            ic_pubinp.push(I::set_targets(
+                pw,
+                &self.inner_circuit_targ[i],
+                &inner_circuit_input[i],
+            )?);
         }
 
-        O::set_targets(
+        let oe_pubinp = O::set_targets(
             pw,
             &self.ops_executor_targ,
             &ops_executor_input,
@@ -309,7 +319,10 @@ where
         // recursive proofs verification
         pw.set_verifier_data_target(&self.verifier_data_targ, &self.verifier_data.verifier_only)?;
 
-        let public_inputs = Self::prepare_public_inputs(self.verifier_data.clone());
+        // join the public inputs from the InnerCircuits and the OpsExecutor
+        let pubinp: Vec<F> = [ic_pubinp.into_iter().flatten().collect(), oe_pubinp].concat();
+        // put together the public inputs with the verifier_data
+        let public_inputs = Self::prepare_public_inputs(self.verifier_data.clone(), pubinp);
         for i in 0..N {
             pw.set_proof_with_pis_target(
                 &self.proofs_targ[i],
@@ -559,7 +572,8 @@ mod tests {
                 );
 
                 // verify the recursive proof
-                let public_inputs = RT::<M, N, NS>::prepare_public_inputs(verifier_data.clone());
+                let public_inputs =
+                    RT::<M, N, NS>::prepare_public_inputs(verifier_data.clone(), vec![]);
                 verifier_data.clone().verify(ProofWithPublicInputs {
                     proof: new_proof.clone(),
                     public_inputs: public_inputs.clone(),
@@ -574,7 +588,7 @@ mod tests {
         let last_proof = proofs_at_level_i[0].clone();
 
         // verify the last proof
-        let public_inputs = RT::<M, N, NS>::prepare_public_inputs(verifier_data.clone());
+        let public_inputs = RT::<M, N, NS>::prepare_public_inputs(verifier_data.clone(), vec![]);
         verifier_data.clone().verify(ProofWithPublicInputs {
             proof: last_proof.clone(),
             public_inputs: public_inputs.clone(),

@@ -24,12 +24,13 @@ pub trait InnerCircuitTrait {
         selector_booltarg: &BoolTarget,
     ) -> Result<Self::Targets>;
 
-    /// set the actual witness values for the current instance of the circuit
+    /// set the actual witness values for the current instance of the circuit. Returns a Vec<F>
+    /// containing the values that will be set as public inputs
     fn set_targets(
         pw: &mut PartialWitness<F>,
         targets: &Self::Targets,
         input: &Self::Input,
-    ) -> Result<()>;
+    ) -> Result<Vec<F>>;
 }
 
 pub trait OpsExecutorTrait {
@@ -40,11 +41,12 @@ pub trait OpsExecutorTrait {
     /// sets up the circuit logic
     fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets>;
 
-    /// assigns the given Input to the given Targets
+    /// assigns the given Input to the given Targets. Returns a Vec<F> containing the values that
+    /// will be set as public inputs
     fn set_targets(
         pw: &mut PartialWitness<F>,
         targets: &Self::Targets,
         input: &Self::Input,
         output: &Self::Output,
-    ) -> Result<()>;
+    ) -> Result<Vec<F>>;
 }

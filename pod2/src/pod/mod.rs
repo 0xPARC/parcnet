@@ -110,9 +110,9 @@ impl POD {
                 // this method.
                 let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS>::circuit_data()?;
                 let verifier_data = circuit_data.verifier_data();
-                PlonkyButNotPlonkyGadget::<M, N, NS>::verify_plonky_proof(
+                PlonkyButNotPlonkyGadget::<M, N, NS>::verify_plonky_pod(
                     verifier_data,
-                    p.clone(),
+                    self.clone(),
                 )?;
                 Ok(true)
             }

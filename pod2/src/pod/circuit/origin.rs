@@ -25,6 +25,10 @@ impl OriginTarget {
             gadget_id: builder.add_virtual_target(),
         }
     }
+    pub fn register_as_public_input(&self, builder: &mut CircuitBuilder<F, D>) {
+        builder.register_public_input(self.origin_id);
+        builder.register_public_input(self.gadget_id);
+    }
     pub fn to_targets(&self) -> Vec<Target> {
         vec![self.origin_id, self.gadget_id]
     }
