@@ -1,13 +1,13 @@
 use std::sync::{Arc, Mutex};
 
 use colored::*;
-use eyre::Result;
+use eyre::{eyre, Result};
 use pex::{
     repl::{
         display::print_pod_details,
         reedline::{LispCompleter, LispHighlighter, LispValidator},
     },
-    InMemoryStore,
+    store::iroh::IrohStore,
 };
 use pex::{Env, MyPods, Value};
 use pod2::schnorr::SchnorrSecretKey;
@@ -16,15 +16,98 @@ use reedline::{
     KeyModifiers, MenuBuilder, Reedline, ReedlineEvent, ReedlineMenu, Signal,
 };
 
+use rand::Rng;
+
+fn get_username_from_key(sk: &SchnorrSecretKey) -> String {
+    let cosmic_prefixes = [
+        "stellar",
+        "nova",
+        "pulsar",
+        "quasar",
+        "nebula",
+        "cosmic",
+        "astro",
+        "galaxy",
+        "comet",
+        "photon",
+        "quantum",
+        "void",
+        "solar",
+        "lunar",
+        "aurora",
+        "celestial",
+        "eclipse",
+        "meteor",
+        "starborn",
+        "infinity",
+    ];
+
+    let cosmic_suffixes = [
+        "walker",
+        "rider",
+        "weaver",
+        "dancer",
+        "singer",
+        "seeker",
+        "drifter",
+        "hunter",
+        "voyager",
+        "explorer",
+        "jumper",
+        "runner",
+        "tracer",
+        "dreamer",
+        "whisperer",
+        "guardian",
+        "wanderer",
+        "sentinel",
+        "sage",
+        "mystic",
+    ];
+
+    // Use the secret key to deterministically choose prefix and suffix
+    let prefix_index = sk.sk % cosmic_prefixes.len() as u64;
+    let suffix_index = (sk.sk >> 8) % cosmic_suffixes.len() as u64;
+
+    format!(
+        "{}_{}",
+        cosmic_prefixes[prefix_index as usize], cosmic_suffixes[suffix_index as usize]
+    )
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    let shared = Arc::new(InMemoryStore::new());
+    let random_sk = rand::thread_rng().gen::<u64>() % 10000;
+    let schnorr_key = SchnorrSecretKey { sk: random_sk };
+    let signer = pod2::schnorr::SchnorrSigner::new();
+    let public_key = signer.keygen(&schnorr_key);
+    let username = get_username_from_key(&schnorr_key);
+    let secret_key = iroh::net::key::SecretKey::generate();
+    let shared = Arc::new(IrohStore::new(secret_key));
+    let task_bound_shared = shared.clone();
+    let (sync_tx, sync_rx) = tokio::sync::oneshot::channel();
+    let init_task = tokio::task::spawn(async move { task_bound_shared.initialize(sync_tx).await });
+    tokio::select! {
+        init_result = init_task => {
+            if let Err(e) = init_result {
+                println!("Error during initialization: {}", e);
+                return Err(eyre!("Initialization failed"));
+            }
+        }
+        sync_result = sync_rx => {
+            match sync_result {
+                Ok(()) => println!("Store successfully reached sync state"),
+                Err(err) => {println!("Failed to receive sync signal"); println!("{:?}", err);},
+            }
+        }
+    }
+
     let pod_store = Arc::new(Mutex::new(MyPods::default()));
     let env = Env::new(
-        "repl_user".to_string(),
-        shared,
+        username.clone(),
+        shared.clone(),
         pod_store.clone(),
-        Some(SchnorrSecretKey { sk: 42 }),
+        Some(schnorr_key),
         None,
     );
 
@@ -71,6 +154,11 @@ async fn main() -> Result<()> {
     );
 
     println!("{}", "PARCNET Lisp REPL".green().bold());
+    println!("Welcome, {}!", username.cyan().bold());
+    println!(
+        "Public key: {}",
+        format!("{:?}", public_key.pk).yellow().bold()
+    );
     println!("Type 'exit' to quit");
     println!("Commands:");
     println!("  exit          - Exit the REPL");
@@ -100,11 +188,15 @@ async fn main() -> Result<()> {
                     _ => match pex::eval(input, env.clone()).await {
                         Ok(result) => match result {
                             Value::PodRef(pod) => {
-                                println!("\n{}", "Created new POD:".green());
-                                let store = env.pod_store.lock().unwrap();
-                                print_pod_details(&pod, &store);
-                                drop(store);
-                                env.pod_store.lock().unwrap().add_pod(pod);
+                                if !input.contains(&username) {
+                                    println!("\n{}", "Created new POD:".green());
+                                    let store = env.pod_store.lock().unwrap();
+                                    print_pod_details(&pod, &store);
+                                    drop(store);
+                                    env.pod_store.lock().unwrap().add_pod(pod);
+                                } else {
+                                    println!("\n{}", "Participated in POD creation".green());
+                                };
                             }
                             value if input.trim().starts_with("[pod?") => {
                                 println!("\n{}", "Matching POD:".green());
