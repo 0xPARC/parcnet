@@ -66,6 +66,7 @@ impl fmt::Display for Statement {
             Statement::Equal(op1, op2) => write!(f, "Equal({} = {})", op1, op2),
             Statement::NotEqual(op1, op2) => write!(f, "NotEqual({} ≠ {})", op1, op2),
             Statement::Gt(op1, op2) => write!(f, "Gt({} > {})", op1, op2),
+            Statement::Lt(op1, op2) => write!(f, "Lt({} > {})", op1, op2),
             Statement::Contains(op1, op2) => write!(f, "Contains({} ∈ {})", op1, op2),
             Statement::SumOf(result, op1, op2) => {
                 write!(f, "SumOf({} = {} + {})", result, op1, op2)
@@ -87,6 +88,7 @@ pub enum Statement {
     Equal(AnchoredKey, AnchoredKey),
     NotEqual(AnchoredKey, AnchoredKey),
     Gt(AnchoredKey, AnchoredKey),
+    Lt(AnchoredKey, AnchoredKey),
     Contains(AnchoredKey, AnchoredKey),
     SumOf(AnchoredKey, AnchoredKey, AnchoredKey),
     ProductOf(AnchoredKey, AnchoredKey, AnchoredKey),
@@ -101,6 +103,7 @@ impl Statement {
             Statement::Equal(_, _) => "EQUAL",
             Statement::NotEqual(_, _) => "NOTEQUAL",
             Statement::Gt(_, _) => "GT",
+            Statement::Lt(_, _) => "LT",
             Statement::Contains(_, _) => "CONTAINS",
             Statement::SumOf(_, _, _) => "SUMOF",
             Statement::ProductOf(_, _, _) => "PRODUCTOF",
@@ -118,6 +121,7 @@ impl Statement {
             6 => "SUMOF",
             7 => "PRODUCTOF",
             8 => "MAXOF",
+            9 => "LT",
             _ => "",
         }
     }
@@ -140,6 +144,7 @@ impl Statement {
     pub const SUM_OF: GoldilocksField = GoldilocksField(6);
     pub const PRODUCT_OF: GoldilocksField = GoldilocksField(7);
     pub const MAX_OF: GoldilocksField = GoldilocksField(8);
+    pub const LT: GoldilocksField = GoldilocksField(9);
     pub fn code(&self) -> GoldilocksField {
         match self {
             Self::None => Self::NONE,
@@ -151,6 +156,7 @@ impl Statement {
             Self::SumOf(_, _, _) => Self::SUM_OF,
             Self::ProductOf(_, _, _) => Self::PRODUCT_OF,
             Self::MaxOf(_, _, _) => Self::MAX_OF,
+            Self::Lt(_, _) => Self::LT,
         }
     }
     /// Field representation as a vector of length 11.
@@ -187,7 +193,13 @@ impl Statement {
                     vec![GoldilocksField::ZERO; 4],
                 ]
                 .concat(),
-                Self::Contains(anchkey1, anchkey2) => [
+                Self::Lt(anchkey1, anchkey2) => vec![
+                    anchkey1.to_fields(),
+                    anchkey2.to_fields(),
+                    vec![GoldilocksField::ZERO; 4],
+                ]
+                .concat(),
+                Self::Contains(anchkey1, anchkey2) => vec![
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
                     vec![GoldilocksField::ZERO; 4],
@@ -237,6 +249,10 @@ impl Statement {
                 anchkey1.remap_origin(f)?,
                 anchkey2.remap_origin(f)?,
             )),
+            Self::Lt(anchkey1, anchkey2) => Ok(Self::Lt(
+                anchkey1.remap_origin(f)?,
+                anchkey2.remap_origin(f)?,
+            )),
             Self::Contains(anchkey1, anchkey2) => Ok(Self::Contains(
                 anchkey1.remap_origin(f)?,
                 anchkey2.remap_origin(f)?,
@@ -272,6 +288,7 @@ impl Statement {
             Self::Equal(anchkey1, anchkey2) => vec![anchkey1.clone(), anchkey2.clone()],
             Self::NotEqual(anchkey1, anchkey2) => vec![anchkey1.clone(), anchkey2.clone()],
             Self::Gt(anchkey1, anchkey2) => vec![anchkey1.clone(), anchkey2.clone()],
+            Self::Lt(anchkey1, anchkey2) => vec![anchkey1.clone(), anchkey2.clone()],
             Self::Contains(anchkey1, anchkey2) => vec![anchkey1.clone(), anchkey2.clone()],
             Self::SumOf(anchkey1, anchkey2, anchkey3) => {
                 vec![anchkey1.clone(), anchkey2.clone(), anchkey3.clone()]

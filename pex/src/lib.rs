@@ -236,7 +236,7 @@ pub enum Value {
 #[derive(Clone, Copy, Debug)]
 pub enum AssertType {
     Gt,
-    // Lt,
+    Lt,
     Eq,
     Neq,
 }
@@ -245,7 +245,7 @@ impl AssertType {
     fn from_str(s: &str) -> Result<Self> {
         match s {
             ">" => Ok(AssertType::Gt),
-            // "<" => Ok(AssertType::Lt),
+            "<" => Ok(AssertType::Lt),
             "=" => Ok(AssertType::Eq),
             "!=" => Ok(AssertType::Neq),
             _ => Err(anyhow!("Unknown operation type: {}", s)),
@@ -257,7 +257,7 @@ impl From<(AssertType, Value, Value)> for Assert {
     fn from((assert_type, op1, op2): (AssertType, Value, Value)) -> Self {
         match assert_type {
             AssertType::Gt => Assert::Gt(op1, op2),
-            // AssertType::Lt => Assert::Lt(op1, op2),
+            AssertType::Lt => Assert::Lt(op1, op2),
             AssertType::Eq => Assert::Eq(op1, op2),
             AssertType::Neq => Assert::Neq(op1, op2),
         }
@@ -267,7 +267,7 @@ impl From<(AssertType, Value, Value)> for Assert {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Assert {
     Gt(Value, Value),
-    // Lt(Value, Value),
+    Lt(Value, Value),
     Eq(Value, Value),
     Neq(Value, Value),
 }
@@ -283,7 +283,7 @@ impl Assert {
 
     fn evaluate_values(&self, env: Option<&Env>) -> Result<(GoldilocksField, GoldilocksField)> {
         match self {
-            Assert::Gt(a, b) | Assert::Eq(a, b) | Assert::Neq(a, b) => {
+            Assert::Gt(a, b) | Assert::Lt(a, b) | Assert::Eq(a, b) | Assert::Neq(a, b) => {
                 let value1 = Self::extract_value(a, env)?;
                 let value2 = Self::extract_value(b, env)?;
                 Ok((value1, value2))
@@ -300,13 +300,13 @@ impl Assert {
                     GoldilocksField(0)
                 }
             }
-            // Assert::Lt(_, _) => {
-            //     if value1.to_canonical_u64() < value2.to_canonical_u64() {
-            //         GoldilocksField(1)
-            //     } else {
-            //         GoldilocksField(0)
-            //     }
-            // }
+            Assert::Lt(_, _) => {
+                 if value1.to_canonical_u64() < value2.to_canonical_u64() {
+                     GoldilocksField(1)
+                 } else {
+                     GoldilocksField(0)
+                 }
+            }
             Assert::Eq(_, _) => {
                 if value1.to_canonical_u64() == value2.to_canonical_u64() {
                     GoldilocksField(1)
@@ -332,7 +332,7 @@ impl Assert {
     fn predicate_from_op(assert_type: AssertType) -> String {
         match assert_type {
             AssertType::Gt => "GT".to_string(),
-            // AssertType::Lt => "",
+            AssertType::Lt => "LT".to_string(),
             AssertType::Eq => "EQUAL".to_string(),
             AssertType::Neq => "NOTEQUAL".to_string(),
         }
@@ -340,7 +340,7 @@ impl Assert {
     fn into_pod_op(assert_type: AssertType, op1: SRef, op2: SRef) -> Op<StatementRef> {
         match assert_type {
             AssertType::Gt => Op::GtFromEntries(op1.into(), op2.into()),
-            // AssertType::Lt => Op::LtFromEntries(op1.into(), op2.into()),
+            AssertType::Lt => Op::LtFromEntries(op1.into(), op2.into()),
             AssertType::Eq => Op::EqualityFromEntries(op1.into(), op2.into()),
             AssertType::Neq => Op::NonequalityFromEntries(op1.into(), op2.into()),
         }
@@ -482,7 +482,7 @@ impl PodQueryBuilder {
     }
     fn add_assert(&mut self, assert: &Assert) -> Result<()> {
         let (op1, op2) = match assert {
-            Assert::Eq(v1, v2) | Assert::Neq(v1, v2) | Assert::Gt(v1, v2) => (v1, v2),
+            Assert::Eq(v1, v2) | Assert::Neq(v1, v2) | Assert::Gt(v1, v2) | Assert::Lt(v1, v2)  => (v1, v2),
         };
         let op1_constraint = self.add_value(op1)?;
         let op2_constraint = self.add_value(op2)?;
@@ -491,6 +491,7 @@ impl PodQueryBuilder {
             Assert::Eq(_, _) => AssertType::Eq,
             Assert::Neq(_, _) => AssertType::Neq,
             Assert::Gt(_, _) => AssertType::Gt,
+            Assert::Lt(_, _) => AssertType::Lt,
         };
 
         self.constraints.push(QueryConstraint::Assert {
@@ -1126,7 +1127,7 @@ impl Expr {
             match &body[j] {
                 Expr::List(_, exprs) => {
                     if let Some(Expr::Atom(_, op)) = exprs.first() {
-                        if matches!(op.as_str(), ">" | "=" | "!=") {
+                        if matches!(op.as_str(), "<" | ">" | "=" | "!=") {
                             break;
                         }
                     }
@@ -1703,6 +1704,7 @@ fn matches_assert_constraint(
 ) -> Option<bool> {
     let (op1, op2) = match (assert_type, statement) {
         (AssertType::Gt, Statement::Gt(l, r))
+        | (AssertType::Lt, Statement::Lt(l, r))
         | (AssertType::Eq, Statement::Equal(l, r))
         | (AssertType::Neq, Statement::NotEqual(l, r)) => (l, r),
         _ => return None,
