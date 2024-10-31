@@ -237,6 +237,7 @@ impl OperationTarget {
 /// OpExecutorGadget implements the OpsExecutorTrait
 /// - NP: NumPODs (NP = M+N)
 /// - NS: Num Statements
+/// Notice that `output_statement_list_target` is registered as public input.
 pub struct OpExecutorGadget<'a, const NP: usize, const NS: usize>(PhantomData<&'a ()>);
 
 impl<'a, const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget<'a, NP, NS> {
@@ -264,7 +265,7 @@ impl<'a, const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget
         [[StatementTarget; NS]; NP],
         [Vec<Target>; NP],
         [OperationTarget; NS],
-        [StatementTarget; NS],
+        [StatementTarget; NS], // registered as public input
     );
 
     fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets> {
@@ -298,6 +299,12 @@ impl<'a, const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget
         // Create output statement list target.
         let output_statement_list_target: [StatementTarget; NS] =
             array::from_fn(|_| StatementTarget::new_virtual(builder));
+
+        // register `output_statement_list_target` as public inputs
+        for statement_target in output_statement_list_target {
+            statement_target.register_as_public_input(builder);
+        }
+
         // Combine inputs and outputs.
         let input_and_output_statement_list_vec_target = [
             remapped_statement_list_vec_target,
@@ -336,7 +343,7 @@ impl<'a, const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget
         targets: &Self::Targets,
         input: &Self::Input,
         output: &Self::Output,
-    ) -> Result<()> {
+    ) -> Result<Vec<F>> {
         // Set POD targets.
         // TODO: Connect these to the POD targets that go into the inner and recursion circuits instead!
         zip(&targets.0, &input.0.pods_list).try_for_each(|(s_targets, (_, pod))| {
@@ -367,7 +374,11 @@ impl<'a, const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget
         )?;
 
         // Check output statement list target
-        zip(&targets.3, output).try_for_each(|(s_target, (_, s))| s_target.set_witness(pw, s))
+        zip(&targets.3, output).try_for_each(|(s_target, (_, s))| s_target.set_witness(pw, s))?;
+
+        // return a Vec<F> containing the public inputs. This must match the order of the
+        // registered public inputs at the `add_targets` method.
+        Ok(output.into_iter().flat_map(|v| v.1.to_fields()).collect())
     }
 }
 

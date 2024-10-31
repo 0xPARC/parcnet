@@ -70,6 +70,16 @@ impl StatementTarget {
             value: builder.add_virtual_target(),
         }
     }
+    pub fn register_as_public_input(&self, builder: &mut CircuitBuilder<F, D>) {
+        builder.register_public_input(self.predicate);
+        self.origin1.register_as_public_input(builder);
+        builder.register_public_input(self.key1);
+        self.origin2.register_as_public_input(builder);
+        builder.register_public_input(self.key2);
+        self.origin3.register_as_public_input(builder);
+        builder.register_public_input(self.key3);
+        builder.register_public_input(self.value);
+    }
     pub fn to_targets(&self) -> Vec<Target> {
         [
             vec![self.predicate],
