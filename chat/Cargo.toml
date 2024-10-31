@@ -8,13 +8,13 @@ anyhow.workspace = true
 assets.workspace = true
 pod2.workspace = true
 constants.workspace = true
+iroh.workspace = true
 bytes = "1.7.2"
 chrono = { version = "0.4.38", features = ["serde"] }
 ed25519-dalek = "2.1.1"
 eyre = "0.6.12"
 futures = "0.3.30"
 gpui.workspace = true
-iroh = "0.26.0"
 pkarr = "2.2.0"
 postcard = "1.0.10"
 reqwest = "0.12.8"
