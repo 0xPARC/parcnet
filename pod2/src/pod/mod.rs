@@ -520,6 +520,11 @@ mod tests {
             .eval_with_gadget_id(GadgetID::NONE)?;
         assert!(gt_statement == Statement::Gt(anchkeys2[0].clone(), anchkeys1[0].clone()));
 
+        // Lt check
+        let lt_statement = Op::LtFromEntries(entry_statement1.clone(), entry_statement2.clone())
+            .eval_with_gadget_id(GadgetID::NONE)?;
+        assert!(lt_statement == Statement::Lt(anchkeys1[0].clone(), anchkeys2[0].clone()));
+
         // Eq transitivity check
         let eq_statement1 =
             Op::EqualityFromEntries(entry_statement4.clone(), entry_statement1.clone())
@@ -544,6 +549,12 @@ mod tests {
         assert!(
             Op::GtToNonequality(gt_statement.clone()).eval_with_gadget_id(GadgetID::NONE)?
                 == Statement::NotEqual(gt_anchkeys[0].clone(), gt_anchkeys[1].clone())
+        );
+        // Lt->Nonequality conversion check
+        let lt_anchkeys = lt_statement.anchored_keys();
+        assert!(
+            Op::LtToNonequality(lt_statement.clone()).eval_with_gadget_id(GadgetID::NONE)?
+                == Statement::NotEqual(lt_anchkeys[0].clone(), lt_anchkeys[1].clone())
         );
         Ok(())
     }
@@ -682,6 +693,13 @@ mod tests {
                 ),
                 "apple banana comparison",
             ),
+            OpCmd::new(
+                Op::LtFromEntries(
+                    StatementRef::new("p1", "VALUEOF:apple"),
+                    StatementRef::new("p1", "VALUEOF:banana"),
+                ),
+                "banana apple comparison",
+            ),
             // this operation creates a statement on top of a statement
             // created by an earlier operation
             OpCmd::new(
@@ -762,7 +780,14 @@ mod tests {
                     "oraclePODParent",
                     "GT:apple banana comparison",
                 )),
-                "apple banana nonequality",
+                "apple banana nonequality with gt",
+            ),
+            OpCmd::new(
+                Op::LtToNonequality(StatementRef::new(
+                    "oraclePODParent",
+                    "LT:banana apple comparison",
+                )),
+                "apple banana nonequality with lt",
             ),
         ];
 
