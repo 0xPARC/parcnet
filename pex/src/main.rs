@@ -10,7 +10,7 @@ use pex::{
     store::iroh::IrohStore,
 };
 use pex::{Env, MyPods, Value};
-use pod2::signature::schnorr::SchnorrSecretKey;
+use pod2::signature::schnorr::{SchnorrSecretKey, SchnorrSigner};
 use reedline::{
     default_emacs_keybindings, ColumnarMenu, DefaultPrompt, DefaultPromptSegment, Emacs, KeyCode,
     KeyModifiers, MenuBuilder, Reedline, ReedlineEvent, ReedlineMenu, Signal,
@@ -79,7 +79,7 @@ fn get_username_from_key(sk: &SchnorrSecretKey) -> String {
 async fn main() -> Result<()> {
     let random_sk = rand::thread_rng().gen::<u64>() % 10000;
     let schnorr_key = SchnorrSecretKey { sk: random_sk };
-    let signer = pod2::schnorr::SchnorrSigner::new();
+    let signer = SchnorrSigner::new();
     let public_key = signer.keygen(&schnorr_key);
     let username = get_username_from_key(&schnorr_key);
     let secret_key = iroh::net::key::SecretKey::generate();

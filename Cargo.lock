@@ -84,9 +84,9 @@ checksum = "4aa90d7ce82d4be67b64039a3d588d38dbcc6736577de4a847025ce5b0c468d1"
 
 [[package]]
 name = "allocator-api2"
-version = "0.2.18"
+version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c6cb57a04249c6480766f7f7cef5467412af1490f8d1e243141daddada3264f"
+checksum = "611cc2ae7d2e242c457e4be7f97036b8ad9ca152b499f53faf99b1ed8fc2553f"
 
 [[package]]
 name = "android-tzdata"
@@ -285,8 +285,8 @@ checksum = "30ca9a001c1e8ba5149f91a74362376cc6bc5b919d92d988668657bd570bdcec"
 dependencies = [
  "async-task",
  "concurrent-queue",
- "fastrand 2.1.1",
- "futures-lite 2.4.0",
+ "fastrand 2.2.0",
+ "futures-lite 2.5.0",
  "slab",
 ]
 
@@ -310,7 +310,7 @@ checksum = "ebcd09b382f40fcd159c2d695175b2ae620ffa5f3bd6f664131efff4e8b9e04a"
 dependencies = [
  "async-lock 3.4.0",
  "blocking",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
 ]
 
 [[package]]
@@ -343,7 +343,7 @@ dependencies = [
  "cfg-if",
  "concurrent-queue",
  "futures-io",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
  "parking",
  "polling 3.7.4",
  "rustix 0.38.39",
@@ -391,7 +391,7 @@ checksum = "b948000fad4873c1c9339d60f2623323a0cfd3816e5181033c6a5cb68b2accf7"
 dependencies = [
  "async-io 2.4.0",
  "blocking",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
 ]
 
 [[package]]
@@ -425,7 +425,7 @@ dependencies = [
  "blocking",
  "cfg-if",
  "event-listener 5.3.1",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
  "rustix 0.38.39",
  "tracing",
 ]
@@ -570,7 +570,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1f7a89a8ee5889d2593ae422ce6e1bb03e48a0e8a16e4fa0882dfcbe7e182ef"
 dependencies = [
  "bytes",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
  "genawaiter",
  "iroh-blake3",
  "iroh-io",
@@ -772,7 +772,7 @@ dependencies = [
  "async-channel 2.3.1",
  "async-task",
  "futures-io",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
  "piper",
 ]
 
@@ -906,9 +906,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.1.36"
+version = "1.1.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baee610e9452a8f6f0a1b6194ec09ff9e2d85dea54432acdae41aa0761c95d70"
+checksum = "40545c26d092346d8a8dab71ee48e7685a7a9cba76e634790c215b41a4a7b4cf"
 dependencies = [
  "jobserver",
  "libc",
@@ -1170,7 +1170,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#f6d4a73c344d8bb9c3ab5fd08f670605e0260d1c"
+source = "git+https://github.com/zed-industries/zed#0a28800049e2a7e9093e870c5a4e4ad83aa80430"
 dependencies = [
  "rustc-hash 1.1.0",
 ]
@@ -1720,7 +1720,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#f6d4a73c344d8bb9c3ab5fd08f670605e0260d1c"
+source = "git+https://github.com/zed-industries/zed#0a28800049e2a7e9093e870c5a4e4ad83aa80430"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1947,9 +1947,9 @@ dependencies = [
 
 [[package]]
 name = "embed-resource"
-version = "2.5.0"
+version = "2.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4e24052d7be71f0efb50c201557f6fe7d237cfd5a64fd5bcd7fd8fe32dbbffa"
+checksum = "b68b6f9f63a0b6a38bc447d4ce84e2b388f3ec95c99c641c8ff0dd3ef89a6379"
 dependencies = [
  "cc",
  "memchr",
@@ -2202,9 +2202,9 @@ dependencies = [
 
 [[package]]
 name = "fastrand"
-version = "2.1.1"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8c02a5121d4ea3eb16a80748c74f5549a5665e4c21333c6098f283870fbdea6"
+checksum = "486f806e73c5707928240ddc295403b1b93c96a02038563881c4a2fd84b81ac4"
 
 [[package]]
 name = "fd-lock"
@@ -2566,11 +2566,11 @@ dependencies = [
 
 [[package]]
 name = "futures-lite"
-version = "2.4.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f1fa2f9765705486b33fd2acf1577f8ec449c2ba1f318ae5447697b7c08d210"
+checksum = "cef40d21ae2c515b51041df9ed313ed21e572df340ea58a922a0aefe7e8891a1"
 dependencies = [
- "fastrand 2.1.1",
+ "fastrand 2.2.0",
  "futures-core",
  "futures-io",
  "parking",
@@ -2802,7 +2802,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#f6d4a73c344d8bb9c3ab5fd08f670605e0260d1c"
+source = "git+https://github.com/zed-industries/zed#0a28800049e2a7e9093e870c5a4e4ad83aa80430"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -2887,7 +2887,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#f6d4a73c344d8bb9c3ab5fd08f670605e0260d1c"
+source = "git+https://github.com/zed-industries/zed#0a28800049e2a7e9093e870c5a4e4ad83aa80430"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3241,7 +3241,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#f6d4a73c344d8bb9c3ab5fd08f670605e0260d1c"
+source = "git+https://github.com/zed-industries/zed#0a28800049e2a7e9093e870c5a4e4ad83aa80430"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3713,7 +3713,7 @@ dependencies = [
  "bytes",
  "derive_more 1.0.0",
  "futures-buffered",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
  "futures-util",
  "genawaiter",
  "hex",
@@ -3801,7 +3801,7 @@ dependencies = [
  "chrono",
  "derive_more 1.0.0",
  "futures-buffered",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
  "genawaiter",
  "hashlink",
  "hex",
@@ -3843,7 +3843,7 @@ dependencies = [
  "derive_more 1.0.0",
  "ed25519-dalek",
  "futures-buffered",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
  "futures-util",
  "hex",
  "iroh-base",
@@ -3882,7 +3882,7 @@ dependencies = [
  "derive_more 1.0.0",
  "ed25519-dalek",
  "futures-concurrency",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
  "futures-util",
  "indexmap",
  "iroh-base",
@@ -3905,7 +3905,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17e302c5ad649c6a7aa9ae8468e1c4dc2469321af0c6de7341c1be1bdaab434b"
 dependencies = [
  "bytes",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
  "pin-project",
  "smallvec",
  "tokio",
@@ -3947,7 +3947,7 @@ dependencies = [
  "duct",
  "futures-buffered",
  "futures-concurrency",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
  "futures-sink",
  "futures-util",
  "genawaiter",
@@ -4462,7 +4462,7 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#f6d4a73c344d8bb9c3ab5fd08f670605e0260d1c"
+source = "git+https://github.com/zed-industries/zed#0a28800049e2a7e9093e870c5a4e4ad83aa80430"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -4991,7 +4991,7 @@ dependencies = [
  "cipher",
  "digest",
  "endi",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
  "futures-util",
  "hkdf",
  "hmac",
@@ -5317,15 +5317,24 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-recursion",
+ "async-trait",
  "colored",
  "constants",
  "eyre",
+ "futures",
+ "hex",
+ "iroh",
  "nu-ansi-term 0.50.1",
  "plonky2",
  "pod2",
+ "postcard",
+ "rand 0.8.5",
  "reedline",
+ "serde",
+ "sha2",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -5373,7 +5382,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96c8c490f422ef9a4efd2cb5b42b76c8613d7e7dfc1caf667b8a3350a5acc066"
 dependencies = [
  "atomic-waker",
- "fastrand 2.1.1",
+ "fastrand 2.2.0",
  "futures-io",
 ]
 
@@ -5903,7 +5912,7 @@ dependencies = [
  "derive_more 1.0.0",
  "educe",
  "flume",
- "futures-lite 2.4.0",
+ "futures-lite 2.5.0",
  "futures-sink",
  "futures-util",
  "hex",
@@ -6303,7 +6312,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#f6d4a73c344d8bb9c3ab5fd08f670605e0260d1c"
+source = "git+https://github.com/zed-industries/zed#0a28800049e2a7e9093e870c5a4e4ad83aa80430"
 dependencies = [
  "derive_refineable",
 ]
@@ -6841,9 +6850,9 @@ dependencies = [
 
 [[package]]
 name = "security-framework-sys"
-version = "2.12.0"
+version = "2.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea4a292869320c0272d7bc55a5a6aafaff59b4f63404a003887b679a2e05b4b6"
+checksum = "fa39c7303dc58b5543c94d22c1766b0d31f2ee58306363ea622b10bbc075eaa2"
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -6858,7 +6867,7 @@ checksum = "d369a96f978623eb3dc28807c4852d6cc617fed53da5d3c400feff1ef34a714a"
 [[package]]
 name = "semantic_version"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#f6d4a73c344d8bb9c3ab5fd08f670605e0260d1c"
+source = "git+https://github.com/zed-industries/zed#0a28800049e2a7e9093e870c5a4e4ad83aa80430"
 dependencies = [
  "anyhow",
  "serde",
@@ -7420,7 +7429,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#f6d4a73c344d8bb9c3ab5fd08f670605e0260d1c"
+source = "git+https://github.com/zed-industries/zed#0a28800049e2a7e9093e870c5a4e4ad83aa80430"
 dependencies = [
  "arrayvec",
  "log",
@@ -7686,12 +7695,12 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
 name = "tempfile"
-version = "3.13.0"
+version = "3.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0f2c9fc62d0beef6951ccffd757e241266a2c833136efbe35af6cd2567dca5b"
+checksum = "28cce251fcbc87fac86a866eeb0d6c2d536fc16d06f184bb61aeae11aa4cee0c"
 dependencies = [
  "cfg-if",
- "fastrand 2.1.1",
+ "fastrand 2.2.0",
  "once_cell",
  "rustix 0.38.39",
  "windows-sys 0.59.0",
@@ -8378,7 +8387,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#f6d4a73c344d8bb9c3ab5fd08f670605e0260d1c"
+source = "git+https://github.com/zed-industries/zed#0a28800049e2a7e9093e870c5a4e4ad83aa80430"
 dependencies = [
  "anyhow",
  "async-fs 1.6.0",

@@ -34,6 +34,7 @@ use pod2::{
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+
 pub enum ORef {
     S,
     P(String),
@@ -95,12 +96,9 @@ impl From<SRef> for StatementRef {
     }
 }
 
-impl<'a> From<&'a SRef> for StatementRef<'static, 'static> {
-    fn from(sref: &'a SRef) -> StatementRef<'static, 'static> {
-        StatementRef(
-            Box::leak(sref.0.as_str().to_string().into_boxed_str()),
-            Box::leak(sref.1.clone().into_boxed_str()),
-        )
+impl<'a> From<&'a SRef> for StatementRef {
+    fn from(sref: &'a SRef) -> StatementRef {
+        StatementRef(sref.0.clone().into(), sref.1.clone())
     }
 }
 
@@ -718,9 +716,10 @@ impl PodBuilder {
             let mut copy_statements = Vec::new();
             for matched_statement in &self.matched_statements {
                 let op = Op::CopyStatement(matched_statement.into());
+                let origin_str: String = matched_statement.0.clone().into();
                 let statement_id = format!(
                     "from_{}_{}",
-                    matched_statement.0.as_str(),
+                    origin_str,
                     matched_statement.1.split(':').last().unwrap().to_string()
                 );
                 copy_statements.push((op, statement_id))
