@@ -2,8 +2,10 @@ mod macros;
 mod pex_constants;
 use constants::NS;
 pub mod repl;
+pub mod store;
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
@@ -31,7 +33,7 @@ use pod2::{
     signature::schnorr::SchnorrSecretKey,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ORef {
     S,
     P(String),
@@ -74,7 +76,7 @@ impl From<Origin> for ORef {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SRef(pub ORef, pub String);
 
 impl SRef {
@@ -222,7 +224,7 @@ pub struct PodBuilder {
     pub next_statement_id: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Value {
     String(String),
     Scalar(GoldilocksField),
@@ -264,7 +266,7 @@ impl From<(AssertType, Value, Value)> for Assert {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Assert {
     Gt(Value, Value),
     // Lt(Value, Value),
@@ -374,7 +376,7 @@ impl From<(OpType, Value, Value)> for Operation {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Operation {
     Sum(Value, Value),
     Product(Value, Value),
