@@ -21,8 +21,10 @@ pub enum Operation<S: StatementOrRef> {
     EqualityFromEntries(S, S),
     NonequalityFromEntries(S, S),
     GtFromEntries(S, S),
+    LtFromEntries(S, S),
     TransitiveEqualityFromStatements(S, S),
     GtToNonequality(S),
+    LtToNonequality(S),
     ContainsFromEntries(S, S),
     RenameContainedBy(S, S),
     SumOf(S, S, S),
@@ -51,11 +53,20 @@ impl Operation<Statement> {
             ) if v1.to_canonical_u64() > v2.to_canonical_u64() => {
                 Ok(Statement::Gt(anchkey1.clone(), anchkey2.clone()))
             }
+            Self::LtFromEntries(
+                Statement::ValueOf(anchkey1, ScalarOrVec::Scalar(v1)),
+                Statement::ValueOf(anchkey2, ScalarOrVec::Scalar(v2)),
+            ) if v1.to_canonical_u64() < v2.to_canonical_u64() => {
+                Ok(Statement::Lt(anchkey1.clone(), anchkey2.clone()))
+            }
             Self::TransitiveEqualityFromStatements(
                 Statement::Equal(anchkey1, anchkey2),
                 Statement::Equal(anchkey3, anchkey4),
             ) if anchkey2.eq(&anchkey3) => Ok(Statement::Equal(anchkey1.clone(), anchkey4.clone())),
             Self::GtToNonequality(Statement::Gt(anchkey1, anchkey2)) => {
+                Ok(Statement::NotEqual(anchkey1.clone(), anchkey2.clone()))
+            }
+            Self::LtToNonequality(Statement::Lt(anchkey1, anchkey2)) => {
                 Ok(Statement::NotEqual(anchkey1.clone(), anchkey2.clone()))
             }
             Self::ContainsFromEntries(
@@ -124,6 +135,10 @@ impl<S: StatementOrRef> Operation<S> {
                 s1.deref_cloned(table)?,
                 s2.deref_cloned(table)?,
             )),
+            Self::LtFromEntries(s1, s2) => Ok(Op::LtFromEntries(
+                s1.deref_cloned(table)?,
+                s2.deref_cloned(table)?,
+            )),
             Self::TransitiveEqualityFromStatements(s1, s2) => {
                 Ok(Op::TransitiveEqualityFromStatements(
                     s1.deref_cloned(table)?,
@@ -131,6 +146,7 @@ impl<S: StatementOrRef> Operation<S> {
                 ))
             }
             Self::GtToNonequality(s) => Ok(Op::GtToNonequality(s.deref_cloned(table)?)),
+            Self::LtToNonequality(s) => Ok(Op::LtToNonequality(s.deref_cloned(table)?)),
             Self::ContainsFromEntries(s1, s2) => Ok(Op::ContainsFromEntries(
                 s1.deref_cloned(table)?,
                 s2.deref_cloned(table)?,
@@ -172,6 +188,8 @@ impl<S: StatementOrRef> Operation<S> {
             Self::SumOf(_, _, _) => 10,
             Self::ProductOf(_, _, _) => 11,
             Self::MaxOf(_, _, _) => 12,
+            Self::LtFromEntries(_, _) => 13,
+            Self::LtToNonequality(_) => 14,
         })
     }
     pub fn execute(&self, gadget_id: GadgetID, table: &S::StatementTable) -> Result<Statement> {
