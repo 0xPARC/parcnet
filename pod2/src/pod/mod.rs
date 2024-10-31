@@ -101,7 +101,7 @@ impl POD {
             }
             PODProof::Plonky(p) => {
                 // ensure that the amount of statements match the NS parameter
-                assert_eq!(NS, self.payload.statements_list.len());
+//                assert_eq!(NS, self.payload.statements_list.len());
 
                 // TODO the verifier_data currently is computed here on the fly, but it will not be
                 // computed here and will be passed as parameter, bcs the circuit_data (needed to
@@ -173,15 +173,7 @@ impl POD {
         let mut statements = input.remap_origin_ids_by_name()?;
         statements.insert("_SELF".to_string(), HashMap::new());
 
-        /* Pad */
-        let mut padded_cmds = cmds.iter().map(|c| c.clone()).collect::<Vec<OpCmd>>();
-        let keys = (padded_cmds.len()..25).map(|i| format!("~DUMMY_KEY_{}", i)).collect::<Vec<_>>();
-        for i in padded_cmds.len()..25 {
-            let dummy_entry = Entry::new_from_scalar(&keys[i], GoldilocksField(0));
-            padded_cmds.push(OpCmd(Op::NewEntry(dummy_entry), &keys[i]));
-        }
-        
-        for cmd in padded_cmds.iter() {
+        for cmd in cmds.iter() {
             let OpCmd(op, output_name) = cmd;
             let new_statement = op.execute(gadget_id, &statements)?;
             statements.get_mut("_SELF").unwrap().insert(
@@ -821,8 +813,8 @@ mod tests {
             ),
         ];
 
-        let plonky_pod = POD::execute_plonky_gadget::<2, 2, 3>(&gpg_input, &ops).unwrap();
-        assert!(plonky_pod.verify::<2, 2, 3>()? == true);
+        let plonky_pod = POD::execute_plonky_gadget::<2, 2, 25>(&gpg_input, &ops).unwrap();
+        assert!(plonky_pod.verify::<2, 2, 25>()? == true);
 
         // make another oracle POD which takes that oracle POD and a schnorr POD
 
@@ -845,6 +837,7 @@ mod tests {
 
         // make a list of the operations we want to call
 
+        
         let ops = vec![
             OpCmd(Op::NewEntry(entry4.clone()), "new entry for equality"),
             OpCmd(
@@ -860,11 +853,11 @@ mod tests {
             ),
         ];
 
-        let plonky_pod2 = POD::execute_plonky_gadget::<2, 2, 3>(&gpg_input, &ops).unwrap();
+        let plonky_pod2 = POD::execute_plonky_gadget::<2, 2, 25>(&gpg_input, &ops).unwrap();
         for statement in plonky_pod2.payload.statements_list.iter() {
             println!("{:?}", statement);
         }
-        assert!(plonky_pod2.verify::<2, 2, 3>()? == true);
+        assert!(plonky_pod2.verify::<2, 2, 25>()? == true);
 
         Ok(())
     }

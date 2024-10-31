@@ -22,7 +22,7 @@ use std::time::Instant;
 use pod::circuit::pod::SchnorrPODGadget;
 use pod::entry::Entry;
 use pod::gadget::GadgetID;
-use pod::operation::OpList;
+use pod::operation::{Operation as Op, OperationCmd as OpCmd, OpList};
 use pod::payload::{HashablePayload, PODPayload, StatementList};
 use pod::statement::Statement;
 use pod::{GPGInput, PODProof, POD};
@@ -135,7 +135,7 @@ where
 
         let statement_check = input_pods
             .iter()
-            .all(|(_, pod)| pod.payload.statements_list.len() == NS);
+            .all(|(name, pod)| { println!("{}: {}", name, pod.payload.statements_list.len()); pod.payload.statements_list.len() == NS});
         if !statement_check {
             return Err(anyhow!(
                 "All input PODs must contain exactly {} statements.",
@@ -143,12 +143,12 @@ where
             ));
         }
 
-        if op_list.0.len() != NS {
-            return Err(anyhow!(
-                "The operation list must contain exactly {} operations.",
-                NS
-            ));
-        }
+        // if op_list.0.len() != NS {
+        //     return Err(anyhow!(
+        //         "The operation list must contain exactly {} operations.",
+        //         NS
+        //     ));
+        // }
 
         // Sort POD lists.
         schnorr_pods.sort_by(|a, b| a.0.cmp(&b.0));
@@ -219,6 +219,17 @@ where
             }
         });
 
+        let cmds = op_list.0;
+        /* Pad */
+        let mut padded_cmds = cmds.iter().map(|c| c.clone()).collect::<Vec<_>>();
+        let keys = ["_D0", "_D1", "_D2", "_D3", "_D4", "_D5", "_D6", "_D7", "_D8", "_D9", "_D10", "_D11","_D12", "_D13", "_D14", "_D15", "_D16", "_D17","_D18", "_D19", "_D20", "_D21", "_D22", "_D23", "_D24", "_D25"];
+        for key in keys[0..(NS-cmds.len())].iter() {
+            let dummy_entry = Entry::new_from_scalar(key, GoldilocksField(0));
+            padded_cmds.push(OpCmd(Op::NewEntry(dummy_entry), key));
+        }
+
+        let op_list = OpList(padded_cmds);
+        
         // Compute result of operations.
         let gpg_input = {
             let sorted_gpg_input = GPGInput::new(
