@@ -202,8 +202,11 @@ impl POD {
         // of time to compute. Need to think how we modify the interface to pass the circuit_data
         // to this method.
         let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS>::circuit_data()?;
+        let prover_params =
+            PlonkyButNotPlonkyGadget::<M, N, NS>::build_prover_params(circuit_data)?;
+
         PlonkyButNotPlonkyGadget::<M, N, NS>::execute(
-            circuit_data,
+            prover_params,
             &input.pods_list,
             crate::OpList(cmds.to_vec()),
             input.origin_renaming_map.clone(),
