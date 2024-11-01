@@ -360,7 +360,7 @@ impl<const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget<NP,
         // TODO: Abstract this away.
         // Determine output POD statements for the purposes of later reference
         let output_pod = POD::execute_oracle_gadget(&input.0, &input.1 .0)?;
-        println!("{:?}", output_pod.payload.statements_list);
+        // println!("{:?}", output_pod.payload.statements_list);
         let input_and_output_pod_list = [
             input.0.pods_list.clone(),
             vec![("_SELF".to_string(), output_pod)],

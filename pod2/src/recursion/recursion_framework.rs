@@ -36,7 +36,7 @@ use plonky2::iop::target::{BoolTarget, Target};
 use plonky2::iop::witness::{PartialWitness, WitnessWrite};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::circuit_data::{
-    CircuitConfig, CircuitData, VerifierCircuitData, VerifierCircuitTarget,
+    CircuitConfig, CircuitData, ProverCircuitData, VerifierCircuitData, VerifierCircuitTarget,
 };
 use plonky2::plonk::proof::{ProofWithPublicInputs, ProofWithPublicInputsTarget};
 use plonky2::recursion::dummy_circuit::cyclic_base_proof;
@@ -85,7 +85,10 @@ where
     }
 
     pub fn prove_node(
-        verifier_data: VerifierCircuitData<F, C, D>,
+        verifier_data: VerifierCircuitData<F, C, D>, // TODO rm
+        // builder: &mut CircuitBuilder<F, D>,
+        prover: &ProverCircuitData<F, C, D>,
+        circuit: &mut RecursionCircuit<I, O, M, N, NS>,
         selectors: [F; M + N],
         inner_circuits_input: [I::Input; M],
         // ops_executor_input: [O::Input; O::NS],
@@ -103,14 +106,14 @@ where
             }
         }
 
-        let config = CircuitConfig::standard_recursion_config();
-        let mut builder = CircuitBuilder::new(config);
-
+        // let config = CircuitConfig::standard_recursion_config();
+        // let mut builder = CircuitBuilder::new(config);
+        //
         // assign the targets
-        let start = Instant::now();
-        let mut circuit =
-            RecursionCircuit::<I, O, M, N, NS>::add_targets(&mut builder, verifier_data.clone())?;
-        println!("RecursionCircuit::add_targets(): {:?}", start.elapsed());
+        // let start = Instant::now();
+        // let mut circuit =
+        //     RecursionCircuit::<I, O, M, N, NS>::add_targets(&mut builder, verifier_data.clone())?;
+        // println!("RecursionCircuit::add_targets(): {:?}", start.elapsed());
 
         // fill the targets
         let mut pw = PartialWitness::new();
@@ -126,22 +129,25 @@ where
         println!("circuit.set_targets(): {:?}", start.elapsed());
 
         let start = Instant::now();
-        let data = builder.build::<C>();
-        println!("builder.build(): {:?}", start.elapsed());
-
-        let start = Instant::now();
-        let new_proof = data.prove(pw)?;
+        let new_proof = prover.prove(pw)?;
         println!("generate new_proof: {:?}", start.elapsed());
+        // let start = Instant::now();
+        // let data = builder.build::<C>();
+        // println!("builder.build(): {:?}", start.elapsed());
+        //
+        // let start = Instant::now();
+        // let new_proof = data.prove(pw)?;
+        // println!("generate new_proof: {:?}", start.elapsed());
 
-        let start = Instant::now();
-        data.verify(new_proof.clone())?;
-        println!("verify new_proof: {:?}", start.elapsed());
-
-        #[cfg(test)]
-        data.verifier_data().verify(ProofWithPublicInputs {
-            proof: new_proof.proof.clone(),
-            public_inputs: new_proof.public_inputs.clone(),
-        })?;
+        // let start = Instant::now();
+        // data.verify(new_proof.clone())?;
+        // println!("verify new_proof: {:?}", start.elapsed());
+        //
+        // #[cfg(test)]
+        // data.verifier_data().verify(ProofWithPublicInputs {
+        //     proof: new_proof.proof.clone(),
+        //     public_inputs: new_proof.public_inputs.clone(),
+        // })?;
 
         #[cfg(test)]
         verifier_data.verify(ProofWithPublicInputs {
@@ -201,6 +207,18 @@ where
         data = builder.build::<C>();
 
         Ok(data)
+    }
+
+    /// returns ProverCircuitData
+    pub fn build_prover(
+        verifier_data: VerifierCircuitData<F, C, D>,
+    ) -> Result<ProverCircuitData<F, C, D>> {
+        let config = CircuitConfig::standard_recursion_config();
+        let mut builder = CircuitBuilder::new(config);
+
+        let _ = Self::add_targets(&mut builder, verifier_data.clone())?;
+
+        Ok(builder.build_prover::<C>())
     }
 
     pub fn dummy_proof(circuit_data: CircuitData<F, C, D>) -> PlonkyProof {
@@ -511,8 +529,9 @@ mod tests {
             RecursionTree<ExampleGadget, ExampleOpsExecutor<1>, M, N, NS>;
 
         // build the circuit_data & verifier_data for the recursive circuit
-        let circuit_data = RT::<M, N, NS>::circuit_data()?;
+        let circuit_data = RC::<M, N, NS>::circuit_data()?;
         let verifier_data = circuit_data.verifier_data();
+        let prover = RC::<M, N, NS>::build_prover(verifier_data.clone())?;
 
         let dummy_proof = RC::<M, N, NS>::dummy_proof(circuit_data);
 
@@ -523,6 +542,17 @@ mod tests {
             .into_iter()
             .map(|_| dummy_proof.clone())
             .collect();
+
+        //
+        let config = CircuitConfig::standard_recursion_config();
+        let mut builder = CircuitBuilder::new(config);
+        let start = Instant::now();
+        let mut circuit = RC::<M, N, NS>::add_targets(&mut builder, verifier_data.clone())?;
+        println!("RecursionCircuit::add_targets(): {:?}", start.elapsed());
+        // let start = Instant::now();
+        // let prover = builder.build_prover::<C>();
+        // println!("builder.build_prover(): {:?}", start.elapsed());
+        //
 
         // loop over the recursion levels
         for i in 0..l {
@@ -558,6 +588,9 @@ mod tests {
                 let start = Instant::now();
                 let new_proof = RT::<M, N, NS>::prove_node(
                     verifier_data.clone(),
+                    // &mut builder,
+                    &prover,
+                    &mut circuit,
                     selectors,
                     innercircuits_input,
                     ops_executor_input,
