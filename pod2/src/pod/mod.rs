@@ -159,7 +159,11 @@ impl POD {
             let OpCmd(op, output_name) = cmd;
             let new_statement = op.execute(GadgetID::ORACLE, &statements)?;
             statements.get_mut("_SELF").unwrap().insert(
-                format!("{}:{}", new_statement.predicate(), output_name),
+                format!(
+                    "{}:{}",
+                    new_statement.predicate(),
+                    Into::<String>::into(output_name.clone())
+                ),
                 new_statement,
             );
         }
@@ -599,50 +603,50 @@ mod tests {
 
         // make a list of the operations we want to call
         let ops = vec![
-            OpCmd(
-                Op::CopyStatement(StatementRef("p1", "VALUEOF:apple")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("p1", "VALUEOF:apple")),
                 "p1-apple",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("p1", "VALUEOF:banana")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("p1", "VALUEOF:banana")),
                 "p1-banana",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("p1", "VALUEOF:_signer")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("p1", "VALUEOF:_signer")),
                 "p1-signer",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("schnorrPOD2", "VALUEOF:vector entry")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("schnorrPOD2", "VALUEOF:vector entry")),
                 "schnorrPOD2-vec-entry",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("schnorrPOD2", "VALUEOF:scalar entry")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("schnorrPOD2", "VALUEOF:scalar entry")),
                 "a scalar entry",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("schnorrPOD2", "VALUEOF:_signer")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("schnorrPOD2", "VALUEOF:_signer")),
                 "schnorrPOD2-signer",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::EqualityFromEntries(
-                    StatementRef("p1", "VALUEOF:banana"),
-                    StatementRef("schnorrPOD2", "VALUEOF:scalar entry"),
+                    StatementRef::new("p1", "VALUEOF:banana"),
+                    StatementRef::new("schnorrPOD2", "VALUEOF:scalar entry"),
                 ),
                 "eq1",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::GtFromEntries(
-                    StatementRef("p1", "VALUEOF:banana"),
-                    StatementRef("p1", "VALUEOF:apple"),
+                    StatementRef::new("p1", "VALUEOF:banana"),
+                    StatementRef::new("p1", "VALUEOF:apple"),
                 ),
                 "apple banana comparison",
             ),
             // this operation creates a statement on top of a statement
             // created by an earlier operation
-            OpCmd(
+            OpCmd::new(
                 Op::ContainsFromEntries(
-                    StatementRef("_SELF", "VALUEOF:schnorrPOD2-vec-entry"),
-                    StatementRef("p1", "VALUEOF:apple"),
+                    StatementRef::new("_SELF", "VALUEOF:schnorrPOD2-vec-entry"),
+                    StatementRef::new("p1", "VALUEOF:apple"),
                 ),
                 "CONTAINS:contains1",
             ),
@@ -682,38 +686,38 @@ mod tests {
         // make a list of the operations we want to call
 
         let ops = vec![
-            OpCmd(
+            OpCmd::new(
                 Op::EqualityFromEntries(
-                    StatementRef("oraclePODParent", "VALUEOF:a scalar entry"),
-                    StatementRef("p3", "VALUEOF:bar"),
+                    StatementRef::new("oraclePODParent", "VALUEOF:a scalar entry"),
+                    StatementRef::new("p3", "VALUEOF:bar"),
                 ),
                 "eq2",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::TransitiveEqualityFromStatements(
-                    StatementRef("oraclePODParent", "EQUAL:eq1"),
-                    StatementRef("_SELF", "EQUAL:eq2"),
+                    StatementRef::new("oraclePODParent", "EQUAL:eq1"),
+                    StatementRef::new("_SELF", "EQUAL:eq2"),
                 ),
                 "EQUAL:transitive eq",
             ),
-            OpCmd(Op::NewEntry(entry9.clone()), "entry for claimed sum"),
-            OpCmd(
+            OpCmd::new(Op::NewEntry(entry9.clone()), "entry for claimed sum"),
+            OpCmd::new(
                 Op::SumOf(
-                    StatementRef("_SELF", "VALUEOF:entry for claimed sum"),
-                    StatementRef("oraclePODParent", "VALUEOF:p1-apple"),
-                    StatementRef("oraclePODParent", "VALUEOF:a scalar entry"),
+                    StatementRef::new("_SELF", "VALUEOF:entry for claimed sum"),
+                    StatementRef::new("oraclePODParent", "VALUEOF:p1-apple"),
+                    StatementRef::new("oraclePODParent", "VALUEOF:a scalar entry"),
                 ),
                 "sumof entry",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef(
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new(
                     "oraclePODParent",
                     "VALUEOF:schnorrPOD2-signer",
                 )),
                 "p2-signer",
             ),
-            OpCmd(
-                Op::GtToNonequality(StatementRef(
+            OpCmd::new(
+                Op::GtToNonequality(StatementRef::new(
                     "oraclePODParent",
                     "GT:apple banana comparison",
                 )),
@@ -781,54 +785,54 @@ mod tests {
         let bob_tf_input = GPGInput::new(bob_tf_input_pods, HashMap::new());
 
         let bob_tf_ops = vec![
-            OpCmd(
-                Op::CopyStatement(StatementRef("bob-alice", "VALUEOF:_signer")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("bob-alice", "VALUEOF:_signer")),
                 "bob-alice signer",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("bob-alice", "VALUEOF:user")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("bob-alice", "VALUEOF:user")),
                 "bob-alice user",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("bob-gb1", "VALUEOF:age")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("bob-gb1", "VALUEOF:age")),
                 "bob age",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::NewEntry(known_attestors_entry.clone()),
                 "known_attestors",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::EqualityFromEntries(
-                    StatementRef("bob-alice", "VALUEOF:_signer"),
-                    StatementRef("bob-gb1", "VALUEOF:user"),
+                    StatementRef::new("bob-alice", "VALUEOF:_signer"),
+                    StatementRef::new("bob-gb1", "VALUEOF:user"),
                 ),
                 "gb1 attests to correct user",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::EqualityFromEntries(
-                    StatementRef("bob-alice", "VALUEOF:_signer"),
-                    StatementRef("bob-gb2", "VALUEOF:user"),
+                    StatementRef::new("bob-alice", "VALUEOF:_signer"),
+                    StatementRef::new("bob-gb2", "VALUEOF:user"),
                 ),
                 "gb2 attests to correct user",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::NonequalityFromEntries(
-                    StatementRef("bob-gb1", "VALUEOF:_signer"),
-                    StatementRef("bob-gb2", "VALUEOF:_signer"),
+                    StatementRef::new("bob-gb1", "VALUEOF:_signer"),
+                    StatementRef::new("bob-gb2", "VALUEOF:_signer"),
                 ),
                 "gb1 and gb2 are different",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::ContainsFromEntries(
-                    StatementRef("_SELF", "VALUEOF:known_attestors"),
-                    StatementRef("bob-gb1", "VALUEOF:_signer"),
+                    StatementRef::new("_SELF", "VALUEOF:known_attestors"),
+                    StatementRef::new("bob-gb1", "VALUEOF:_signer"),
                 ),
                 "gb1 has known signer",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::ContainsFromEntries(
-                    StatementRef("_SELF", "VALUEOF:known_attestors"),
-                    StatementRef("bob-gb2", "VALUEOF:_signer"),
+                    StatementRef::new("_SELF", "VALUEOF:known_attestors"),
+                    StatementRef::new("bob-gb2", "VALUEOF:_signer"),
                 ),
                 "gb2 has known signer",
             ),
@@ -846,54 +850,54 @@ mod tests {
         let charlie_tf_input = GPGInput::new(charlie_tf_input_pods, HashMap::new());
 
         let charlie_tf_ops = vec![
-            OpCmd(
-                Op::CopyStatement(StatementRef("charlie-alice", "VALUEOF:_signer")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("charlie-alice", "VALUEOF:_signer")),
                 "charlie-alice signer",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("charlie-alice", "VALUEOF:user")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("charlie-alice", "VALUEOF:user")),
                 "charlie-alice user",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("charlie-gb3", "VALUEOF:age")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("charlie-gb3", "VALUEOF:age")),
                 "charlie age",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::NewEntry(known_attestors_entry.clone()),
                 "known_attestors",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::EqualityFromEntries(
-                    StatementRef("charlie-alice", "VALUEOF:_signer"),
-                    StatementRef("charlie-gb3", "VALUEOF:user"),
+                    StatementRef::new("charlie-alice", "VALUEOF:_signer"),
+                    StatementRef::new("charlie-gb3", "VALUEOF:user"),
                 ),
                 "gb3 attests to correct user",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::EqualityFromEntries(
-                    StatementRef("charlie-alice", "VALUEOF:_signer"),
-                    StatementRef("charlie-gb4", "VALUEOF:user"),
+                    StatementRef::new("charlie-alice", "VALUEOF:_signer"),
+                    StatementRef::new("charlie-gb4", "VALUEOF:user"),
                 ),
                 "gb4 attests to correct user",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::NonequalityFromEntries(
-                    StatementRef("charlie-gb3", "VALUEOF:_signer"),
-                    StatementRef("charlie-gb4", "VALUEOF:_signer"),
+                    StatementRef::new("charlie-gb3", "VALUEOF:_signer"),
+                    StatementRef::new("charlie-gb4", "VALUEOF:_signer"),
                 ),
                 "gb3 and gb4 are different",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::ContainsFromEntries(
-                    StatementRef("_SELF", "VALUEOF:known_attestors"),
-                    StatementRef("charlie-gb3", "VALUEOF:_signer"),
+                    StatementRef::new("_SELF", "VALUEOF:known_attestors"),
+                    StatementRef::new("charlie-gb3", "VALUEOF:_signer"),
                 ),
                 "gb3 has known signer",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::ContainsFromEntries(
-                    StatementRef("_SELF", "VALUEOF:known_attestors"),
-                    StatementRef("charlie-gb4", "VALUEOF:_signer"),
+                    StatementRef::new("_SELF", "VALUEOF:known_attestors"),
+                    StatementRef::new("charlie-gb4", "VALUEOF:_signer"),
                 ),
                 "gb4 has known signer",
             ),
@@ -940,118 +944,130 @@ mod tests {
         let grb_input = GPGInput::new(grb_input_pods, grb_origin_rename_map);
 
         let grb_ops = vec![
-            OpCmd(
-                Op::CopyStatement(StatementRef("friend1", "VALUEOF:bob-alice user")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("friend1", "VALUEOF:bob-alice user")),
                 "friend1 attested user",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("friend2", "VALUEOF:charlie-alice user")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("friend2", "VALUEOF:charlie-alice user")),
                 "friend2 attested user",
             ),
-            OpCmd(Op::NewEntry(age_bound_entry.clone()), "age_bound"),
-            OpCmd(Op::NewEntry(age_sum_entry.clone()), "age_sum"),
-            OpCmd(
+            OpCmd::new(Op::NewEntry(age_bound_entry.clone()), "age_bound"),
+            OpCmd::new(Op::NewEntry(age_sum_entry.clone()), "age_sum"),
+            OpCmd::new(
                 Op::NewEntry(known_attestors_entry.clone()),
                 "known_attestors",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::EqualityFromEntries(
-                    StatementRef("friend1", "VALUEOF:known_attestors"),
-                    StatementRef("_SELF", "VALUEOF:known_attestors"),
+                    StatementRef::new("friend1", "VALUEOF:known_attestors"),
+                    StatementRef::new("_SELF", "VALUEOF:known_attestors"),
                 ),
                 "friend1 known_attestors same as _SELF",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::EqualityFromEntries(
-                    StatementRef("friend2", "VALUEOF:known_attestors"),
-                    StatementRef("_SELF", "VALUEOF:known_attestors"),
+                    StatementRef::new("friend2", "VALUEOF:known_attestors"),
+                    StatementRef::new("_SELF", "VALUEOF:known_attestors"),
                 ),
                 "friend2 known_attestors same as _SELF",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("friend1", "EQUAL:gb1 attests to correct user")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new(
+                    "friend1",
+                    "EQUAL:gb1 attests to correct user",
+                )),
                 "gb1 attests to correct user",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::RenameContainedBy(
-                    StatementRef("friend1", "CONTAINS:gb1 has known signer"),
-                    StatementRef("_SELF", "EQUAL:friend1 known_attestors same as _SELF"),
+                    StatementRef::new("friend1", "CONTAINS:gb1 has known signer"),
+                    StatementRef::new("_SELF", "EQUAL:friend1 known_attestors same as _SELF"),
                 ),
                 "gb1 has known signer",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("friend1", "EQUAL:gb2 attests to correct user")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new(
+                    "friend1",
+                    "EQUAL:gb2 attests to correct user",
+                )),
                 "gb2 attests to correct user",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::RenameContainedBy(
-                    StatementRef("friend1", "CONTAINS:gb2 has known signer"),
-                    StatementRef("_SELF", "EQUAL:friend1 known_attestors same as _SELF"),
+                    StatementRef::new("friend1", "CONTAINS:gb2 has known signer"),
+                    StatementRef::new("_SELF", "EQUAL:friend1 known_attestors same as _SELF"),
                 ),
                 "gb2 has known signer",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef(
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new(
                     "friend1",
                     "NOTEQUAL:gb1 and gb2 are different",
                 )),
                 "gb1 and gb2 are different",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("friend2", "EQUAL:gb3 attests to correct user")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new(
+                    "friend2",
+                    "EQUAL:gb3 attests to correct user",
+                )),
                 "gb3 attests to correct user",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::RenameContainedBy(
-                    StatementRef("friend2", "CONTAINS:gb3 has known signer"),
-                    StatementRef("_SELF", "EQUAL:friend2 known_attestors same as _SELF"),
+                    StatementRef::new("friend2", "CONTAINS:gb3 has known signer"),
+                    StatementRef::new("_SELF", "EQUAL:friend2 known_attestors same as _SELF"),
                 ),
                 "gb3 has known signer",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef("friend2", "EQUAL:gb4 attests to correct user")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new(
+                    "friend2",
+                    "EQUAL:gb4 attests to correct user",
+                )),
                 "gb4 attests to correct user",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::RenameContainedBy(
-                    StatementRef("friend2", "CONTAINS:gb4 has known signer"),
-                    StatementRef("_SELF", "EQUAL:friend2 known_attestors same as _SELF"),
+                    StatementRef::new("friend2", "CONTAINS:gb4 has known signer"),
+                    StatementRef::new("_SELF", "EQUAL:friend2 known_attestors same as _SELF"),
                 ),
                 "gb4 has known signer",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef(
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new(
                     "friend2",
                     "NOTEQUAL:gb3 and gb4 are different",
                 )),
                 "gb4 attests to correct user",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::NonequalityFromEntries(
-                    StatementRef("friend1", "VALUEOF:bob-alice signer"),
-                    StatementRef("friend2", "VALUEOF:charlie-alice signer"),
+                    StatementRef::new("friend1", "VALUEOF:bob-alice signer"),
+                    StatementRef::new("friend2", "VALUEOF:charlie-alice signer"),
                 ),
                 "friend1 and friend2 are different",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::GtFromEntries(
-                    StatementRef("friend1", "VALUEOF:bob age"),
-                    StatementRef("_SELF", "VALUEOF:age_bound"),
+                    StatementRef::new("friend1", "VALUEOF:bob age"),
+                    StatementRef::new("_SELF", "VALUEOF:age_bound"),
                 ),
                 "friend1 is at least 18",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::GtFromEntries(
-                    StatementRef("friend2", "VALUEOF:charlie age"),
-                    StatementRef("_SELF", "VALUEOF:age_bound"),
+                    StatementRef::new("friend2", "VALUEOF:charlie age"),
+                    StatementRef::new("_SELF", "VALUEOF:age_bound"),
                 ),
                 "friend2 is at least 18",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::SumOf(
-                    StatementRef("_SELF", "VALUEOF:age_sum"),
-                    StatementRef("friend1", "VALUEOF:bob age"),
-                    StatementRef("friend2", "VALUEOF:charlie age"),
+                    StatementRef::new("_SELF", "VALUEOF:age_sum"),
+                    StatementRef::new("friend1", "VALUEOF:bob age"),
+                    StatementRef::new("friend2", "VALUEOF:charlie age"),
                 ),
                 "sum of friend1 and friend2 ages",
             ),
@@ -1172,22 +1188,22 @@ mod tests {
 
         let sum_pod_ops = vec![
             // If we have this operation, we would copy X and reveal it. Here we don't copy X (we just prove that 25 is the sum of x and z)
-            // OpCmd(
-            //     Op::CopyStatement(StatementRef("pod-1", "VALUEOF:x")), // a pointer to simple_pod_1, using the sum_pod_input_pods HashMap
+            // OpCmd::new(
+            //     Op::CopyStatement(StatementRef::new("pod-1", "VALUEOF:x")), // a pointer to simple_pod_1, using the sum_pod_input_pods HashMap
             //     // this name comes from applying the predicate name (from predicate_name) followed by the
             //     // statement name
             //     "pod-1-value-of-x",
             // ),
-            OpCmd(
+            OpCmd::new(
                 Op::NewEntry(Entry::new_from_scalar("result", GoldilocksField(10 + 15))), // We store simple-pod-1.x + simple-pod-2.z in a new entry
                 "result", // statement name are only used to have operations point at statement (poor man's pointer)
                           // they are not cryptographic, hence why we need another name beyond the optional entry
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::SumOf(
-                    StatementRef("_SELF", "VALUEOF:result"),
-                    StatementRef("pod-2", "VALUEOF:z"),
-                    StatementRef("pod-1", "VALUEOF:x"),
+                    StatementRef::new("_SELF", "VALUEOF:result"),
+                    StatementRef::new("pod-2", "VALUEOF:z"),
+                    StatementRef::new("pod-1", "VALUEOF:x"),
                 ),
                 "sum-of-pod-1-x-and-pod-2-z",
             ),
@@ -1214,15 +1230,15 @@ mod tests {
         let product_pod_input = GPGInput::new(product_pod_input_pods, HashMap::new());
 
         let product_pod_ops = vec![
-            OpCmd(
+            OpCmd::new(
                 Op::NewEntry(Entry::new_from_scalar("result", GoldilocksField(30 * 40))),
                 "result",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::ProductOf(
-                    StatementRef("_SELF", "VALUEOF:result"),
-                    StatementRef("pod-3", "VALUEOF:a"),
-                    StatementRef("pod-3", "VALUEOF:b"),
+                    StatementRef::new("_SELF", "VALUEOF:result"),
+                    StatementRef::new("pod-3", "VALUEOF:a"),
+                    StatementRef::new("pod-3", "VALUEOF:b"),
                 ),
                 "product-of-pod-3-a-and-pod-3-b",
             ),
@@ -1286,54 +1302,57 @@ mod tests {
             // "result" that came from the sum and the product of other pods
             // We could have remote-max be the max of two pod (and stop there)
             // But this is not what is being expressed in the createpod of final-pod
-            OpCmd(
-                Op::CopyStatement(StatementRef("sum-pod", "SUMOF:sum-of-pod-1-x-and-pod-2-z")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new(
+                    "sum-pod",
+                    "SUMOF:sum-of-pod-1-x-and-pod-2-z",
+                )),
                 "sum-of-pod-1-x-and-pod-2-z",
             ),
-            OpCmd(
-                Op::CopyStatement(StatementRef(
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new(
                     "product-pod",
                     "PRODUCTOF:product-of-pod-3-a-and-pod-3-b",
                 )),
                 "product-of-pod-3-a-and-pod-3-b",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::NewEntry(Entry::new_from_scalar("remote-max", GoldilocksField(1200))),
                 "remote-max",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::MaxOf(
-                    StatementRef("_SELF", "VALUEOF:remote-max"),
-                    StatementRef("sum-pod", "VALUEOF:result"),
-                    StatementRef("product-pod", "VALUEOF:result"),
+                    StatementRef::new("_SELF", "VALUEOF:remote-max"),
+                    StatementRef::new("sum-pod", "VALUEOF:result"),
+                    StatementRef::new("product-pod", "VALUEOF:result"),
                 ),
                 "max-sum-pod-and-product-pod",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::NewEntry(Entry::new_from_scalar("42", GoldilocksField(42))),
                 "42",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::NewEntry(Entry::new_from_scalar("local-sum", GoldilocksField(142))),
                 "local-sum",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::SumOf(
-                    StatementRef("_SELF", "VALUEOF:local-sum"),
-                    StatementRef("simple-pod-4", "VALUEOF:local-value"),
-                    StatementRef("_SELF", "VALUEOF:42"),
+                    StatementRef::new("_SELF", "VALUEOF:local-sum"),
+                    StatementRef::new("simple-pod-4", "VALUEOF:local-value"),
+                    StatementRef::new("_SELF", "VALUEOF:42"),
                 ),
                 "sum-of-simple-pod-4-local-value-and-42",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::NewEntry(Entry::new_from_scalar("overall-max", GoldilocksField(1200))),
                 "overall-max",
             ),
-            OpCmd(
+            OpCmd::new(
                 Op::MaxOf(
-                    StatementRef("_SELF", "VALUEOF:overall-max"),
-                    StatementRef("_SELF", "VALUEOF:remote-max"),
-                    StatementRef("_SELF", "VALUEOF:local-sum"),
+                    StatementRef::new("_SELF", "VALUEOF:overall-max"),
+                    StatementRef::new("_SELF", "VALUEOF:remote-max"),
+                    StatementRef::new("_SELF", "VALUEOF:local-sum"),
                 ),
                 "max-of-remote-max-and-local-max",
             ),
