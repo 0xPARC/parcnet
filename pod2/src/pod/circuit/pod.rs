@@ -173,8 +173,10 @@ impl<const NS: usize> InnerCircuitTrait for SchnorrPODGadget<NS> {
         pw: &mut PartialWitness<F>,
         pod_target: &Self::Targets, // targets = schnorr_pod_target
         pod: &Self::Input,          // input = pod
-    ) -> Result<()> {
-        pod_target.set_witness(pw, pod)
+    ) -> Result<Vec<F>> {
+        pod_target.set_witness(pw, pod)?;
+        // no public inputs at SchnorrPODGadget, return empty vec
+        Ok(vec![])
     }
 }
 

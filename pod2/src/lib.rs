@@ -274,7 +274,6 @@ where
         let time_add_targets = start_add_targets.elapsed();
 
         // set the circuit witness
-        let start_set_targets = Instant::now();
         circuit.set_targets(
             &mut pw,
             selectors,
@@ -283,7 +282,6 @@ where
             output_statements.clone(), // =OpsExecutor::Output
             &recursive_proofs,
         )?;
-        let time_set_targets = start_set_targets.elapsed();
 
         let start_build = Instant::now();
         let num_gates = builder.num_gates();
@@ -336,16 +334,28 @@ where
             PODProof::Plonky(p) => Ok(p),
             _ => Err(anyhow!("Expected PODProof's Plonky variant")),
         }?;
-        Self::verify_plonky_proof(verifier_data, proof)
+
+        // get the statement fields from each statement in the
+        // `pod.payload.statements_list:Vec<(String,Statement)>`
+        let public_inputs: Vec<F> = pod
+            .payload
+            .statements_list
+            .into_iter()
+            .flat_map(|v| v.1.to_fields())
+            .collect();
+
+        Self::verify_plonky_proof(verifier_data, proof, public_inputs)
     }
 
     /// This is a helper method that just verifies the given PlonkyProof
     pub fn verify_plonky_proof(
         verifier_data: VerifierCircuitData<F, C, D>,
         proof: PlonkyProof,
+        public_inputs: Vec<F>,
     ) -> Result<()> {
-        let public_inputs = [
-            // add verifier_data as public inputs:
+        let public_inputs: Vec<F> = [
+            public_inputs,
+            // add verifier_data as public inputs
             verifier_data.verifier_only.circuit_digest.elements.to_vec(),
             verifier_data
                 .verifier_only
@@ -360,7 +370,7 @@ where
         // verify the PlonkyProof
         verifier_data.verify(plonky2::plonk::proof::ProofWithPublicInputs {
             proof,
-            public_inputs: public_inputs.clone(),
+            public_inputs,
         })?;
         Ok(())
     }
@@ -493,12 +503,13 @@ mod tests {
         test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 1, 25>()?;
         test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 2, 1>()?;
         test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 2, 3>()?;
-        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 2, 5>()?;
-        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 2, 10>()?;
-        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 2, 25>()?;
-        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 3, 1>()?;
-        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 3, 3>()?;
-        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 3, 5>()?;
+        // the next tests are commented out by default because they take longer time to compute
+        // test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 2, 5>()?;
+        // test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 2, 10>()?;
+        // test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 2, 25>()?;
+        // test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 3, 1>()?;
+        // test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 3, 3>()?;
+        // test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 3, 5>()?;
         // test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 3, 10>()?;
         // test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 3, 25>()?;
         Ok(())

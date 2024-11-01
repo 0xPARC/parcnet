@@ -63,13 +63,13 @@ impl InnerCircuitTrait for ExampleGadget {
         pw: &mut PartialWitness<F>,
         targets: &Self::Targets,
         pod: &Self::Input,
-    ) -> Result<()> {
+    ) -> Result<Vec<F>> {
         // set signature related values:
         targets.pk_targ.set_witness(pw, &pod.pk).unwrap();
         targets.sig_targ.set_witness(pw, &pod.sig).unwrap();
         targets.msg_targ.set_witness(pw, &pod.msg).unwrap();
 
-        Ok(())
+        Ok(vec![])
     }
 }
 
@@ -91,7 +91,7 @@ impl<const NS: usize> OpsExecutorTrait for ExampleOpsExecutor<NS> {
         _targets: &Self::Targets,
         _input: &Self::Input,
         _output: &Self::Output,
-    ) -> Result<()> {
-        Ok(())
+    ) -> Result<Vec<F>> {
+        Ok(vec![])
     }
 }
