@@ -119,6 +119,7 @@ pub type User = String;
 pub struct ScriptId(String);
 
 impl ScriptId {
+    // TODO: Hash after lexing
     pub fn from_script(script: &str) -> Self {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
@@ -228,7 +229,7 @@ pub enum Value {
     Scalar(GoldilocksField),
     PodRef(POD),
     SRef(SRef),
-    Operation(Box<Operation>), // Box because Operation can contain Operation
+    Operation(Box<Operation>),
     Assert(Box<Assert>),
     List(Vec<Value>),
 }

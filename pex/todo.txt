@@ -1,11 +1,46 @@
 [x] pod? with an operation tree for a key
 [x] [createpod [define x [pod? x]] first-key [max [* x 5] 20]]
 [ ] recursive pod? (pod? within pod?)
-[ ] create schnorr pod when there are only K/V
-[ ] expose _signer on schnorr pod
+[x] create schnorr pod when there are only K/V
+[x] expose _signer on schnorr pod
 [x] [asserts] in query and in createpod body
 [ ] [keep] for keeping entries from source pods
-[ ] support [from @user] so we can receive pods across the network. check that the pod received matches the query
+    Need to think through how we can keep statements (given we never explicit references to them)
+    My answer is that I would query for them, that would show that I care about these statements
+[x] support [from @user] so we can receive pods across the network. check that the pod received matches the query
 [ ] support [to @user] so we can send pods across the network
+    One way to do this better is being able to get a reference to a POD in the REPL and then send it to someone (they then have to accept to take it or not)
+[ ] Do a pass of cleanup for operation and assert. See if they can be bundled. In general clean up lib.rs
+[ ] Graphviz support for debugging
+[ ] [show pod] where POD is a pod ref
+[ ] [get-pod pod-id] to get a pod from your store. can you use it to create another pod then? How would that work? pass it as a last argume
 [ ] support reading and saving pods from a SQLite database that has the same schema as the chat app
-[ ] turn the shared HashMap into something that works over the network (an Iroh doc?)
+[x] turn the shared HashMap into something that works over the network (an Iroh doc?)
+[ ] Hook up  the ZKPs
+[ ] Add a string type, support it via hashing in the circuit, only supports EQ and contain.
+[ ] Support storing lists in PODs
+[ ] Support operations on lists
+[ ] Support importing POD1 (eg: Frogs)
+    Think about the flow for import (maybe a custom CLI tool that imports into your POD store database?, maybe a local web app using the Z API?)
+    POD store database under ~/.parcnet? with your keys too? Both Chat and PEX could read from there
+    The first interopability experiment could be browsing and sending PODs in Chat
+[ ] Remove one of the two statement object in the POD struct; and get the other one at run time (for better serialization)
+[ ] Requests over the network for pod? (remove the requirement to run the exact same code on both side)
+    Eg: do you want to execute <QUERY> in <CONTEXT> for <USERNAME>?
+[ ] Store name associations and Schnorr pub key in the Iroh doc (so we have unique name)
+    Can take a bunch of code from Chat. Could even use the same doc as chat. (and unify all the networking).
+[ ] Optionally persists Schnorr keys, Iorh keys, and PODs (--persist or something, default if you install the binary)
+[ ] POD browser
+    Could exit out of reedline and get into a temporary TUI, then exit that with a pod_id copied into clipboard if needed
+
+[ ] Format POD in a LISPy way
+[ ] Plaintext constraints (:where)
+[ ] Turn usernames into public_key
+[ ] Add @ before usernames
+[ ] Choose which POD to pass in queries
+
+-- Bugs
+
+POD sent over the network don't carry matched statements with them so produced pods lack important statements. solution is to re-execute the pod query (we should do this anyway) and make sure the POD verifies as well
+
+QueryResults include duplicate (eg: HasKey x twice)
