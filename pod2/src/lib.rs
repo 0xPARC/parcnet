@@ -16,6 +16,7 @@ use plonky2::plonk::config::PoseidonGoldilocksConfig;
 use plonky2::plonk::proof::Proof;
 use std::array;
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::time::Instant;
 
@@ -57,9 +58,9 @@ pub use recursion::{RecursionCircuit, RecursionTree};
 /// Enumerate operations:
 /// ```
 /// let op_list = OpList(
-///         OpCmd(Op::None, "some out statement name"),
-///         OpCmd(
-///                 Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
+///         OpCmd::new(Op::None, "some out statement name"),
+///         OpCmd::new(
+///                 Op::CopyStatement(StatementRef::new(&schnorr_pod1_name, "VALUEOF:s2")),
 ///         "some other out statement name",
 ///             ), ...
 ///               );
@@ -70,13 +71,11 @@ pub use recursion::{RecursionCircuit, RecursionTree};
 /// let plonky_pod = PlonkyButNotPlonkyGadget::<2,2,3>::execute(&input_pods, &op_list)?;
 /// ```
 // TODO: `PlonkyButNotPlonkyGadget` is a placeholder name, set better struct name.
-pub struct PlonkyButNotPlonkyGadget<'a, const M: usize, const N: usize, const NS: usize>(
-    PhantomData<&'a ()>,
-)
+pub struct PlonkyButNotPlonkyGadget<const M: usize, const N: usize, const NS: usize>
 where
     [(); M + N]:;
 
-impl<'a, const M: usize, const N: usize, const NS: usize> PlonkyButNotPlonkyGadget<'a, M, N, NS>
+impl<const M: usize, const N: usize, const NS: usize> PlonkyButNotPlonkyGadget<M, N, NS>
 where
     [(); M + N]:,
 {
@@ -86,7 +85,7 @@ where
         // generate circuit data
         RecursionCircuit::<
             SchnorrPODGadget<NS>,
-            OpExecutorGadget<'a, { M + N }, NS>, // NP=M+N
+            OpExecutorGadget<{ M + N }, NS>, // NP=M+N
             M,
             N,
             NS,
@@ -97,7 +96,7 @@ where
     pub fn execute(
         circuit_data: CircuitData<F, C, D>,
         input_pods: &[(String, POD)],
-        op_list: OpList<'a>,
+        op_list: OpList,
         origin_renaming_map: HashMap<(String, String), String>,
     ) -> Result<POD> {
         let start_execute = Instant::now();
@@ -158,7 +157,7 @@ where
         let start_dummy_proof = Instant::now();
         let dummy_proof = RecursionCircuit::<
             SchnorrPODGadget<NS>,
-            OpExecutorGadget<'a, { M + N }, NS>,
+            OpExecutorGadget<{ M + N }, NS>,
             M,
             N,
             NS,
@@ -266,7 +265,7 @@ where
         let start_add_targets = Instant::now();
         let mut circuit = RecursionCircuit::<
             SchnorrPODGadget<NS>,
-            OpExecutorGadget<'a, { M + N }, NS>,
+            OpExecutorGadget<{ M + N }, NS>,
             M,
             N,
             NS,
@@ -434,35 +433,35 @@ mod tests {
 
         let op_list = OpList(vec![
             // NONE:pop
-            OpCmd(Op::None, "pop"),
+            OpCmd::new(Op::None, "pop"),
             // VALUEOF:op3
-            OpCmd(
-                Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new(schnorr_pod1_name, "VALUEOF:s2")),
                 "op3",
             ),
             // COPY preceding op's output
-            OpCmd(
-                Op::CopyStatement(StatementRef("_SELF", "VALUEOF:op3")),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("_SELF", "VALUEOF:op3")),
                 "op4",
             ),
             // NOTEQUAL:yolo
-            // OpCmd(
+            // OpCmd::new(
             //     Op::NonequalityFromEntries(
-            //         StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-            //         StatementRef(&schnorr_pod1_name, "VALUEOF:s2"),
+            //         StatementRef::new(schnorr_pod1_name, "VALUEOF:s1"),
+            //         StatementRef::new(schnorr_pod1_name, "VALUEOF:s2"),
             //     ),
             //     "yolo",
             // ),
             // // VALUEOF:nono
-            // OpCmd(
+            // OpCmd::new(
             //     Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
             //     "nono",
             // ),
             // // EQUAL:op2
-            // OpCmd(
+            // OpCmd::new(
             //     Op::EqualityFromEntries(
-            //         StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-            //         StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
+            //         StatementRef::new(schnorr_pod1_name, "VALUEOF:s1"),
+            //         StatementRef::new(schnorr_pod2_name, "VALUEOF:s4"),
             //     ),
             //     "op2",
             // ),
@@ -530,7 +529,7 @@ mod tests {
         let op_list = OpList(
             out_statement_names
                 .iter()
-                .map(|name| OpCmd(Op::None, name))
+                .map(|name| OpCmd::new(Op::None, name))
                 .collect(),
         );
 

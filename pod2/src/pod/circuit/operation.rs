@@ -238,13 +238,13 @@ impl OperationTarget {
 /// - NP: NumPODs (NP = M+N)
 /// - NS: Num Statements
 /// Notice that `output_statement_list_target` is registered as public input.
-pub struct OpExecutorGadget<'a, const NP: usize, const NS: usize>(PhantomData<&'a ()>);
+pub struct OpExecutorGadget<const NP: usize, const NS: usize>;
 
-impl<'a, const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget<'a, NP, NS> {
+impl<const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget<NP, NS> {
     /// Input consists of:
     /// - GPG input (pod list + origin renaming map), and
     /// - a list of operations.
-    type Input = (GPGInput, OpList<'a>);
+    type Input = (GPGInput, OpList);
 
     /// Output consists of the output statement list of the list of operations.
     /// Note that this should contain `NS` elements!
@@ -460,36 +460,36 @@ mod tests {
         let op_lists = [
             OpList(vec![
                 // NONE:pop
-                OpCmd(Op::None, "pop"),
+                OpCmd::new(Op::None, "pop"),
                 // VALUEOF:op3
-                OpCmd(
-                    Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
+                OpCmd::new(
+                    Op::CopyStatement(StatementRef::new(&schnorr_pod1_name, "VALUEOF:s2")),
                     "op3",
                 ),
                 // NOTEQUAL:yolo
-                OpCmd(
+                OpCmd::new(
                     Op::NonequalityFromEntries(
-                        StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-                        StatementRef(&schnorr_pod1_name, "VALUEOF:s2"),
+                        StatementRef::new(&schnorr_pod1_name, "VALUEOF:s1"),
+                        StatementRef::new(&schnorr_pod1_name, "VALUEOF:s2"),
                     ),
                     "yolo",
                 ),
             ]),
             OpList(vec![
                 // VALUEOF:nono
-                OpCmd(
+                OpCmd::new(
                     Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
                     "nono",
                 ),
                 // EQUAL:op2
-                OpCmd(
+                OpCmd::new(
                     Op::EqualityFromEntries(
-                        StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-                        StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
+                        StatementRef::new(&schnorr_pod1_name, "VALUEOF:s1"),
+                        StatementRef::new(&schnorr_pod2_name, "VALUEOF:s4"),
                     ),
                     "op2",
                 ),
-                OpCmd(Op::None, "bop"),
+                OpCmd::new(Op::None, "bop"),
             ]),
         ]
         .into_iter()
@@ -617,48 +617,48 @@ mod tests {
         let op_lists = [
             OpList(vec![
                 // NONE:pop
-                OpCmd(Op::None, "pop"),
+                OpCmd::new(Op::None, "pop"),
                 // VALUEOF:op3
-                OpCmd(
-                    Op::CopyStatement(StatementRef(&schnorr_pod1_name, "VALUEOF:s2")),
+                OpCmd::new(
+                    Op::CopyStatement(StatementRef::new(&schnorr_pod1_name, "VALUEOF:s2")),
                     "op3",
                 ),
                 // NOTEQUAL:yolo
-                OpCmd(
+                OpCmd::new(
                     Op::NonequalityFromEntries(
-                        StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-                        StatementRef(&schnorr_pod1_name, "VALUEOF:s2"),
+                        StatementRef::new(&schnorr_pod1_name, "VALUEOF:s1"),
+                        StatementRef::new(&schnorr_pod1_name, "VALUEOF:s2"),
                     ),
                     "yolo",
                 ),
             ]),
             OpList(vec![
                 // VALUEOF:nono
-                OpCmd(
+                OpCmd::new(
                     Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
                     "nono",
                 ),
                 // EQUAL:op2
-                OpCmd(
+                OpCmd::new(
                     Op::EqualityFromEntries(
-                        StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
-                        StatementRef(&schnorr_pod2_name, "VALUEOF:s4"),
+                        StatementRef::new(&schnorr_pod1_name, "VALUEOF:s1"),
+                        StatementRef::new(&schnorr_pod2_name, "VALUEOF:s4"),
                     ),
                     "op2",
                 ),
                 // TODO: Fails with s4 in place of s3
-                OpCmd(
+                OpCmd::new(
                     Op::GtFromEntries(
-                        StatementRef(&schnorr_pod2_name, "VALUEOF:s3"),
-                        StatementRef(&schnorr_pod1_name, "VALUEOF:s1"),
+                        StatementRef::new(&schnorr_pod2_name, "VALUEOF:s3"),
+                        StatementRef::new(&schnorr_pod1_name, "VALUEOF:s1"),
                     ),
                     "bop",
                 ),
             ]),
             OpList(vec![
-                OpCmd(Op::None, "cons"),
-                OpCmd(Op::None, "car"),
-                OpCmd(Op::None, "cdr"),
+                OpCmd::new(Op::None, "cons"),
+                OpCmd::new(Op::None, "car"),
+                OpCmd::new(Op::None, "cdr"),
             ]),
         ]
         .into_iter()

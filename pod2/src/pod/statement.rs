@@ -315,19 +315,19 @@ impl StatementOrRef for Statement {
 
 /// Typical statement ref type.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct StatementRef<'a>(pub &'a str, pub &'a str);
+pub struct StatementRef(pub String, pub String);
 
-impl<'a> StatementOrRef for StatementRef<'a> {
+impl StatementOrRef for StatementRef {
     type StatementTable = HashMap<String, HashMap<String, Statement>>;
     fn deref_cloned(&self, table: &Self::StatementTable) -> Result<Statement> {
         let StatementRef(parent_name, statement_name) = self;
         table
-            .get(*parent_name)
+            .get(parent_name)
             .ok_or(anyhow!(
                 "Statement parent {} missing from statement table!",
                 parent_name
             ))?
-            .get(*statement_name)
+            .get(statement_name)
             .ok_or(anyhow!(
                 "Statement {} with parent {} missing from statement table!",
                 statement_name,
@@ -337,8 +337,11 @@ impl<'a> StatementOrRef for StatementRef<'a> {
     }
 }
 
-impl<'a> StatementRef<'a> {
-    pub fn index_map(pods_list: &'a [(String, POD)]) -> HashMap<Self, (usize, usize)> {
+impl StatementRef {
+    pub fn new(pod_name: impl Into<String>, statement_name: impl Into<String>) -> Self {
+        Self(pod_name.into(), statement_name.into())
+    }
+    pub fn index_map(pods_list: &[(String, POD)]) -> HashMap<Self, (usize, usize)> {
         pods_list
             .iter()
             .enumerate()
@@ -346,7 +349,7 @@ impl<'a> StatementRef<'a> {
                 pod.payload.statements_list.iter().enumerate().map(
                     move |(statement_num, (statement_name, _))| {
                         (
-                            StatementRef(pod_name, statement_name),
+                            StatementRef(pod_name.clone(), statement_name.clone()),
                             (pod_num, statement_num),
                         )
                     },

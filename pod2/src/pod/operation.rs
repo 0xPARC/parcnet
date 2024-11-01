@@ -222,9 +222,15 @@ impl<S: StatementOrRef> Operation<S> {
 
 /// Named operation struct
 #[derive(Clone, Debug)]
-pub struct OperationCmd<'a>(pub Operation<StatementRef<'a>>, pub &'a str);
+pub struct OperationCmd(pub Operation<StatementRef>, pub String);
 
-impl<'a> Operation<StatementRef<'a>> {
+impl OperationCmd {
+    pub fn new(op: Operation<StatementRef>, out_name: impl Into<String>) -> Self {
+        Self(op, out_name.into())
+    }
+}
+
+impl Operation<StatementRef> {
     /// Representation of operation command as field vector of length
     /// 9 of the form
     /// [code] ++ [pod_num1, statement_num1] ++ [pod_num2,
@@ -232,7 +238,7 @@ impl<'a> Operation<StatementRef<'a>> {
     /// where we substitute 0s for unused operands and entries.
     pub fn to_fields(
         &self,
-        ref_index_map: &HashMap<StatementRef<'a>, (usize, usize)>,
+        ref_index_map: &HashMap<StatementRef, (usize, usize)>,
     ) -> Result<Vec<GoldilocksField>> {
         // Enumerate operands, substitute indices and pad with 0s.
         let operands = self
@@ -267,10 +273,10 @@ impl<'a> Operation<StatementRef<'a>> {
 // Op list type. TODO.
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
-pub struct OpList<'a>(pub Vec<OperationCmd<'a>>);
+pub struct OpList(pub Vec<OperationCmd>);
 
 #[allow(dead_code)]
-impl<'a> OpList<'a> {
+impl OpList {
     pub fn sort(&self, pods_list: &[(String, POD)]) -> Self {
         // Map from StatementRef to pair of the form (pod index, statement index)
         let ref_index_map = StatementRef::index_map(pods_list);
