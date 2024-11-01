@@ -301,11 +301,11 @@ impl Assert {
                 }
             }
             Assert::Lt(_, _) => {
-                 if value1.to_canonical_u64() < value2.to_canonical_u64() {
-                     GoldilocksField(1)
-                 } else {
-                     GoldilocksField(0)
-                 }
+                if value1.to_canonical_u64() < value2.to_canonical_u64() {
+                    GoldilocksField(1)
+                } else {
+                    GoldilocksField(0)
+                }
             }
             Assert::Eq(_, _) => {
                 if value1.to_canonical_u64() == value2.to_canonical_u64() {
@@ -482,7 +482,9 @@ impl PodQueryBuilder {
     }
     fn add_assert(&mut self, assert: &Assert) -> Result<()> {
         let (op1, op2) = match assert {
-            Assert::Eq(v1, v2) | Assert::Neq(v1, v2) | Assert::Gt(v1, v2) | Assert::Lt(v1, v2)  => (v1, v2),
+            Assert::Eq(v1, v2) | Assert::Neq(v1, v2) | Assert::Gt(v1, v2) | Assert::Lt(v1, v2) => {
+                (v1, v2)
+            }
         };
         let op1_constraint = self.add_value(op1)?;
         let op2_constraint = self.add_value(op2)?;
@@ -1810,70 +1812,6 @@ fn matches_operand_constraint(
             }
             None
         }
-    }
-}
-
-fn match_operation(
-    pod: &POD,
-    id_mapping: &mut HashMap<(usize, String), SRef>,
-    origin_id: usize,
-    result: &AnchoredKey,
-    left: &AnchoredKey,
-    right: &AnchoredKey,
-    is_matching_op: impl Fn(&Statement) -> bool,
-) -> Result<bool> {
-    for (pod_statement_key, pod_statement) in &pod.payload.statements_map {
-        if is_matching_op(pod_statement) {
-            let (pod_result, pod_left, pod_right) = match pod_statement {
-                Statement::SumOf(r, l, r2)
-                | Statement::ProductOf(r, l, r2)
-                | Statement::MaxOf(r, l, r2) => (r, l, r2),
-                _ => continue,
-            };
-
-            // Match operands recursively
-            if operands_match(left, pod_left, id_mapping, origin_id)?
-                && operands_match(right, pod_right, id_mapping, origin_id)?
-            {
-                // Add mapping for result
-                id_mapping.insert(
-                    (origin_id, result.1.clone()),
-                    SRef(
-                        ORef::P(pod_result.0.origin_name.clone()),
-                        pod_statement_key.clone(),
-                    ),
-                );
-                return Ok(true);
-            }
-        }
-    }
-    Ok(false)
-}
-
-fn operands_match(
-    query_key: &AnchoredKey,
-    pod_key: &AnchoredKey,
-    id_mapping: &mut HashMap<(usize, String), SRef>,
-    origin_id: usize,
-) -> Result<bool> {
-    let query_oref = ORef::from(query_key.0.clone());
-    match query_oref {
-        ORef::Q(_) => {
-            if let Some(mapped_sref) = id_mapping.get(&(origin_id, query_key.1.clone())) {
-                // If we've seen this query key before, check it matches
-                let mapped_sref_origin: Origin = mapped_sref.0.clone().into();
-                Ok(pod_key.0.origin_name == mapped_sref_origin.origin_name
-                    && pod_key.1 == mapped_sref.1)
-            } else {
-                // First time seeing this query key, add mapping
-                id_mapping.insert(
-                    (origin_id, query_key.1.clone()),
-                    SRef(ORef::P(pod_key.0.origin_name.clone()), query_key.1.clone()),
-                );
-                Ok(true)
-            }
-        }
-        _ => Ok(query_key == pod_key),
     }
 }
 
