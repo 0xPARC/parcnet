@@ -351,9 +351,9 @@ mod tests {
         assert!(gt_statement == Statement::Gt(anchkeys2[0].clone(), anchkeys1[0].clone()));
 
         // Lt check
-        let lt_statement = Op::LtFromEntries(entry_statement2.clone(), entry_statement1.clone())
+        let lt_statement = Op::LtFromEntries(entry_statement1.clone(), entry_statement2.clone())
            .eval_with_gadget_id(GadgetID::NONE)?;
-        assert!(lt_statement == Statement::Lt(anchkeys2[0].clone(), anchkeys1[0].clone()));
+        assert!(lt_statement == Statement::Lt(anchkeys1[0].clone(), anchkeys2[0].clone()));
 
         // Eq transitivity check
         let eq_statement1 =
@@ -632,7 +632,7 @@ mod tests {
             OpCmd(
                 Op::LtToNonequality(StatementRef(
                     "oraclePODParent",
-                    "LT:apple banana comparison",
+                    "LT:banana apple comparison",
                 )),
                 "apple banana nonequality with lt",
             ),
