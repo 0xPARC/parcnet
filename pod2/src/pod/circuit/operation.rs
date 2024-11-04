@@ -237,10 +237,13 @@ impl OperationTarget {
 /// OpExecutorGadget implements the OpsExecutorTrait
 /// - NP: NumPODs (NP = M+N)
 /// - NS: Num Statements
+/// - VL: Vector Length
 /// Notice that `output_statement_list_target` is registered as public input.
-pub struct OpExecutorGadget<const NP: usize, const NS: usize>;
+pub struct OpExecutorGadget<const NP: usize, const NS: usize, const VL: usize>;
 
-impl<const NP: usize, const NS: usize> OpsExecutorTrait for OpExecutorGadget<NP, NS> {
+impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
+    for OpExecutorGadget<NP, NS, VL>
+{
     /// Input consists of:
     /// - GPG input (pod list + origin renaming map), and
     /// - a list of operations.
@@ -674,8 +677,8 @@ mod tests {
             let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &op_list.0)?;
 
             // circuit test
-            let targets = OpExecutorGadget::<4, 3>::add_targets(&mut builder)?;
-            OpExecutorGadget::<4, 3>::set_targets(
+            let targets = OpExecutorGadget::<4, 3, 0>::add_targets(&mut builder)?;
+            OpExecutorGadget::<4, 3, 0>::set_targets(
                 &mut pw,
                 &targets,
                 &(gpg_input.clone(), op_list),
