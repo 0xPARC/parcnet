@@ -153,17 +153,7 @@ where
 
     /// Generates a new POD from the given input PODs and the OpList (operations list)
     pub fn execute(
-        // circuit_data: CircuitData<F, C, D>,
         mut prover_params: ProverParams<M, N, NS, VL>,
-        // circuit: &mut RecursionCircuit<
-        //     SchnorrPODGadget<NS>,
-        //     OpExecutorGadget<{ M + N }, NS, VL>,
-        //     M,
-        //     N,
-        //     NS,
-        //     VL
-        // >,
-        // prover: ProverCircuitData<F, C, D>,
         input_pods: &[(String, POD)],
         op_list: OpList,
         origin_renaming_map: HashMap<(String, String), String>,
@@ -221,18 +211,6 @@ where
         // Sort POD lists.
         schnorr_pods.sort_by(|a, b| a.0.cmp(&b.0));
         plonky_pods.sort_by(|a, b| a.0.cmp(&b.0));
-
-        // let verifier_data = circuit_data.verifier_data();
-        // let start_dummy_proof = Instant::now();
-        // let dummy_proof = RecursionCircuit::<
-        //     SchnorrPODGadget<NS>,
-        //     OpExecutorGadget<{ M + N }, NS, VL>,
-        //     M,
-        //     N,
-        //     NS,
-        //     VL
-        // >::dummy_proof(circuit_data);
-        // let time_dummy_proof = start_dummy_proof.elapsed();
 
         // TODO: Constructor
         let dummy_plonky_pod = POD {
@@ -345,8 +323,6 @@ where
 
         // set the circuit witness
         prover_params.circuit.set_targets(
-            // &mut circuit,
-            // prover_params.prover,
             &mut pw,
             selectors,
             inner_circuit_input,       // =[InnerCircuit::Input; M]
@@ -355,17 +331,9 @@ where
             &recursive_proofs,
         )?;
 
-        // let start_build = Instant::now();
-        // let num_gates = builder.num_gates();
-        // let data = builder.build::<C>();
-        // let time_build = start_build.elapsed();
-
         let start_prove = Instant::now();
         let plonky_proof = prover_params.prover.prove(pw)?;
         let time_prove = start_prove.elapsed();
-
-        // #[cfg(test)] // if running a test, verify the proof
-        // data.verify(plonky_proof.clone())?;
 
         // Check operations in circuit by routing `gpg_input` and
         // `output_statements` into the op executor.
@@ -378,16 +346,7 @@ where
         let time_execute = start_execute.elapsed();
         println!(
             "| {} | {} | {} | {} | {:#.2?} | {:#.2?} |",
-            M,
-            N,
-            NS,
-            VL,
-            // num_gates,
-            // time_dummy_proof,
-            // time_add_targets,
-            // time_build,
-            time_prove,
-            time_execute,
+            M, N, NS, VL, time_prove, time_execute,
         );
 
         Ok(POD {
