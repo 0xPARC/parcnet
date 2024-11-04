@@ -8,6 +8,7 @@ use serde::Serialize;
 use plonky2::field::types::PrimeField64;
 use std::collections::HashMap;
 
+use crate::pod::gadget::plonky_pod::PlonkyButNotPlonkyGadget;
 use crate::pod::{
     entry::Entry,
     gadget::GadgetID,
@@ -17,7 +18,7 @@ use crate::pod::{
 use crate::signature::schnorr::{
     SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner,
 };
-use crate::{PlonkyButNotPlonkyGadget, PlonkyProof};
+use crate::PlonkyProof;
 
 pub use operation::Operation as Op;
 pub use operation::OperationCmd as OpCmd;
@@ -102,7 +103,7 @@ impl POD {
                     &protocol.keygen(&SchnorrSecretKey { sk: 0 }), // hardcoded secret key
                 ))
             }
-            PODProof::Plonky(p) => {
+            PODProof::Plonky(_p) => {
                 // ensure that the amount of statements match the NS parameter
                 assert_eq!(NS, self.payload.statements_list.len());
 
@@ -219,7 +220,7 @@ impl POD {
         PlonkyButNotPlonkyGadget::<M, N, NS, VL>::execute(
             prover_params,
             &input.pods_list,
-            crate::OpList(cmds.to_vec()),
+            crate::pod::operation::OpList(cmds.to_vec()),
             input.origin_renaming_map.clone(),
         )
     }

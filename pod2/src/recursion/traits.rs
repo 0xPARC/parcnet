@@ -1,10 +1,8 @@
 use anyhow::Result;
-use plonky2::hash::hash_types::HashOutTarget;
 use plonky2::iop::target::BoolTarget;
 use plonky2::iop::witness::PartialWitness;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 
-use crate::pod::{circuit::statement::StatementTarget, gadget::GadgetID};
 use crate::{D, F};
 
 /// InnerCircuit is the trait that is used to define the logic of the circuit that is used at each

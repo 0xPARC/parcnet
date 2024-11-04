@@ -1,6 +1,13 @@
 use core::fmt;
-
 use serde::{Deserialize, Serialize};
+
+pub mod opexecutor;
+pub mod plonky_pod;
+pub mod schnorr_pod;
+
+pub use opexecutor::OpExecutorGadget;
+pub use plonky_pod::PlonkyButNotPlonkyGadget;
+pub use schnorr_pod::SchnorrPODGadget;
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum GadgetID {
