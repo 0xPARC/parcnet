@@ -1,5 +1,4 @@
 pub mod entry;
-pub mod gpg;
 pub mod operation;
 pub mod origin;
 pub mod pod;

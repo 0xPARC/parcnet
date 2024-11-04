@@ -15,7 +15,7 @@ use crate::{
         gadget::GadgetID,
         operation::{OpList, OperationCmd},
         payload::StatementList,
-        statement::StatementRef,
+        statement::{StatementOrRef, StatementRef},
         GPGInput, POD,
     },
     recursion::OpsExecutorTrait,
@@ -57,7 +57,7 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
     type Targets = (
         [[StatementTarget; NS]; NP],
         [Vec<Target>; NP],
-        [OperationTarget; NS],
+        [OperationTarget<VL>; NS],
         [StatementTarget; NS], // registered as public input
     );
 
@@ -68,7 +68,7 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
         let origin_id_map_target: [Vec<Target>; NP] =
             array::from_fn(|_| builder.add_virtual_targets(NS + 2));
 
-        let op_list_target: [OperationTarget; NS] =
+        let op_list_target: [OperationTarget<VL>; NS] =
             array::from_fn(|_| OperationTarget::new_virtual(builder));
 
         // TODO: Check that origin ID map has appropriate properties.
@@ -162,8 +162,14 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
 
         // Set operation targets
         let ref_index_map = StatementRef::index_map(&input_and_output_pod_list);
+        let statement_table: <StatementRef as StatementOrRef>::StatementTable =
+            input_and_output_pod_list.iter().map(
+                |(pod_name, pod)|
+                (pod_name.clone(), pod.payload.statements_map.clone())
+                ).collect();
         zip(&targets.2, input.1.sort(&input_and_output_pod_list).0).try_for_each(
-            |(op_target, OperationCmd(op, _))| op_target.set_witness(pw, &op, &ref_index_map),
+            |(op_target, OperationCmd(op, _))| op_target.set_witness(pw, &op, &ref_index_map, &statement_table
+            ),
         )?;
 
         // Check output statement list target
