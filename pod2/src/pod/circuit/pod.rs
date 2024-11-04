@@ -199,16 +199,16 @@ mod tests {
 
     #[test]
     fn schnorr_pod_test() -> Result<()> {
+        const NS: usize = 2; // NS: NumStatements
+        
         let scalar1 = GoldilocksField(36);
         let entry1 = Entry::new_from_scalar("some key", scalar1);
         let schnorr_pod3 =
-            POD::execute_schnorr_gadget(&vec![entry1.clone()], &SchnorrSecretKey { sk: 25 });
+            POD::execute_schnorr_gadget::<NS>(&vec![entry1.clone()], &SchnorrSecretKey { sk: 25 })?;
         let payload_hash = schnorr_pod3.payload.hash_payload();
 
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::<F, D>::new(config);
-
-        const NS: usize = 2; // NS: NumStatements
 
         let selector_targ = builder.add_virtual_target();
         let selector_booltarg = BoolTarget::new_unsafe(selector_targ);

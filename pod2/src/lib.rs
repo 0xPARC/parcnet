@@ -235,12 +235,12 @@ where
         };
 
         // Note: One statement is reserved for the signer's public key.
-        let dummy_schnorr_pod = POD::execute_schnorr_gadget(
+        let dummy_schnorr_pod = POD::execute_schnorr_gadget::<NS>(
             &(0..(NS - 1))
                 .map(|i| Entry::new_from_scalar(&format!("Dummy entry {}", i), GoldilocksField(0)))
                 .collect::<Vec<_>>(),
             &SchnorrSecretKey { sk: 0 },
-        );
+        )?;
 
         // Arrange input PODs as a list of M SchnorrPODs followed by N
         // PlonkyPODs. Pad with appropriate dummy data.
@@ -454,29 +454,29 @@ mod tests {
     };
 
     /// returns M Schnorr PODs
-    fn prepare_pods() -> Vec<(String, POD)> {
+    fn prepare_pods<const NS: usize>() -> Result<Vec<(String, POD)>> {
         let schnorr_pod1_name = "Test POD 1".to_string();
-        let schnorr_pod1 = POD::execute_schnorr_gadget(
+        let schnorr_pod1 = POD::execute_schnorr_gadget::<NS>(
             &[
                 Entry::new_from_scalar("s1", GoldilocksField(55)),
                 Entry::new_from_scalar("s2", GoldilocksField(56)),
             ],
             &SchnorrSecretKey { sk: 27 },
-        );
+        )?;
         let schnorr_pod2_name = "Test POD 2".to_string();
-        let schnorr_pod2 = POD::execute_schnorr_gadget(
+        let schnorr_pod2 = POD::execute_schnorr_gadget::<NS>(
             &[
                 Entry::new_from_scalar("s3", GoldilocksField(57)),
                 Entry::new_from_scalar("s4", GoldilocksField(55)),
             ],
             &SchnorrSecretKey { sk: 29 },
-        );
+        )?;
 
         let pods_list = vec![
             (schnorr_pod1_name.clone(), schnorr_pod1),
             (schnorr_pod2_name.clone(), schnorr_pod2),
         ];
-        pods_list
+        Ok(pods_list)
     }
 
     // TODO: `PlonkyButNotPlonkyGadget` is tmp, put better name.
@@ -486,7 +486,7 @@ mod tests {
         const N: usize = 2; // max num Plonky2 recursive proof
         const NS: usize = 3; // num statements
 
-        let pods_list = prepare_pods();
+        let pods_list = prepare_pods::<NS>()?;
 
         let schnorr_pod1_name = pods_list[0].0.clone();
         let schnorr_pod2_name = pods_list[1].0.clone();

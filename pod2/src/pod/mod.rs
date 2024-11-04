@@ -119,7 +119,10 @@ impl POD {
         }
     }
 
-    pub fn execute_schnorr_gadget(entries: &[Entry], sk: &SchnorrSecretKey) -> Self {
+    pub fn execute_schnorr_gadget<const NS: usize>(
+        entries: &[Entry],
+        sk: &SchnorrSecretKey,
+    ) -> Result<Self> {
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
         let protocol = SchnorrSigner::new();
 
@@ -130,26 +133,32 @@ impl POD {
                 value: ScalarOrVec::Scalar(protocol.keygen(sk).pk),
             }],
         ]
-        .concat();
-
-        let statement_map: HashMap<String, Statement> = kv_pairs
+            .concat();
+        
+        let statement_list =
+            POD::pad_statements::<NS>(
+            kv_pairs
             .iter()
-            .map(|entry| {
+            .map(|e| {
                 (
-                    format!("VALUEOF:{}", entry.key),
-                    Statement::from_entry(entry, GadgetID::SCHNORR16),
+                    format!("VALUEOF:{}", e.key),
+                    Statement::from_entry(e, GadgetID::SCHNORR16),
                 )
             })
+            .collect::<Vec<_>>().as_ref())?;
+
+        let statement_map: HashMap<String, Statement> = statement_list
+            .into_iter()
             .collect();
 
         let payload = PODPayload::new(&statement_map);
         let payload_hash = payload.hash_payload();
         let proof = protocol.sign(&payload_hash.elements.to_vec(), sk, &mut rng);
-        Self {
+        Ok(Self {
             payload,
             proof: PODProof::Schnorr(proof),
             proof_type: GadgetID::SCHNORR16,
-        }
+        })
     }
 
     pub fn execute_oracle_gadget(input: &GPGInput, cmds: &[OpCmd]) -> Result<Self> {
@@ -211,6 +220,27 @@ impl POD {
             crate::OpList(cmds.to_vec()),
             input.origin_renaming_map.clone(),
         )
+    }
+    fn pad_statements<const SIZE: usize>(statement_list: &[(String, Statement)]) -> Result<Vec<(String, Statement)>> {
+        let slice_len = statement_list.len();
+
+        if slice_len > SIZE {
+            Err(anyhow!(
+                "Number of statements in {:?} exceeds maximum size {}.",
+                statement_list,
+                SIZE
+            ))
+        } else {
+            Ok([
+                statement_list.to_vec(),
+                (slice_len..SIZE)
+                    .map(|i|
+                         (format!("_DUMMY_STATEMENT{}", i),
+                          Statement::None))
+                    .collect(),
+            ]
+            .concat())
+        }
     }
 }
 
@@ -516,6 +546,8 @@ mod tests {
 
     #[test]
     fn schnorr_pod_test() -> Result<()> {
+        const NS: usize = 3;
+        
         // Start with some values.
         let scalar1 = GoldilocksField(36);
         let scalar2 = GoldilocksField(52);
@@ -528,21 +560,21 @@ mod tests {
         let other_entry = Entry::new_from_scalar("some key", GoldilocksField(37));
         let other_statement = Statement::from_entry(&other_entry, GadgetID::SCHNORR16);
 
-        let schnorr_pod1 = POD::execute_schnorr_gadget(
+        let schnorr_pod1 = POD::execute_schnorr_gadget::<NS>(
             &vec![entry1.clone(), entry2.clone()],
             &SchnorrSecretKey { sk: 25 },
-        );
+        )?;
 
-        let schnorr_pod2 = POD::execute_schnorr_gadget(
+        let schnorr_pod2 = POD::execute_schnorr_gadget::<NS>(
             &vec![entry2.clone(), entry3.clone()],
             &SchnorrSecretKey { sk: 42 },
-        );
+        )?;
 
         assert!(schnorr_pod1.verify::<3, 2, 2>()?);
         assert!(schnorr_pod2.verify::<3, 2, 2>()?);
 
         let mut schnorr_pod3 =
-            POD::execute_schnorr_gadget(&vec![entry1.clone()], &SchnorrSecretKey { sk: 25 });
+            POD::execute_schnorr_gadget::<NS>(&vec![entry1.clone()], &SchnorrSecretKey { sk: 25 })?;
 
         // modify the internal value of the valueOf statement in schnorrPOD3
         schnorr_pod3
@@ -561,6 +593,8 @@ mod tests {
     // but i've manually inspected output and it looks good
     #[test]
     fn oracle_pod_from_schnorr_test() -> Result<()> {
+        const NS: usize = 4;
+        
         println!("oracle_pod_from_schnorr_test");
         // Start with some values.
         let scalar1 = GoldilocksField(36);
@@ -579,15 +613,15 @@ mod tests {
         let entry9 = Entry::new_from_scalar("claimed sum", scalar3);
 
         // three schnorr pods
-        let schnorr_pod1 = POD::execute_schnorr_gadget(
+        let schnorr_pod1 = POD::execute_schnorr_gadget::<NS>(
             &vec![entry1.clone(), entry2.clone()],
             &SchnorrSecretKey { sk: 25 },
-        );
+        )?;
 
-        let schnorr_pod2 = POD::execute_schnorr_gadget(
+        let schnorr_pod2 = POD::execute_schnorr_gadget::<NS>(
             &vec![entry3.clone(), entry4.clone()],
             &SchnorrSecretKey { sk: 42 },
-        );
+        )?;
         // make an OraclePOD using from_pods called on the two schnorr PODs
 
         // first make the GPG input
@@ -660,10 +694,10 @@ mod tests {
 
         // make another oracle POD which takes that oracle POD and a schnorr POD
 
-        let schnorr_pod3 = POD::execute_schnorr_gadget(
+        let schnorr_pod3 = POD::execute_schnorr_gadget::<NS>(
             &vec![entry5.clone(), entry6.clone(), entry7.clone()],
             &SchnorrSecretKey { sk: 83 },
-        );
+        )?;
 
         // make the GPG input
 
@@ -738,6 +772,8 @@ mod tests {
 
     #[test]
     fn goodboy_test() -> Result<()> {
+        const NS: usize = 3;
+        
         // A HackMD detailing execution and how each statement gets deduced is available here https://hackmd.io/@gubsheep/B1Rajmik1g
 
         let protocol = SchnorrSigner::new();
@@ -760,24 +796,24 @@ mod tests {
 
         let gb1_user = Entry::new_from_scalar("user", bob_pk);
         let gb1_age = Entry::new_from_scalar("age", GoldilocksField(27));
-        let gb1 = POD::execute_schnorr_gadget(&vec![gb1_user.clone(), gb1_age.clone()], &goog_sk);
+        let gb1 = POD::execute_schnorr_gadget::<NS>(&vec![gb1_user.clone(), gb1_age.clone()], &goog_sk)?;
 
         let gb2_user = Entry::new_from_scalar("user", bob_pk);
-        let gb2 = POD::execute_schnorr_gadget(&vec![gb2_user.clone()], &msft_sk);
+        let gb2 = POD::execute_schnorr_gadget::<NS>(&vec![gb2_user.clone()], &msft_sk)?;
 
         let gb3_user = Entry::new_from_scalar("user", charlie_pk);
         let gb3_age = Entry::new_from_scalar("age", GoldilocksField(18));
-        let gb3 = POD::execute_schnorr_gadget(&vec![gb3_user.clone(), gb3_age.clone()], &msft_sk);
+        let gb3 = POD::execute_schnorr_gadget::<NS>(&vec![gb3_user.clone(), gb3_age.clone()], &msft_sk)?;
 
         let gb4_user = Entry::new_from_scalar("user", charlie_pk);
-        let gb4 = POD::execute_schnorr_gadget(&vec![gb4_user.clone()], &fb_sk);
+        let gb4 = POD::execute_schnorr_gadget::<NS>(&vec![gb4_user.clone()], &fb_sk)?;
 
         let alice_user_entry = Entry::new_from_scalar("user", alice_pk);
         let known_attestors_entry = Entry::new_from_vec("known_attestors", known_attestors.clone());
 
-        let bob_alice = POD::execute_schnorr_gadget(&vec![alice_user_entry.clone()], &bob_sk);
+        let bob_alice = POD::execute_schnorr_gadget::<NS>(&vec![alice_user_entry.clone()], &bob_sk)?;
         let charlie_alice =
-            POD::execute_schnorr_gadget(&vec![alice_user_entry.clone()], &charlie_sk);
+            POD::execute_schnorr_gadget::<NS>(&vec![alice_user_entry.clone()], &charlie_sk)?;
 
         // make the "bob trusted friend" POD
         let mut bob_tf_input_pods = HashMap::new();
@@ -1088,6 +1124,7 @@ mod tests {
 
     #[test]
     fn final_pod_test() -> Result<()> {
+        const NS: usize = 5;
         // In this test we will execute this PEX script below and generate final-pod using
         // The oracle gadget on 4 different SchnorrPOD assigned to Alice, Bob, and Charlie
 
@@ -1112,10 +1149,10 @@ mod tests {
         let simple_pod_1_x = Entry::new_from_scalar("x", GoldilocksField(10));
         let simple_pod_1_y = Entry::new_from_scalar("y", GoldilocksField(20));
 
-        let simple_pod_1 = POD::execute_schnorr_gadget(
+        let simple_pod_1 = POD::execute_schnorr_gadget::<NS>(
             &vec![simple_pod_1_x.clone(), simple_pod_1_y.clone()],
             &alice_sk,
-        );
+        )?;
 
         // ^
         // [defpod simple-pod-1
@@ -1132,10 +1169,10 @@ mod tests {
         let simple_pod_2_z = Entry::new_from_scalar("z", GoldilocksField(15));
         let simple_pod_2_w = Entry::new_from_scalar("w", GoldilocksField(25));
 
-        let simple_pod_2 = POD::execute_schnorr_gadget(
+        let simple_pod_2 = POD::execute_schnorr_gadget::<NS>(
             &vec![simple_pod_2_z.clone(), simple_pod_2_w.clone()],
             &alice_sk,
-        );
+        )?;
 
         // [defpod simple-pod-2
         //   z 15
@@ -1151,10 +1188,10 @@ mod tests {
         let simple_pod_3_a = Entry::new_from_scalar("a", GoldilocksField(30));
         let simple_pod_3_b = Entry::new_from_scalar("b", GoldilocksField(40));
 
-        let simple_pod_3 = POD::execute_schnorr_gadget(
+        let simple_pod_3 = POD::execute_schnorr_gadget::<NS>(
             &vec![simple_pod_3_a.clone(), simple_pod_3_b.clone()],
             &bob_sk,
-        );
+        )?;
 
         // [defpod simple-pod-3
         //   a 30
@@ -1169,7 +1206,7 @@ mod tests {
         let simple_pod_4_local_value = Entry::new_from_scalar("local-value", GoldilocksField(100));
 
         let simple_pod_4 =
-            POD::execute_schnorr_gadget(&vec![simple_pod_4_local_value.clone()], &charlie_sk);
+            POD::execute_schnorr_gadget::<NS>(&vec![simple_pod_4_local_value.clone()], &charlie_sk)?;
 
         // Now let's create the sum-pod using the Oracle gadget
 
@@ -1247,7 +1284,7 @@ mod tests {
             ),
         ];
 
-        let product_pod = POD::execute_oracle_gadget(&product_pod_input, &product_pod_ops).unwrap();
+        let product_pod = POD::execute_oracle_gadget(&product_pod_input, &product_pod_ops)?;
         assert!(product_pod.verify::<3, 2, 2>()? == true);
 
         // [defpod product-pod
