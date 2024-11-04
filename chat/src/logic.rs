@@ -284,7 +284,8 @@ fn store_message_pod(
     let pod = POD::execute_schnorr_gadget(
         &vec![Entry::new_from_scalar("message", field_elem)],
         &schnorr_secret_key,
-    );
+    )
+    .unwrap();
     pod_store.lock().unwrap().add_pod(&pod).unwrap();
     pod_watch.send(()).unwrap();
     Ok(())

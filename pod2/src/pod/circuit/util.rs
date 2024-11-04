@@ -3,7 +3,7 @@ use plonky2::{
     field::{goldilocks_field::GoldilocksField, types::Field},
     iop::target::{BoolTarget, Target},
     plonk::circuit_builder::CircuitBuilder,
-    util::log2_ceil,
+    // util::log2_ceil,
 };
 
 use super::statement::StatementTarget;
@@ -13,15 +13,15 @@ const NUM_BITS: usize = 32;
 
 /// Pads the end of the vector with its final element until its length
 /// is a power of two. Needed for Plonky2 RAM.
-fn pad_to_power_of_two<A: Clone>(v: &[A]) -> Result<Vec<A>> {
-    let v_len = v.len();
-    let bits = log2_ceil(v_len);
-    let padding = (0..2usize.pow(bits as u32) - v_len)
-        .map(|_| v.last().cloned())
-        .collect::<Option<Vec<_>>>()
-        .ok_or(anyhow!("Vector is empty"))?;
-    Ok([v.to_vec(), padding].concat())
-}
+// fn pad_to_power_of_two<A: Clone>(v: &[A]) -> Result<Vec<A>> {
+//     let v_len = v.len();
+//     let bits = log2_ceil(v_len);
+//     let padding = (0..2usize.pow(bits as u32) - v_len)
+//         .map(|_| v.last().cloned())
+//         .collect::<Option<Vec<_>>>()
+//         .ok_or(anyhow!("Vector is empty"))?;
+//     Ok([v.to_vec(), padding].concat())
+// }
 
 /*
 /// Helper for random access. Includes a range check.

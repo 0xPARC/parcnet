@@ -27,10 +27,10 @@ pub enum ORef {
     P(String),
 }
 
-impl ORef {
-    fn as_str(&self) -> &str {
-        match self {
-            ORef::S => SELF_ORIGIN_NAME,
+impl From<ORef> for String {
+    fn from(oref: ORef) -> String {
+        match oref {
+            ORef::S => SELF_ORIGIN_NAME.to_string(),
             ORef::P(s) => s,
         }
     }
@@ -49,12 +49,9 @@ impl SRef {
     }
 }
 
-impl From<SRef> for StatementRef<'static> {
-    fn from(sref: SRef) -> StatementRef<'static> {
-        StatementRef(
-            Box::leak(sref.0.as_str().to_string().into_boxed_str()),
-            Box::leak(sref.1.into_boxed_str()),
-        )
+impl From<SRef> for StatementRef {
+    fn from(sref: SRef) -> StatementRef {
+        StatementRef(sref.0.into(), sref.1)
     }
 }
 
@@ -90,7 +87,7 @@ pub struct Env {
 
 #[derive(Clone, Debug)]
 pub struct PodBuilder {
-    pub pending_operations: Vec<(String, OpCmd<'static>)>,
+    pub pending_operations: Vec<(String, OpCmd)>,
     pub input_pods: HashMap<String, POD>,
     pub next_origin_id: usize,
     pub next_result_key_id: usize,
@@ -184,12 +181,7 @@ impl Operation {
         let (value1, value2) = self.evaluate_values(Some(env))?;
         Ok(self.apply_operation(value1, value2))
     }
-    fn into_pod_op(
-        op_type: OpType,
-        result_ref: SRef,
-        op1: SRef,
-        op2: SRef,
-    ) -> Op<StatementRef<'static>> {
+    fn into_pod_op(op_type: OpType, result_ref: SRef, op1: SRef, op2: SRef) -> Op<StatementRef> {
         match op_type {
             OpType::Add => Op::SumOf(result_ref.into(), op1.into(), op2.into()),
             OpType::Multiply => Op::ProductOf(result_ref.into(), op1.into(), op2.into()),
@@ -235,10 +227,9 @@ impl PodBuilder {
         id
     }
 
-    pub fn add_operation(&mut self, op: Op<StatementRef<'static>>, statement_id: String) {
-        let static_str = Box::leak(statement_id.to_owned().into_boxed_str());
+    pub fn add_operation(&mut self, op: Op<StatementRef>, statement_id: String) {
         self.pending_operations
-            .push((statement_id.clone(), OpCmd(op, static_str)));
+            .push((statement_id.clone(), OpCmd(op, statement_id)));
     }
 
     fn get_or_create_constant_ref(&mut self, value: GoldilocksField) -> SRef {
@@ -630,10 +621,8 @@ impl Expr {
                                             key: key.clone(),
                                             value: entry.value.clone(),
                                         };
-                                        let op_cmd = OpCmd(
-                                            Op::NewEntry(new_entry),
-                                            Box::leak(statement_id.clone().into_boxed_str()),
-                                        );
+                                        let op_cmd =
+                                            OpCmd(Op::NewEntry(new_entry), statement_id.clone());
                                         builder_guard.pending_operations[index] =
                                             (statement_id.to_string(), op_cmd);
                                     } else {
@@ -846,7 +835,8 @@ fn get_value_from_sref(sref: &SRef, env: &Env) -> Result<GoldilocksField> {
             return Err(anyhow!("Cannot get value from a SELF statement"));
         }
         // Look up value in input pods using origin mapping
-        if let Some(pod) = builder.input_pods.get(sref.0.as_str()) {
+        let key: String = sref.0.clone().into();
+        if let Some(pod) = builder.input_pods.get(&key) {
             if let Some(Statement::ValueOf(_, ScalarOrVec::Scalar(value))) =
                 pod.payload.statements_map.get(&sref.1)
             {
