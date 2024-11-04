@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn schnorr_pod_test() -> Result<()> {
         const NS: usize = 2; // NS: NumStatements
-        
+
         let scalar1 = GoldilocksField(36);
         let entry1 = Entry::new_from_scalar("some key", scalar1);
         let schnorr_pod3 =

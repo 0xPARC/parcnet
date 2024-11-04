@@ -59,6 +59,7 @@ pub struct RecursionTree<
     const M: usize,
     const N: usize,
     const NS: usize,
+    const VL: usize,
 > where
     [(); M + N]:,
 {
@@ -66,7 +67,8 @@ pub struct RecursionTree<
     _o: PhantomData<O>,
 }
 
-impl<I, O, const M: usize, const N: usize, const NS: usize> RecursionTree<I, O, M, N, NS>
+impl<I, O, const M: usize, const N: usize, const NS: usize, const VL: usize>
+    RecursionTree<I, O, M, N, NS, VL>
 where
     I: InnerCircuitTrait,
     O: OpsExecutorTrait,
@@ -74,21 +76,21 @@ where
 {
     /// returns the full-recursive CircuitData
     pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
-        RecursionCircuit::<I, O, M, N, NS>::circuit_data()
+        RecursionCircuit::<I, O, M, N, NS, VL>::circuit_data()
     }
 
     pub fn prepare_public_inputs(
         verifier_data: VerifierCircuitData<F, C, D>,
         public_inputs: Vec<F>,
     ) -> Vec<F> {
-        RecursionCircuit::<I, O, M, N, NS>::prepare_public_inputs(verifier_data, public_inputs)
+        RecursionCircuit::<I, O, M, N, NS, VL>::prepare_public_inputs(verifier_data, public_inputs)
     }
 
     pub fn prove_node(
         verifier_data: VerifierCircuitData<F, C, D>, // TODO rm
         // builder: &mut CircuitBuilder<F, D>,
         prover: &ProverCircuitData<F, C, D>,
-        circuit: &mut RecursionCircuit<I, O, M, N, NS>,
+        circuit: &mut RecursionCircuit<I, O, M, N, NS, VL>,
         selectors: [F; M + N],
         inner_circuits_input: [I::Input; M],
         // ops_executor_input: [O::Input; O::NS],
@@ -112,7 +114,7 @@ where
         // assign the targets
         // let start = Instant::now();
         // let mut circuit =
-        //     RecursionCircuit::<I, O, M, N, NS>::add_targets(&mut builder, verifier_data.clone())?;
+        //     RecursionCircuit::<I, O, M, N, NS, VL>::add_targets(&mut builder, verifier_data.clone())?;
         // println!("RecursionCircuit::add_targets(): {:?}", start.elapsed());
 
         // fill the targets
@@ -176,6 +178,7 @@ pub struct RecursionCircuit<
     const M: usize,
     const N: usize,
     const NS: usize,
+    const VL: usize,
 > where
     [(); M + N]:,
 {
@@ -189,7 +192,8 @@ pub struct RecursionCircuit<
     verifier_data: VerifierCircuitData<F, C, D>,
 }
 
-impl<I, O, const M: usize, const N: usize, const NS: usize> RecursionCircuit<I, O, M, N, NS>
+impl<I, O, const M: usize, const N: usize, const NS: usize, const VL: usize>
+    RecursionCircuit<I, O, M, N, NS, VL>
 where
     I: InnerCircuitTrait,
     O: OpsExecutorTrait,
@@ -197,7 +201,7 @@ where
 {
     /// returns the full-recursive CircuitData
     pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
-        let mut data = common_data_for_recursion::<I, O, M, N, NS>()?;
+        let mut data = common_data_for_recursion::<I, O, M, N, NS, VL>()?;
 
         // build the actual RecursionCircuit circuit data
         let config = CircuitConfig::standard_recursion_config();
@@ -361,6 +365,7 @@ pub fn common_data_for_recursion<
     const M: usize,
     const N: usize,
     const NS: usize,
+    const VL: usize,
 >() -> Result<CircuitData<F, C, D>>
 where
     [(); M + N]:,
@@ -416,14 +421,15 @@ where
     }
 
     // pad min gates
-    let n_gates = compute_num_gates::<N, NS>()?;
+    let n_gates = compute_num_gates::<N, NS, VL>()?;
     while builder.num_gates() < n_gates {
         builder.add_gate(NoopGate, vec![]);
     }
     Ok(builder.build::<C>())
 }
 
-fn compute_num_gates<const N: usize, const NS: usize>() -> Result<usize> {
+// TODO: Take `VL` into account.
+fn compute_num_gates<const N: usize, const NS: usize, const VL: usize>() -> Result<usize> {
     // Note: the following numbers are WIP, obtained by trial-error by running different
     // configurations in the tests.
     let n_gates = match N {
@@ -476,12 +482,13 @@ mod tests {
     /// cargo test --release test_recursion -- --nocapture
     #[test]
     fn test_recursion() -> Result<()> {
-        test_recursion_opt::<3, 2, 2>()?; // <M, N>
+        test_recursion_opt::<3, 2, 2, 0>()?; // <M, N, NS, VL>
 
         Ok(())
     }
 
-    fn test_recursion_opt<const M: usize, const N: usize, const NS: usize>() -> Result<()>
+    fn test_recursion_opt<const M: usize, const N: usize, const NS: usize, const VL: usize>(
+    ) -> Result<()>
     where
         [(); M + N]:,
     {
@@ -523,17 +530,17 @@ mod tests {
             .collect();
         assert_eq!(sig_vec.len(), M);
 
-        type RC<const M: usize, const N: usize, const NS: usize> =
-            RecursionCircuit<ExampleGadget, ExampleOpsExecutor<1>, M, N, NS>;
-        type RT<const M: usize, const N: usize, const NS: usize> =
-            RecursionTree<ExampleGadget, ExampleOpsExecutor<1>, M, N, NS>;
+        type RC<const M: usize, const N: usize, const NS: usize, const VL: usize> =
+            RecursionCircuit<ExampleGadget, ExampleOpsExecutor<1>, M, N, NS, VL>;
+        type RT<const M: usize, const N: usize, const NS: usize, const VL: usize> =
+            RecursionTree<ExampleGadget, ExampleOpsExecutor<1>, M, N, NS, VL>;
 
         // build the circuit_data & verifier_data for the recursive circuit
-        let circuit_data = RC::<M, N, NS>::circuit_data()?;
+        let circuit_data = RC::<M, N, NS, VL>::circuit_data()?;
         let verifier_data = circuit_data.verifier_data();
-        let prover = RC::<M, N, NS>::build_prover(verifier_data.clone())?;
+        let prover = RC::<M, N, NS, VL>::build_prover(verifier_data.clone())?;
 
-        let dummy_proof = RC::<M, N, NS>::dummy_proof(circuit_data);
+        let dummy_proof = RC::<M, N, NS, VL>::dummy_proof(circuit_data);
 
         // we start with k dummy proofs, since at the leafs level we don't have proofs yet and we
         // just verify the signatures. At each level we divide the amount of proofs by N. At the
@@ -547,7 +554,7 @@ mod tests {
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::new(config);
         let start = Instant::now();
-        let mut circuit = RC::<M, N, NS>::add_targets(&mut builder, verifier_data.clone())?;
+        let mut circuit = RC::<M, N, NS, VL>::add_targets(&mut builder, verifier_data.clone())?;
         println!("RecursionCircuit::add_targets(): {:?}", start.elapsed());
         // let start = Instant::now();
         // let prover = builder.build_prover::<C>();
@@ -586,7 +593,7 @@ mod tests {
 
                 // do the recursive step
                 let start = Instant::now();
-                let new_proof = RT::<M, N, NS>::prove_node(
+                let new_proof = RT::<M, N, NS, VL>::prove_node(
                     verifier_data.clone(),
                     // &mut builder,
                     &prover,
@@ -606,7 +613,7 @@ mod tests {
 
                 // verify the recursive proof
                 let public_inputs =
-                    RT::<M, N, NS>::prepare_public_inputs(verifier_data.clone(), vec![]);
+                    RT::<M, N, NS, VL>::prepare_public_inputs(verifier_data.clone(), vec![]);
                 verifier_data.clone().verify(ProofWithPublicInputs {
                     proof: new_proof.clone(),
                     public_inputs: public_inputs.clone(),
@@ -621,7 +628,8 @@ mod tests {
         let last_proof = proofs_at_level_i[0].clone();
 
         // verify the last proof
-        let public_inputs = RT::<M, N, NS>::prepare_public_inputs(verifier_data.clone(), vec![]);
+        let public_inputs =
+            RT::<M, N, NS, VL>::prepare_public_inputs(verifier_data.clone(), vec![]);
         verifier_data.clone().verify(ProofWithPublicInputs {
             proof: last_proof.clone(),
             public_inputs: public_inputs.clone(),
