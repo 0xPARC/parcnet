@@ -413,41 +413,41 @@ mod tests {
     fn op_test() -> Result<()> {
         // Input Schnorr PODs. For now, they must all have the same number
         // of statements.
-        let num_statements = 3;
+        const NS: usize = 3;
         let schnorr_pod1_name = "Test POD 1".to_string();
-        let schnorr_pod1 = POD::execute_schnorr_gadget(
+        let schnorr_pod1 = POD::execute_schnorr_gadget::<NS>(
             &[
                 Entry::new_from_scalar("s1", GoldilocksField(55)),
                 Entry::new_from_scalar("s2", GoldilocksField(56)),
             ],
             &SchnorrSecretKey { sk: 27 },
-        );
+        )?;
         let schnorr_pod2_name = "Test POD 2".to_string();
-        let schnorr_pod2 = POD::execute_schnorr_gadget(
+        let schnorr_pod2 = POD::execute_schnorr_gadget::<NS>(
             &[
                 Entry::new_from_scalar("s3", GoldilocksField(57)),
                 Entry::new_from_scalar("s4", GoldilocksField(55)),
             ],
             &SchnorrSecretKey { sk: 29 },
-        );
+        )?;
 
         let schnorr_pod3_name = "Test POD 3".to_string();
-        let schnorr_pod3 = POD::execute_schnorr_gadget(
+        let schnorr_pod3 = POD::execute_schnorr_gadget::<NS>(
             &[
                 Entry::new_from_scalar("s0", GoldilocksField(57)),
                 Entry::new_from_scalar("s-1", GoldilocksField(55)),
             ],
             &SchnorrSecretKey { sk: 24 },
-        );
+        )?;
 
         let schnorr_pod4_name = "Test POD 4".to_string();
-        let schnorr_pod4 = POD::execute_schnorr_gadget(
+        let schnorr_pod4 = POD::execute_schnorr_gadget::<NS>(
             &[
                 Entry::new_from_scalar("who", GoldilocksField(7)),
                 Entry::new_from_scalar("what", GoldilocksField(5)),
             ],
             &SchnorrSecretKey { sk: 20 },
-        );
+        )?;
 
         let pods_list = [
             (schnorr_pod1_name.clone(), schnorr_pod1),
@@ -525,7 +525,7 @@ mod tests {
                 .map(|(pod_index, (_, pod))| {
                     // QUESTION: this is creating a new target, but does not call
                     // `compute_targets_and_verify`
-                    let pod_target = SchnorrPODTarget::new_virtual(&mut builder, num_statements);
+                    let pod_target = SchnorrPODTarget::new_virtual(&mut builder, NS);
                     let pod_index_target = builder.constant(GoldilocksField(pod_index as u64));
                     pod_target.set_witness(&mut pw, pod)?;
                     pod_target
@@ -570,41 +570,41 @@ mod tests {
 
         // Input Schnorr PODs. For now, they must all have the same number
         // of statements.
-        let num_statements = 3;
+        const NS: usize = 3;
         let schnorr_pod1_name = "Test POD 1".to_string();
-        let schnorr_pod1 = POD::execute_schnorr_gadget(
+        let schnorr_pod1 = POD::execute_schnorr_gadget::<NS>(
             &[
                 Entry::new_from_scalar("s1", GoldilocksField(55)),
                 Entry::new_from_scalar("s2", GoldilocksField(56)),
             ],
             &SchnorrSecretKey { sk: 27 },
-        );
+        )?;
         let schnorr_pod2_name = "Test POD 2".to_string();
-        let schnorr_pod2 = POD::execute_schnorr_gadget(
+        let schnorr_pod2 = POD::execute_schnorr_gadget::<NS>(
             &[
                 Entry::new_from_scalar("s3", GoldilocksField(57)),
                 Entry::new_from_scalar("s4", GoldilocksField(55)),
             ],
             &SchnorrSecretKey { sk: 29 },
-        );
+        )?;
 
         let schnorr_pod3_name = "Test POD 3".to_string();
-        let schnorr_pod3 = POD::execute_schnorr_gadget(
+        let schnorr_pod3 = POD::execute_schnorr_gadget::<NS>(
             &[
                 Entry::new_from_scalar("s0", GoldilocksField(57)),
                 Entry::new_from_scalar("s-1", GoldilocksField(55)),
             ],
             &SchnorrSecretKey { sk: 24 },
-        );
+        )?;
 
         let schnorr_pod4_name = "Test POD 4".to_string();
-        let schnorr_pod4 = POD::execute_schnorr_gadget(
+        let schnorr_pod4 = POD::execute_schnorr_gadget::<NS>(
             &[
                 Entry::new_from_scalar("who", GoldilocksField(7)),
                 Entry::new_from_scalar("what", GoldilocksField(5)),
             ],
             &SchnorrSecretKey { sk: 20 },
-        );
+        )?;
 
         let pods_list = [
             (schnorr_pod1_name.clone(), schnorr_pod1),
