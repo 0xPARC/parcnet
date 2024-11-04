@@ -495,9 +495,9 @@ mod tests {
         assert_eq!(sig_vec.len(), M);
 
         type RC<const M: usize, const N: usize, const NS: usize, const VL: usize> =
-            RecursionCircuit<ExampleGadget, ExampleOpsExecutor<1>, M, N, NS, VL>;
+            RecursionCircuit<ExampleGadget, ExampleOpsExecutor<1, VL>, M, N, NS, VL>;
         type RT<const M: usize, const N: usize, const NS: usize, const VL: usize> =
-            RecursionTree<ExampleGadget, ExampleOpsExecutor<1>, M, N, NS, VL>;
+            RecursionTree<ExampleGadget, ExampleOpsExecutor<1, VL>, M, N, NS, VL>;
 
         // build the circuit_data & verifier_data for the recursive circuit
         let circuit_data = RC::<M, N, NS, VL>::circuit_data()?;
