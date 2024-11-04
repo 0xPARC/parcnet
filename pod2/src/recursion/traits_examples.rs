@@ -73,10 +73,10 @@ impl InnerCircuitTrait for ExampleGadget {
     }
 }
 
-pub struct ExampleOpsExecutor<const NS: usize>;
+pub struct ExampleOpsExecutor<const NS: usize, const VL: usize>;
 
-impl<const NS: usize> OpsExecutorTrait for ExampleOpsExecutor<NS> {
-    type Targets = [OperationTarget; NS];
+impl<const NS: usize, const VL: usize> OpsExecutorTrait for ExampleOpsExecutor<NS, VL> {
+    type Targets = [OperationTarget<VL>; NS];
     type Input = ();
     type Output = ();
 

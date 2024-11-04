@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Result};
 use plonky2::field::{
-    goldilocks_field::GoldilocksField,
-    types::{Field, PrimeField64},
+    goldilocks_field::GoldilocksField, packed::PackedField, types::{Field, PrimeField64}
 };
 use std::{collections::HashMap, fmt::Debug};
 
@@ -232,14 +231,19 @@ impl OperationCmd {
 
 impl Operation<StatementRef> {
     /// Representation of operation command as field vector of length
-    /// 9 of the form
+    /// 9 + VL of the form
     /// [code] ++ [pod_num1, statement_num1] ++ [pod_num2,
-    ///   statement_num2] ++ [pod_num3, statement_num3] ++ [entry],
-    /// where we substitute 0s for unused operands and entries.
-    pub fn to_fields(
+    ///   statement_num2] ++ [pod_num3, statement_num3] ++ [entry]
+    ///   ++ contains_proof,
+    /// where `VL` stands for the length of the vector involved in a
+    /// `contains` op and we substitute 0s for unused operands and
+    /// entries.
+    pub fn to_fields<const VL: usize>(
         &self,
         ref_index_map: &HashMap<StatementRef, (usize, usize)>,
+        statement_table: &<StatementRef as StatementOrRef>::StatementTable
     ) -> Result<Vec<GoldilocksField>> {
+        let op_code =self.code();
         // Enumerate operands, substitute indices and pad with 0s.
         let operands = self
             .operands()
@@ -266,7 +270,22 @@ impl Operation<StatementRef> {
             .entry()
             .map_or(vec![GoldilocksField::ZERO; 2], |e| e.to_fields());
 
-        Ok([vec![self.code()], padded_operands, entry].concat())
+        // Check for `contains` op.
+        let contains_proof =
+            match self {
+                Self::ContainsFromEntries(s_ref, _) => {
+                    // Look up statement
+                    let statement = s_ref.deref_cloned(statement_table)?;
+                    match statement {
+                        Statement::ValueOf(_, ScalarOrVec::Vector(v)) =>
+                            if v.len() == VL { Ok(v.clone())} else {Err(anyhow!("Vector {:?} in CONTAINS op is not of length {}.", v, VL))},
+                        _ => Err(anyhow!("Improper statement argument to CONTAINS op: {:?}", statement))
+                    }
+                },
+                    _ => Ok(vec![GoldilocksField::ZERO; VL])
+            }?;
+
+        Ok([vec![op_code], padded_operands, entry, contains_proof].concat())
     }
 }
 
@@ -314,18 +333,5 @@ impl OpList {
             ))
         });
         Self(sorted_opcmds)
-    }
-    pub fn to_fields(&self, pods_list: &[(String, POD)]) -> Result<Vec<Vec<GoldilocksField>>> {
-        // Map from StatementRef to pair of the form (pod index, statement index)
-        let ref_index_map = StatementRef::index_map(pods_list);
-
-        // Arrange OpCmds by output statement name and convert.
-        let sorted_oplist = self.sort(pods_list);
-
-        sorted_oplist
-            .0
-            .iter()
-            .map(|OperationCmd(op, _)| op.to_fields(&ref_index_map))
-            .collect::<Result<Vec<Vec<_>>>>()
     }
 }
