@@ -12,7 +12,7 @@ use std::iter::zip;
 
 use super::{statement::StatementTarget, util::vector_ref};
 use crate::{
-    pod::{util::hash_string_to_field, PODProof, POD, SIGNER_PK_KEY},
+    pod::{util::hash_string_to_field, PODProof, Statement, POD, SIGNER_PK_KEY},
     signature::schnorr_prover::{
         MessageTarget, SchnorrBuilder, SchnorrPublicKeyTarget, SchnorrSignatureTarget,
         SignatureVerifierBuilder,
@@ -79,6 +79,20 @@ impl SchnorrPODTarget {
 
         // This suggests we are OK.
         Ok(value_target)
+    }
+
+    /// Checks that the payload is valid for a SchnorrPOD, i.e. that its statements
+    /// are either of type `VALUE_OF` or `NONE`.
+    pub fn check_payload(&self, builder: &mut CircuitBuilder<F, D>) {
+        let valueof_target = builder.constant(Statement::VALUE_OF);
+        let none_target = builder.constant(Statement::NONE);
+        self.payload.iter().for_each(|s_target| {
+            let s_type = s_target.predicate;
+            let valueof_check = builder.sub(s_type, valueof_target);
+            let none_check = builder.sub(s_type, none_target);
+            let check = builder.mul(valueof_check, none_check);
+            builder.assert_zero(check);
+        });
     }
 
     pub fn compute_hash_target(&self, builder: &mut CircuitBuilder<F, D>) -> HashOutTarget {
