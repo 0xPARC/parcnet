@@ -7,16 +7,14 @@ use plonky2::{
     },
     plonk::circuit_builder::CircuitBuilder,
 };
-use std::collections::HashMap;
+use std::{array, collections::HashMap};
 use std::iter::zip;
 
 use crate::{
     pod::{
-        circuit::util::statement_matrix_ref, gadget::GadgetID, operation::Operation as Op,
-        statement::StatementRef, Statement,
-        statement::StatementOrRef
+        circuit::util::statement_matrix_ref, gadget::GadgetID, operation::{OpList, Operation as Op}, statement::{StatementOrRef, StatementRef}, GPGInput, OpCmd, Statement
     },
-    D, F, NUM_BITS,
+    D, F, NUM_BITS, POD,
 };
 
 use super::{
@@ -239,64 +237,39 @@ impl<const VL: usize> OperationTarget<VL> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
+pub struct OpListTarget<const NS: usize, const VL: usize>(pub [OperationTarget<VL>; NS]);
 
-    use anyhow::Result;
-    use plonky2::{
-        field::goldilocks_field::GoldilocksField,
-        iop::witness::PartialWitness,
-        plonk::{circuit_builder::CircuitBuilder, circuit_data::CircuitConfig},
-    };
+impl<const NS: usize, const VL: usize> OpListTarget<NS, VL> {
+    pub fn new_virtual(builder: &mut CircuitBuilder<F, D>) -> Self {
+        OpListTarget(array::from_fn(|_| OperationTarget::<VL>::new_virtual(builder)))
+    }
 
-    use crate::{
-        pod::{
-            circuit::{pod::SchnorrPODTarget, statement::StatementTarget},
-            entry::Entry,
-            gadget::GadgetID,
-            operation::{OpList, Operation as Op, OperationCmd as OpCmd},
-            statement::StatementRef,
-            GPGInput, POD,
-        },
-        signature::schnorr::SchnorrSecretKey,
-        C,
-    };
+    pub fn set_witness(
+        &self,
+        pw: &mut PartialWitness<GoldilocksField>,
+        op_list: &OpList,
+        gpg_input: &GPGInput
+    ) -> Result<()> {
+        // TODO: Abstract this away.
+        // Determine output POD statements for the purposes of later reference
+        let output_pod = POD::execute_oracle_gadget(gpg_input, &op_list.0)?;
+        // println!("{:?}", output_pod.payload.statements_list);
+        let input_and_output_pod_list = [
+            gpg_input.pods_list.clone(),
+            vec![("_SELF".to_string(), output_pod)],
+        ]
+        .concat();
+
+        // Set operation targets
+        let ref_index_map = StatementRef::index_map(&input_and_output_pod_list);
+        let statement_table: <StatementRef as StatementOrRef>::StatementTable =
+            input_and_output_pod_list.iter().map(
+                |(pod_name, pod)|
+                (pod_name.clone(), pod.payload.statements_map.clone())
+                ).collect();
+
+        zip(&self.0, op_list.sort(&input_and_output_pod_list).0).try_for_each(
+            |(op_target, OpCmd(op, _))| op_target.set_witness(pw, &op, &ref_index_map, &statement_table),
+        )
+    }
 }
-
-// pub struct OpListTarget<const NS: usize, const VL: usize>(pub [OperationTarget<VL>; NS]);
-
-// impl<const NS: usize, const VL: usize> OpListTarget<NS, VL> {
-//     pub fn new_virtual(builder: &mut CircuitBuilder<F, D>) -> Self {
-//         OpListTarget(array::from_fn(|_| OperationTarget::<VL>::new_virtual(builder)))
-//     }
-
-//     pub fn set_witness(
-//         &self,
-//         pw: &mut PartialWitness<GoldilocksField>,
-//         op_list: &OpList,
-//         gpg_input: &GPGInput
-//     ) -> Result<()> {
-//         // TODO: Abstract this away.
-//         // Determine output POD statements for the purposes of later reference
-//         let output_pod = POD::execute_oracle_gadget(gpg_input, &op_list.0)?;
-//         // println!("{:?}", output_pod.payload.statements_list);
-//         let input_and_output_pod_list = [
-//             gpg_input.pods_list.clone(),
-//             vec![("_SELF".to_string(), output_pod)],
-//         ]
-//         .concat();
-
-//         // Set operation targets
-//         let ref_index_map = StatementRef::index_map(&input_and_output_pod_list);
-//         let statement_table: <StatementRef as StatementOrRef>::StatementTable =
-//             input_and_output_pod_list.iter().map(
-//                 |(pod_name, pod)|
-//                 (pod_name.clone(), pod.payload.statements_map.clone())
-//                 ).collect();
-
-//         zip(&self.0, op_list.sort(&input_and_output_pod_list).0).try_for_each(
-//             |(op_target, OperationCmd(op, _))| op_target.set_witness(pw, &op, &ref_index_map, &statement_table),
-//         )
-//     }
-// }
