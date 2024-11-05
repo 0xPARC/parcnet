@@ -274,13 +274,19 @@ mod tests {
             ]),
             OpList(vec![
                 OpCmd::new(Op::None, "cons"),
-                OpCmd::new(Op::None, "car"),
+                // OpCmd::new(
+                //     Op::ContainsFromEntries(
+                //         StatementRef::new(&schnorr_pod4_name, "VALUEOF:who"),
+                //         StatementRef::new(&schnorr_pod4_name, "VALUEOF:what"),
+                //     ),
+                //     "car",
+                // ),
                 OpCmd::new(Op::None, "cdr"),
             ]),
         ]
         .into_iter()
-        .map(|op_list| op_list.sort(&pods_list))
-        .collect::<Vec<_>>();
+        .map(|op_list| op_list.pad::<NS>().and_then(|o| Ok(o.sort(&pods_list))))
+        .collect::<Result<Vec<_>>>()?;
 
         let gpg_input = GPGInput::new(HashMap::from(pods_list.clone()), HashMap::new());
 
