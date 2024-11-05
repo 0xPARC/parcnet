@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
 use plonky2::field::{
-    goldilocks_field::GoldilocksField, packed::PackedField, types::{Field, PrimeField64}
+    goldilocks_field::GoldilocksField,
+    packed::PackedField,
+    types::{Field, PrimeField64},
 };
 use std::{collections::HashMap, fmt::Debug};
 
@@ -261,9 +263,9 @@ impl Operation<StatementRef> {
     pub fn to_fields<const VL: usize>(
         &self,
         ref_index_map: &HashMap<StatementRef, (usize, usize)>,
-        statement_table: &<StatementRef as StatementOrRef>::StatementTable
+        statement_table: &<StatementRef as StatementOrRef>::StatementTable,
     ) -> Result<Vec<GoldilocksField>> {
-        let op_code =self.code();
+        let op_code = self.code();
         // Enumerate operands, substitute indices and pad with 0s.
         let operands = self
             .operands()
@@ -291,19 +293,30 @@ impl Operation<StatementRef> {
             .map_or(vec![GoldilocksField::ZERO; 2], |e| e.to_fields());
 
         // Check for `contains` op.
-        let contains_proof =
-            match self {
-                Self::ContainsFromEntries(s_ref, _) => {
-                    // Look up statement
-                    let statement = s_ref.deref_cloned(statement_table)?;
-                    match statement {
-                        Statement::ValueOf(_, ScalarOrVec::Vector(v)) =>
-                            if v.len() == VL { Ok(v.clone())} else {Err(anyhow!("Vector {:?} in CONTAINS op is not of length {}.", v, VL))},
-                        _ => Err(anyhow!("Improper statement argument to CONTAINS op: {:?}", statement))
+        let contains_proof = match self {
+            Self::ContainsFromEntries(s_ref, _) => {
+                // Look up statement
+                let statement = s_ref.deref_cloned(statement_table)?;
+                match statement {
+                    Statement::ValueOf(_, ScalarOrVec::Vector(v)) => {
+                        if v.len() == VL {
+                            Ok(v.clone())
+                        } else {
+                            Err(anyhow!(
+                                "Vector {:?} in CONTAINS op is not of length {}.",
+                                v,
+                                VL
+                            ))
+                        }
                     }
-                },
-                    _ => Ok(vec![GoldilocksField::ZERO; VL])
-            }?;
+                    _ => Err(anyhow!(
+                        "Improper statement argument to CONTAINS op: {:?}",
+                        statement
+                    )),
+                }
+            }
+            _ => Ok(vec![GoldilocksField::ZERO; VL]),
+        }?;
 
         Ok([vec![op_code], padded_operands, entry, contains_proof].concat())
     }
@@ -355,5 +368,15 @@ impl OpList {
             ))
         });
         Self(sorted_opcmds)
+    }
+    pub fn pad<const NS: usize>(self) -> Result<Self> {
+        let op_list_len = self.0.len();
+        if op_list_len > NS {
+            return Err(anyhow!(
+                "The operation list must contain at most {} operations.",
+                NS
+            ));
+        }
+        Ok(Self([self.0, (op_list_len..NS).map( |i| OperationCmd( Operation::None, format!("_DUMMY_STATEMENT{}", i))).collect()].concat()))
     }
 }
