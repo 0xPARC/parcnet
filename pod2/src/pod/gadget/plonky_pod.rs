@@ -268,11 +268,11 @@ where
         let inner_circuit_input: [POD; M] = array::from_fn(|i| schnorr_pods_padded[i].1.clone());
         let recursive_proofs: [PlonkyProof; N] = array::from_fn(|i| {
             // convert the PODProof.proof into an actual PlonkyProof:
-            let proof = match plonky_pods_padded[i].1.proof.clone() {
+            
+            match plonky_pods_padded[i].1.proof.clone() {
                 PODProof::Plonky(p) => p,
                 _ => panic!("Expected PODProof's Plonky variant"),
-            };
-            proof
+            }
         });
 
         // plonky2 proof generation:

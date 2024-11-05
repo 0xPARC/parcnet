@@ -90,7 +90,7 @@ impl Chat {
         let message = message_input.read(cx).get_content().to_string();
         let logic = self.logic.clone();
         cx.spawn(|view, mut cx| async move {
-            let _ = logic.send_message(&message).await.unwrap();
+            logic.send_message(&message).await.unwrap();
             let _ = cx.update(|cx| {
                 message_input.update(cx, |input, _| input.reset());
                 view.update(cx, |this, cx| {

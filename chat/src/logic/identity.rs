@@ -34,7 +34,7 @@ impl Identities {
                     warn!("invalid schnorr sig, not storing identity");
                     return;
                 }
-                self.keys.insert(pubkey, schnorr_public_key.clone());
+                self.keys.insert(pubkey, *schnorr_public_key);
             }
             _ => {}
         }

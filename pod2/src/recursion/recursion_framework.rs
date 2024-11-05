@@ -510,7 +510,6 @@ mod tests {
         // just verify the signatures. At each level we divide the amount of proofs by N. At the
         // root level there is a single proof.
         let mut proofs_at_level_i: Vec<PlonkyProof> = (0..(N * N))
-            .into_iter()
             .map(|_| dummy_proof.clone())
             .collect();
 
@@ -526,7 +525,7 @@ mod tests {
             let mut next_level_proofs: Vec<PlonkyProof> = vec![];
 
             // loop over the nodes of each recursion tree level
-            for j in (0..proofs_at_level_i.len()).into_iter().step_by(N) {
+            for j in (0..proofs_at_level_i.len()).step_by(N) {
                 println!(
                     "\n------ recursion node: (level) i={}, (node in level) j={}",
                     i, j

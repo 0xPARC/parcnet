@@ -66,7 +66,7 @@ impl OriginTarget {
         pod_index: Target,
     ) -> Result<Self> {
         Ok(Self {
-            origin_id: matrix_ref(builder, &origin_id_map, pod_index, self.origin_id)?,
+            origin_id: matrix_ref(builder, origin_id_map, pod_index, self.origin_id)?,
             gadget_id: self.gadget_id,
         })
     }

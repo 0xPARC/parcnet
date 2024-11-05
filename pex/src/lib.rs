@@ -190,6 +190,12 @@ impl Operation {
     }
 }
 
+impl Default for PodBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PodBuilder {
     pub fn new() -> Self {
         Self {
@@ -207,7 +213,7 @@ impl PodBuilder {
     }
     pub fn register_input_pod(&mut self, pod: &POD) -> String {
         let name = PodBuilder::pod_id(pod);
-        if let Some(_) = self.input_pods.get(&name) {
+        if self.input_pods.get(&name).is_some() {
             name.clone()
         } else {
             self.input_pods.insert(name.clone(), pod.clone());
@@ -720,8 +726,7 @@ impl Expr {
                             .statements_map
                             .iter()
                             .find(|(_, s)| {
-                                s.value_of_anchored_key()
-                                    .and_then(|k| Some(k.0.is_self() && k.1 == *key))
+                                s.value_of_anchored_key().map(|k| k.0.is_self() && k.1 == *key)
                                     .filter(|&x| x)
                                     .unwrap_or(false)
                             })
@@ -757,7 +762,7 @@ impl Expr {
                 return Err(anyhow!("pod? not in createpod context"));
             }
         }
-        return Err(anyhow!("No pod found matching statements"));
+        Err(anyhow!("No pod found matching statements"))
     }
     async fn eval_operation(&self, op_type: OpType, operands: &[Expr], env: Env) -> Result<Value> {
         if operands.len() != 2 {
