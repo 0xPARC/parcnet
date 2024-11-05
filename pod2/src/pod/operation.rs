@@ -377,6 +377,14 @@ impl OpList {
                 NS
             ));
         }
-        Ok(Self([self.0, (op_list_len..NS).map( |i| OperationCmd( Operation::None, format!("_DUMMY_STATEMENT{}", i))).collect()].concat()))
+        Ok(Self(
+            [
+                self.0,
+                (op_list_len..NS)
+                    .map(|i| OperationCmd(Operation::None, format!("_DUMMY_STATEMENT{}", i)))
+                    .collect(),
+            ]
+            .concat(),
+        ))
     }
 }

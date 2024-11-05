@@ -12,7 +12,12 @@ use std::iter::zip;
 
 use crate::{
     pod::{
-        circuit::operation::OpListTarget, gadget::GadgetID, operation::{OpList, OperationCmd}, payload::StatementList, statement::{StatementOrRef, StatementRef}, GPGInput, POD
+        circuit::operation::OpListTarget,
+        gadget::GadgetID,
+        operation::{OpList, OperationCmd},
+        payload::StatementList,
+        statement::{StatementOrRef, StatementRef},
+        GPGInput, POD,
     },
     recursion::OpsExecutorTrait,
     D, F,
@@ -53,7 +58,7 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
     type Targets = (
         [[StatementTarget; NS]; NP],
         [Vec<Target>; NP],
-        OpListTarget<NS,VL>,
+        OpListTarget<NS, VL>,
         [StatementTarget; NS], // registered as public input
     );
 
@@ -64,8 +69,7 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
         let origin_id_map_target: [Vec<Target>; NP] =
             array::from_fn(|_| builder.add_virtual_targets(NS + 2));
 
-        let op_list_target =
-            OpListTarget::new_virtual(builder);
+        let op_list_target = OpListTarget::new_virtual(builder);
 
         // TODO: Check that origin ID map has appropriate properties.
 
@@ -149,7 +153,7 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
         // Set op list target.
         let op_list_target = &targets.2;
         op_list_target.set_witness(pw, &input.1, &input.0)?;
-        
+
         // Check output statement list target
         zip(&targets.3, output).try_for_each(|(s_target, (_, s))| s_target.set_witness(pw, s))?;
 
@@ -188,6 +192,8 @@ mod tests {
         // Input Schnorr PODs. For now, they must all have the same number
         // of statements.
         const NS: usize = 3;
+        const VL: usize = 3;
+
         let schnorr_pod1_name = "Test POD 1".to_string();
         let schnorr_pod1 = POD::execute_schnorr_gadget::<NS>(
             &[
@@ -217,7 +223,10 @@ mod tests {
         let schnorr_pod4_name = "Test POD 4".to_string();
         let schnorr_pod4 = POD::execute_schnorr_gadget::<NS>(
             &[
-                Entry::new_from_scalar("who", GoldilocksField(7)),
+                Entry::new_from_vec(
+                    "who",
+                    vec![GoldilocksField(5), GoldilocksField(6), GoldilocksField(7)],
+                ),
                 Entry::new_from_scalar("what", GoldilocksField(5)),
             ],
             &SchnorrSecretKey { sk: 20 },
@@ -229,6 +238,8 @@ mod tests {
             (schnorr_pod3_name.clone(), schnorr_pod3),
             (schnorr_pod4_name.clone(), schnorr_pod4),
         ];
+
+        const NP: usize = 4;
 
         // Ops
         let op_lists = [
@@ -274,13 +285,13 @@ mod tests {
             ]),
             OpList(vec![
                 OpCmd::new(Op::None, "cons"),
-                // OpCmd::new(
-                //     Op::ContainsFromEntries(
-                //         StatementRef::new(&schnorr_pod4_name, "VALUEOF:who"),
-                //         StatementRef::new(&schnorr_pod4_name, "VALUEOF:what"),
-                //     ),
-                //     "car",
-                // ),
+                OpCmd::new(
+                    Op::ContainsFromEntries(
+                        StatementRef::new(&schnorr_pod4_name, "VALUEOF:who"),
+                        StatementRef::new(&schnorr_pod4_name, "VALUEOF:what"),
+                    ),
+                    "car",
+                ),
                 OpCmd::new(Op::None, "cdr"),
             ]),
         ]
@@ -297,8 +308,8 @@ mod tests {
             let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &op_list.0)?;
 
             // circuit test
-            let targets = OpExecutorGadget::<4, 3, 0>::add_targets(&mut builder)?;
-            OpExecutorGadget::<4, 3, 0>::set_targets(
+            let targets = OpExecutorGadget::<NP, NS, VL>::add_targets(&mut builder)?;
+            OpExecutorGadget::<NP, NS, VL>::set_targets(
                 &mut pw,
                 &targets,
                 &(gpg_input.clone(), op_list),
