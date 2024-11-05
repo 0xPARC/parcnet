@@ -1,18 +1,23 @@
 use anyhow::Result;
 use plonky2::{
     field::goldilocks_field::GoldilocksField,
+    hash::poseidon::PoseidonHash,
     iop::{
         target::Target,
         witness::{PartialWitness, WitnessWrite},
     },
     plonk::circuit_builder::CircuitBuilder,
 };
-use std::{array, collections::HashMap};
 use std::iter::zip;
+use std::{array, collections::HashMap};
 
 use crate::{
     pod::{
-        circuit::util::statement_matrix_ref, gadget::GadgetID, operation::{OpList, Operation as Op}, statement::{StatementOrRef, StatementRef}, GPGInput, OpCmd, Statement
+        circuit::util::statement_matrix_ref,
+        gadget::GadgetID,
+        operation::{OpList, Operation as Op},
+        statement::{StatementOrRef, StatementRef},
+        GPGInput, OpCmd, Statement,
     },
     D, F, NUM_BITS, POD,
 };
@@ -21,7 +26,7 @@ use super::{
     entry::EntryTarget,
     origin::OriginTarget,
     statement::{StatementRefTarget, StatementTarget},
-    util::assert_less_if,
+    util::{and, assert_less_if, member},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -31,7 +36,7 @@ pub struct OperationTarget<const VL: usize> {
     pub operand2: StatementRefTarget,
     pub operand3: StatementRefTarget,
     pub entry: EntryTarget,
-    pub contains_proof: [Target; VL]
+    pub contains_proof: [Target; VL],
 }
 
 impl<const VL: usize> OperationTarget<VL> {
@@ -42,7 +47,7 @@ impl<const VL: usize> OperationTarget<VL> {
             operand2: StatementRefTarget::new_virtual(builder),
             operand3: StatementRefTarget::new_virtual(builder),
             entry: EntryTarget::new_virtual(builder),
-            contains_proof: builder.add_virtual_target_arr()
+            contains_proof: builder.add_virtual_target_arr(),
         }
     }
     // TODO: Perestroika!
@@ -51,7 +56,7 @@ impl<const VL: usize> OperationTarget<VL> {
         pw: &mut PartialWitness<GoldilocksField>,
         operation: &Op<StatementRef>,
         ref_index_map: &HashMap<StatementRef, (usize, usize)>,
-        statement_table: &<StatementRef as StatementOrRef>::StatementTable
+        statement_table: &<StatementRef as StatementOrRef>::StatementTable,
     ) -> Result<()> {
         let operation_as_fields = operation.to_fields::<VL>(ref_index_map, &statement_table)?;
         pw.set_target(self.op, operation_as_fields[0])?;
@@ -71,10 +76,7 @@ impl<const VL: usize> OperationTarget<VL> {
             &[self.entry.key, self.entry.value],
             &[operation_as_fields[7], operation_as_fields[8]],
         )?;
-        pw.set_target_arr(
-            &self.contains_proof,
-            &operation_as_fields[9..]
-        )?;
+        pw.set_target_arr(&self.contains_proof, &operation_as_fields[9..])?;
         Ok(())
     }
 
@@ -152,12 +154,11 @@ impl<const VL: usize> OperationTarget<VL> {
             ), // TODO: MaxOf
         ];
 
-        // Indicators of whether the conditions on the operands were satisfied.
-        let statements_are_value_ofs = {
-            let s1_check = statement1_target.has_code(builder, Statement::VALUE_OF);
-            let s2_check = statement2_target.has_code(builder, Statement::VALUE_OF);
-            builder.and(s1_check, s2_check)
-        };
+        // Type indicators
+        let statement_is_valueof = [statement1_target, statement2_target, statement3_target]
+            .iter()
+            .map(|s_target| s_target.has_code(builder, Statement::VALUE_OF))
+            .collect::<Vec<_>>();
 
         let statements_1_and_2_equal =
             builder.is_equal(statement1_target.value, statement2_target.value);
@@ -178,7 +179,7 @@ impl<const VL: usize> OperationTarget<VL> {
             let s2_check = statement2_target.has_code(builder, Statement::EQUAL);
             builder.and(s1_check, s2_check)
         };
-        // TODO
+        // TODO: Proper origin check
         let statements_allow_transitivity = {
             let origins_match = builder.is_equal(
                 statement1_target.origin2.origin_id,
@@ -188,20 +189,100 @@ impl<const VL: usize> OperationTarget<VL> {
             builder.and(origins_match, keys_match)
         };
 
+        // Do a membership check for `ContainsFromEntries`
+        // TODO: Type check args.
+        let scalar_is_member = member(builder, statement2_target.value, &self.contains_proof);
+        let proof_root = builder
+            .hash_n_to_hash_no_pad::<PoseidonHash>(self.contains_proof.to_vec())
+            .elements[0];
+        let root_is_valid = builder.is_equal(proof_root, statement1_target.value);
+
         let op_is_valid = [
-            builder._true(),                       // None - no checks needed.
-            builder._true(),                       // NewEntry - no checks needed.
-            builder._true(),                       // Copy - no checks needed.
-            statements_1_and_2_equal,              // EqualityFromEntries - equality check
+            builder._true(), // None - no checks needed.
+            builder._true(), // NewEntry - no checks needed.
+            builder._true(), // Copy - no checks needed.
+            and(
+                builder,
+                &[
+                    statement_is_valueof[0],
+                    statement_is_valueof[1],
+                    statements_1_and_2_equal,
+                ],
+            ), // EqualityFromEntries - equality check
             builder.not(statements_1_and_2_equal), // NonequalityFromEntries - non-equality check
-            statements_are_value_ofs,              // GtFromEntries - Type-check input statements
+            and(builder, &[statement_is_valueof[0], statement_is_valueof[1]]), // GtFromEntries - Type-check input statements. TODO: Replace assertion above.
             builder.and(statements_are_equalities, statements_allow_transitivity), // TransitiveEqualityFromStatements
             statement1_target.has_code(builder, Statement::GT), // GtToNonequality
-            builder._true(),                                    // TODO: ContainsFromEntries
-            builder._true(),                                    // TODO: RenameContainedBy
-            builder._true(),                                    // TODO: SumOf
-            builder._true(),                                    // TODO: ProductOf
-            builder._true(),                                    // TODO: MaxOf
+            builder.and(scalar_is_member, root_is_valid),       // TODO: ContainsFromEntries
+            {
+                let conditions = &[
+                    // Types
+                    statement1_target.has_code(builder, Statement::CONTAINS),
+                    statement2_target.has_code(builder, Statement::EQUAL),
+                    // Anchored key equality. TODO.
+                    builder.is_equal(statement1_target.key1, statement2_target.key1),
+                    builder.is_equal(
+                        statement1_target.origin1.origin_id,
+                        statement2_target.origin1.origin_id,
+                    ),
+                ];
+                and(builder, conditions)
+            }, // RenameContainedBy. TODO.
+            {
+                let conditions = &[
+                    // Types
+                    statement_is_valueof[0],
+                    statement_is_valueof[1],
+                    statement_is_valueof[2],
+                    // s1 = s2 + s3
+                    {
+                        let rhs = builder.add(statement2_target.value, statement3_target.value);
+                        builder.is_equal(statement1_target.value, rhs)
+                    },
+                ];
+                and(builder, conditions)
+            }, // SumOf
+            {
+                let conditions = &[
+                    // Types
+                    statement_is_valueof[0],
+                    statement_is_valueof[1],
+                    statement_is_valueof[2],
+                    // s1 = s2 * s3
+                    {
+                        let rhs = builder.mul(statement2_target.value, statement3_target.value);
+                        builder.is_equal(statement1_target.value, rhs)
+                    },
+                ];
+                and(builder, conditions)
+            }, // ProductOf
+            {
+                let conditions = &[
+                    // Types
+                    statement_is_valueof[0],
+                    statement_is_valueof[1],
+                    statement_is_valueof[2],
+                    // s1 = max(s2, s3) <=> s1 >= s2, s3 and (s1 = s2 or s1 = s3)
+                    {
+                        // TODO: Replace assertions.
+                        let maxof_opcode_target = builder.constant(Op::<Statement>::MAX_OF);
+                        let one_target = builder.one();
+                        let op_is_maxof = builder.is_equal(self.op, maxof_opcode_target);
+                        let s1 = statement1_target.value;
+                        let s1_plus_one = builder.add(statement1_target.value, one_target);
+                        let s2 = statement2_target.value;
+                        let s3 = statement3_target.value;
+                        assert_less_if::<NUM_BITS>(builder, op_is_maxof, s2, s1_plus_one);
+                        assert_less_if::<NUM_BITS>(builder, op_is_maxof, s3, s1_plus_one);
+
+                        let s1_eq_s2 = builder.is_equal(s1, s2);
+                        let s1_eq_s3 = builder.is_equal(s1, s3);
+
+                        builder.or(s1_eq_s2, s1_eq_s3)
+                    },
+                ];
+                and(builder, conditions)
+            }, // MaxOf
         ]
         .iter()
         .enumerate()
@@ -237,14 +318,16 @@ pub struct OpListTarget<const NS: usize, const VL: usize>(pub [OperationTarget<V
 
 impl<const NS: usize, const VL: usize> OpListTarget<NS, VL> {
     pub fn new_virtual(builder: &mut CircuitBuilder<F, D>) -> Self {
-        OpListTarget(array::from_fn(|_| OperationTarget::<VL>::new_virtual(builder)))
+        OpListTarget(array::from_fn(|_| {
+            OperationTarget::<VL>::new_virtual(builder)
+        }))
     }
 
     pub fn set_witness(
         &self,
         pw: &mut PartialWitness<GoldilocksField>,
         op_list: &OpList,
-        gpg_input: &GPGInput
+        gpg_input: &GPGInput,
     ) -> Result<()> {
         // TODO: Abstract this away.
         // Determine output POD statements for the purposes of later reference
@@ -259,13 +342,15 @@ impl<const NS: usize, const VL: usize> OpListTarget<NS, VL> {
         // Set operation targets
         let ref_index_map = StatementRef::index_map(&input_and_output_pod_list);
         let statement_table: <StatementRef as StatementOrRef>::StatementTable =
-            input_and_output_pod_list.iter().map(
-                |(pod_name, pod)|
-                (pod_name.clone(), pod.payload.statements_map.clone())
-                ).collect();
+            input_and_output_pod_list
+                .iter()
+                .map(|(pod_name, pod)| (pod_name.clone(), pod.payload.statements_map.clone()))
+                .collect();
 
         zip(&self.0, op_list.sort(&input_and_output_pod_list).0).try_for_each(
-            |(op_target, OpCmd(op, _))| op_target.set_witness(pw, &op, &ref_index_map, &statement_table),
+            |(op_target, OpCmd(op, _))| {
+                op_target.set_witness(pw, &op, &ref_index_map, &statement_table)
+            },
         )
     }
 }
