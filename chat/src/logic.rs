@@ -6,6 +6,7 @@ mod pods;
 
 use auto_update::AutoUpdater;
 pub use auto_update::{get_app_path, get_current_version, is_dev};
+use constants::NS;
 use futures::StreamExt;
 use identity::Identities;
 use iroh::client::Doc;
@@ -281,7 +282,7 @@ fn store_message_pod(
     input: &str,
 ) -> anyhow::Result<()> {
     let field_elem = get_string_field_elem(input);
-    let pod = POD::execute_schnorr_gadget(
+    let pod = POD::execute_schnorr_gadget::<NS>(
         &vec![Entry::new_from_scalar("message", field_elem)],
         &schnorr_secret_key,
     )
