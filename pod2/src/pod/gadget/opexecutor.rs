@@ -12,11 +12,7 @@ use std::iter::zip;
 
 use crate::{
     pod::{
-        gadget::GadgetID,
-        operation::{OpList, OperationCmd},
-        payload::StatementList,
-        statement::{StatementOrRef, StatementRef},
-        GPGInput, POD,
+        circuit::operation::OpListTarget, gadget::GadgetID, operation::{OpList, OperationCmd}, payload::StatementList, statement::{StatementOrRef, StatementRef}, GPGInput, POD
     },
     recursion::OpsExecutorTrait,
     D, F,
@@ -57,7 +53,7 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
     type Targets = (
         [[StatementTarget; NS]; NP],
         [Vec<Target>; NP],
-        [OperationTarget<VL>; NS],
+        OpListTarget<NS,VL>,
         [StatementTarget; NS], // registered as public input
     );
 
@@ -68,8 +64,8 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
         let origin_id_map_target: [Vec<Target>; NP] =
             array::from_fn(|_| builder.add_virtual_targets(NS + 2));
 
-        let op_list_target: [OperationTarget<VL>; NS] =
-            array::from_fn(|_| OperationTarget::new_virtual(builder));
+        let op_list_target =
+            OpListTarget::new_virtual(builder);
 
         // TODO: Check that origin ID map has appropriate properties.
 
@@ -109,7 +105,7 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
             array::try_from_fn(|i| {
                 // TODO: Make sure current op does not reference itself or an
                 // as-yet unevaluated op.
-                op_list_target[i].eval_with_gadget_id(
+                op_list_target.0[i].eval_with_gadget_id(
                     builder,
                     GadgetID::ORACLE,
                     &input_and_output_statement_list_vec_target,
@@ -150,28 +146,10 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
             zip(target_row, row).try_for_each(|(target, value)| pw.set_target(*target, value))
         })?;
 
-        // TODO: Abstract this away.
-        // Determine output POD statements for the purposes of later reference
-        let output_pod = POD::execute_oracle_gadget(&input.0, &input.1 .0)?;
-        // println!("{:?}", output_pod.payload.statements_list);
-        let input_and_output_pod_list = [
-            input.0.pods_list.clone(),
-            vec![("_SELF".to_string(), output_pod)],
-        ]
-        .concat();
-
-        // Set operation targets
-        let ref_index_map = StatementRef::index_map(&input_and_output_pod_list);
-        let statement_table: <StatementRef as StatementOrRef>::StatementTable =
-            input_and_output_pod_list.iter().map(
-                |(pod_name, pod)|
-                (pod_name.clone(), pod.payload.statements_map.clone())
-                ).collect();
-        zip(&targets.2, input.1.sort(&input_and_output_pod_list).0).try_for_each(
-            |(op_target, OperationCmd(op, _))| op_target.set_witness(pw, &op, &ref_index_map, &statement_table
-            ),
-        )?;
-
+        // Set op list target.
+        let op_list_target = &targets.2;
+        op_list_target.set_witness(pw, &input.1, &input.0)?;
+        
         // Check output statement list target
         zip(&targets.3, output).try_for_each(|(s_target, (_, s))| s_target.set_witness(pw, s))?;
 
