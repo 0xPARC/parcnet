@@ -25,12 +25,16 @@ impl<const NS: usize> InnerCircuitTrait for SchnorrPODGadget<NS> {
     ) -> Result<Self::Targets> {
         let schnorr_pod_target = SchnorrPODTarget::new_virtual(builder, NS);
 
+        // Check thaht payload is valid.
+        schnorr_pod_target.check_payload(builder);
+
+        // Compute hash target.
         let hash_target = schnorr_pod_target.compute_hash_target(builder);
 
-        // add POD in-circuit verification logic
+        // Add POD in-circuit verification logic.
         let (_, verified) = schnorr_pod_target.compute_targets_and_verify(builder, &hash_target)?;
 
-        // if selector_booltarg=1, we check the verified.target
+        // If selector_booltarg=1, check verified.target.
         assert_one_if_enabled(builder, verified.target, &selector_booltarg);
         Ok(schnorr_pod_target)
     }
