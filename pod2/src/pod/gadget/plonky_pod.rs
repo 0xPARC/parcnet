@@ -176,12 +176,8 @@ where
             ));
         }
 
-        if op_list.0.len() != NS {
-            return Err(anyhow!(
-                "The operation list must contain exactly {} operations.",
-                NS
-            ));
-        }
+        // Pad op list
+        let op_list = op_list.pad::<NS>()?;
 
         // Sort POD lists.
         schnorr_pods.sort_by(|a, b| a.0.cmp(&b.0));
