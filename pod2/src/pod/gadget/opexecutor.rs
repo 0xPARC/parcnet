@@ -195,7 +195,7 @@ mod tests {
         const VL: usize = 3;
 
         let schnorr_pod1_name = "Test POD 1".to_string();
-        let schnorr_pod1 = POD::execute_schnorr_gadget::<NS>(
+        let schnorr_pod1 = POD::execute_schnorr_gadget::<NS, VL>(
             &[
                 Entry::new_from_scalar("s1", GoldilocksField(55)),
                 Entry::new_from_scalar("s2", GoldilocksField(56)),
@@ -203,7 +203,7 @@ mod tests {
             &SchnorrSecretKey { sk: 27 },
         )?;
         let schnorr_pod2_name = "Test POD 2".to_string();
-        let schnorr_pod2 = POD::execute_schnorr_gadget::<NS>(
+        let schnorr_pod2 = POD::execute_schnorr_gadget::<NS, VL>(
             &[
                 Entry::new_from_scalar("s3", GoldilocksField(57)),
                 Entry::new_from_scalar("s4", GoldilocksField(55)),
@@ -212,7 +212,7 @@ mod tests {
         )?;
 
         let schnorr_pod3_name = "Test POD 3".to_string();
-        let schnorr_pod3 = POD::execute_schnorr_gadget::<NS>(
+        let schnorr_pod3 = POD::execute_schnorr_gadget::<NS, VL>(
             &[
                 Entry::new_from_scalar("s0", GoldilocksField(57)),
                 Entry::new_from_scalar("s-1", GoldilocksField(55)),
@@ -221,7 +221,7 @@ mod tests {
         )?;
 
         let schnorr_pod4_name = "Test POD 4".to_string();
-        let schnorr_pod4 = POD::execute_schnorr_gadget::<NS>(
+        let schnorr_pod4 = POD::execute_schnorr_gadget::<NS, VL>(
             &[
                 Entry::new_from_vec(
                     "who",
