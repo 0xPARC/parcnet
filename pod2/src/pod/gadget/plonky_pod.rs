@@ -36,12 +36,12 @@ where
 /// Example usage:
 ///
 /// Enumerate PODs you want to prove about:
-/// ```
+/// ```no_run,ignore
 /// let input_pods = [("some POD", schnorr_pod1), ("some other POD", schnorr_pod2)];
 /// ```
 ///
 /// Enumerate operations:
-/// ```
+/// ```no_run,ignore
 /// let op_list = OpList(
 ///         OpCmd::new(Op::None, "some out statement name"),
 ///         OpCmd::new(
@@ -52,7 +52,7 @@ where
 /// ```
 ///
 /// Call the procedure
-/// ```
+/// ```no_run,ignore
 /// let plonky_pod = PlonkyButNotPlonkyGadget::<2,2,3>::execute(&input_pods, &op_list)?;
 /// ```
 // TODO: `PlonkyButNotPlonkyGadget` is a placeholder name, set better struct name.
