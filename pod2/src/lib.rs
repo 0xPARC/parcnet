@@ -1,4 +1,6 @@
 pub mod biguint;
+pub mod eddsa;
+pub mod jubjubcurve;
 pub mod jubjubfield;
 pub mod mod65537;
 pub mod plonky2_u32;

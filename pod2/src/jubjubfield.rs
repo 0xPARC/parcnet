@@ -35,7 +35,7 @@ impl JubjubP for BigUint {
 
 #[derive(Clone, Debug)]
 pub struct JubjubFieldTarget (
-    BigUintTarget,
+    pub BigUintTarget,
 );
 
 pub trait CircuitBuilderJubjubField {
