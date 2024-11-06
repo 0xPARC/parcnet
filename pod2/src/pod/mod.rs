@@ -781,6 +781,120 @@ mod tests {
     }
 
     #[test]
+    fn plonky_pod_from_schnorr() -> Result<()> {
+        const M: usize = 2;
+        const N: usize = 1;
+        const NS: usize = 3;
+        const VL: usize = 2;
+
+        println!("oracle_pod_from_schnorr_test");
+        // Start with some values.
+        let scalar1 = GoldilocksField(36);
+        let scalar2 = GoldilocksField(52);
+        let scalar3 = GoldilocksField(88);
+        let vector_value = vec![scalar1, scalar2];
+
+        // make entries
+        let entry1 = Entry::new_from_scalar("apple", scalar1);
+        let entry2 = Entry::new_from_scalar("banana", scalar2);
+        let entry3 = Entry::new_from_vec("vector entry", vector_value.clone());
+        let entry4 = Entry::new_from_scalar("scalar entry", scalar2);
+        let entry5 = Entry::new_from_scalar("foo", GoldilocksField(100));
+        let entry6 = Entry::new_from_scalar("baz", GoldilocksField(120));
+        let entry7 = Entry::new_from_scalar("bar", scalar2);
+        let entry9 = Entry::new_from_scalar("claimed sum", scalar3);
+
+        // two schnorr pods
+        let schnorr_pod1 = POD::execute_schnorr_gadget::<NS, VL>(
+            &vec![entry1.clone(), entry2.clone()],
+            &SchnorrSecretKey { sk: 25 },
+        )?;
+
+        let schnorr_pod2 = POD::execute_schnorr_gadget::<NS, VL>(
+            &vec![entry3.clone(), entry4.clone()],
+            &SchnorrSecretKey { sk: 42 },
+        )?;
+        // make a PlonkyPOD using from_pods called on the two schnorr PODs
+
+        // first make the GPG input
+
+        // make a map of named POD inputs
+        let mut named_input_pods = HashMap::new();
+        named_input_pods.insert("p1".to_string(), schnorr_pod1.clone());
+        named_input_pods.insert("schnorrPOD2".to_string(), schnorr_pod2.clone());
+
+        // make a map of (pod name, old origin name) to new origin name
+        let origin_renaming_map = HashMap::new();
+        // all the inputs are schnorr PODs whose only referenced origin is _SELF
+        // _SELF is taken care of automatically so origin_renaming_map can be empty
+
+        let gpg_input = GPGInput::new(named_input_pods, origin_renaming_map);
+
+        // make a list of the operations we want to call
+        let ops = vec![
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("p1", "VALUEOF:apple")),
+                "p1-apple",
+            ),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("p1", "VALUEOF:banana")),
+                "p1-banana",
+            ),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("p1", "VALUEOF:_signer")),
+                "p1-signer",
+            ),
+        ];
+
+        let plonky_pod = POD::execute_plonky_gadget::<M, N, NS, VL>(&gpg_input, &ops)?;
+        assert!(plonky_pod.verify::<M, N, NS, VL>()? == true);
+
+        // make another oracle POD which takes that oracle POD and a schnorr POD
+
+        // make the GPG input
+
+        // make a map of named POD inputs
+        let mut named_input_pods2 = HashMap::new();
+        named_input_pods2.insert("parent".to_string(), plonky_pod.clone());
+
+        // make a map of (pod name, old origin name) to new origin name
+        let mut origin_renaming_map2 = HashMap::new();
+        // let's keep the name of the first origin and shorten the name of the second origin
+        origin_renaming_map2.insert(("parent".to_string(), "p1".to_string()), "p1".to_string());
+        // origin_renaming_map2.insert(
+        //     ("parent".to_string(), "schnorrPOD2".to_string()),
+        //     "p2".to_string(),
+        // );
+
+        let gpg_input = GPGInput::new(named_input_pods2, origin_renaming_map2);
+
+        // make a list of the operations we want to call
+
+        let ops = vec![
+            OpCmd::new(Op::NewEntry(entry4.clone()), "new entry for equality"),
+            OpCmd::new(
+                Op::EqualityFromEntries(
+                    StatementRef::new("parent", "VALUEOF:p1-banana"),
+                    StatementRef::new("_SELF", "VALUEOF:new entry for equality"),
+                ),
+                "equality of banana and new entry",
+            ),
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new("parent", "VALUEOF:p1-signer")),
+                "p1-signer",
+            ),
+        ];
+
+        let plonky_pod2 = POD::execute_plonky_gadget::<M, N, NS, VL>(&gpg_input, &ops)?;
+        for statement in plonky_pod2.payload.statements_list.iter() {
+            println!("{:?}", statement);
+        }
+        assert!(plonky_pod2.verify::<M, N, NS, VL>()? == true);
+
+        Ok(())
+    }
+
+    #[test]
     fn goodboy_test() -> Result<()> {
         const NS: usize = 3;
         const VL: usize = 0;
