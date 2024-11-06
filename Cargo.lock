@@ -5325,7 +5325,9 @@ name = "pod2"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "itertools 0.13.0",
  "log",
+ "num",
  "plonky2",
  "rand 0.8.5",
  "serde",

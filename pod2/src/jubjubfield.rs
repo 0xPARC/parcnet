@@ -23,6 +23,7 @@ pub trait JubjubP {
     fn jubjub_p() -> Self;
 }
 
+// 21888242871839275222246405745257275088548364400416034343698204186575808495617
 impl JubjubP for BigUint {
     fn jubjub_p() -> BigUint {
         BigUint::new( {vec![
@@ -215,8 +216,8 @@ impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
         a: &JubjubFieldTarget, 
         b: &JubjubFieldTarget
     ) -> JubjubFieldTarget {
-        let a_inv = self.recip_jubjubfield(a);
-        self.mul_jubjubfield(b, &a_inv)
+        let b_inv = self.recip_jubjubfield(b);
+        self.mul_jubjubfield(a, &b_inv)
     }
 }
 
@@ -224,6 +225,10 @@ pub trait WitnessJubjubField {
     fn get_jubjubfield_target(
         &self, 
         target: JubjubFieldTarget
+    ) -> BigUint;
+    fn get_jubjubfield_target_borrow(
+        &self,
+        target: &JubjubFieldTarget
     ) -> BigUint;
     fn set_jubjubfield_target(
         &mut self, 
@@ -238,6 +243,13 @@ impl<T: Witness<GoldilocksField>> WitnessJubjubField for T {
         target: JubjubFieldTarget
     ) -> BigUint {
         self.get_biguint_target(target.0)
+    }
+
+    fn get_jubjubfield_target_borrow(
+        &self,
+        target: &JubjubFieldTarget
+    ) -> BigUint {
+        self.get_biguint_target(target.0.clone())
     }
 
     fn set_jubjubfield_target(
@@ -329,5 +341,164 @@ impl SimpleGenerator<GoldilocksField, 2> for JubjubFieldReciprocalGenerator {
             a,
             a_inv,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+    use num::BigUint;
+    use num::FromPrimitive;
+    use plonky2::iop::witness::PartialWitness;
+    use plonky2::plonk::circuit_builder::CircuitBuilder;
+    use plonky2::plonk::circuit_data::CircuitConfig;
+    use plonky2::{field::goldilocks_field::GoldilocksField, plonk::config::{GenericConfig, PoseidonGoldilocksConfig}};
+
+    use crate::jubjubfield::CircuitBuilderJubjubField;
+    use crate::jubjubfield::WitnessJubjubField;
+
+
+    #[test]
+    fn test_jubjubfield_arith() -> Result<()> {
+        // compute and verify (1 + 1/3 + 4/3) * 3 = 8
+        // 1 is one
+        // x = 3, y = 4
+
+        type C = PoseidonGoldilocksConfig;
+
+        let config = CircuitConfig::standard_recursion_config();
+        let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
+        let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
+
+        let x = builder.add_virtual_jubjubfield_target();
+        let y = builder.add_virtual_jubjubfield_target();
+        let expected_result = builder.add_virtual_jubjubfield_target();
+
+        let one = builder.one_jubjubfield();
+        let one_over_x = builder.recip_jubjubfield(&x);
+        let y_over_x = builder.div_jubjubfield(&y, &x);
+        let sum_a = builder.add_jubjubfield(&one, &one_over_x);
+        let sum = builder.add_jubjubfield(&sum_a, &y_over_x);
+        let result = builder.mul_jubjubfield(&sum, &x);
+
+        builder.connect_jubjubfield(&result, &expected_result);
+
+        let x_value = BigUint::from_u32(3).unwrap();
+        let y_value = BigUint::from_u32(4).unwrap();
+        let expected_result_value = BigUint::from_u32(8).unwrap();
+
+        pw.set_jubjubfield_target(&x, &x_value);
+        pw.set_jubjubfield_target(&y, &y_value);
+        pw.set_jubjubfield_target(&expected_result, &expected_result_value);
+        
+        let data = builder.build::<C>();
+        let proof = data.prove(pw).unwrap();
+        data.verify(proof);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_jubjubfield_add() -> Result<()> {
+        // compute and verify 3 + 4 = 8
+        // this one is supposed to fail
+
+        type C = PoseidonGoldilocksConfig;
+
+        let config = CircuitConfig::standard_recursion_config();
+        let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
+        let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
+
+        let x = builder.add_virtual_jubjubfield_target();
+        let y = builder.add_virtual_jubjubfield_target();
+        let expected_result = builder.add_virtual_jubjubfield_target();
+
+        let result = builder.add_jubjubfield(&x, &y);
+
+        builder.connect_jubjubfield(&result, &expected_result);
+
+        let x_value = BigUint::from_u32(3).unwrap();
+        let y_value = BigUint::from_u32(4).unwrap();
+        let expected_result_value = BigUint::from_u32(8).unwrap();
+
+        pw.set_jubjubfield_target(&x, &x_value);
+        pw.set_jubjubfield_target(&y, &y_value);
+        pw.set_jubjubfield_target(&expected_result, &expected_result_value);
+        
+        let data = builder.build::<C>();
+        let proof = data.prove(pw);
+        assert!(proof.is_err());
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_jubjubfield_divmul() -> Result<()> {
+        type C = PoseidonGoldilocksConfig;
+
+        let config = CircuitConfig::standard_recursion_config();
+        let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
+        let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
+
+        let x = builder.add_virtual_jubjubfield_target();
+        let y = builder.add_virtual_jubjubfield_target();
+        let expected_result = builder.add_virtual_jubjubfield_target();
+
+        let y_over_x = builder.div_jubjubfield(&y, &x);
+        let result = builder.mul_jubjubfield(&y_over_x, &x);
+
+        builder.connect_jubjubfield(&result, &expected_result);
+
+        let x_value = BigUint::from_u32(1).unwrap();
+        let y_value = BigUint::from_u32(5).unwrap();
+        let expected_result_value = BigUint::from_u32(5).unwrap();
+
+        pw.set_jubjubfield_target(&x, &x_value);
+        pw.set_jubjubfield_target(&y, &y_value);
+        pw.set_jubjubfield_target(&expected_result, &expected_result_value);
+        
+        let data = builder.build::<C>();
+        let try_proof = data.prove(pw);
+        let proof = try_proof.unwrap();
+        data.verify(proof);
+
+        Ok(())
+    }
+
+    
+    #[test]
+    fn test_jubjubfield_muladd() -> Result<()> {
+        // compute and verify (1 + 1/3 + 4/3) * 3 = 8
+        // 1 is one
+        // x = 3, y = 4
+
+        type C = PoseidonGoldilocksConfig;
+
+        let config = CircuitConfig::standard_recursion_config();
+        let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
+        let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
+
+        let x = builder.add_virtual_jubjubfield_target();
+        let y = builder.add_virtual_jubjubfield_target();
+        let expected_result = builder.add_virtual_jubjubfield_target();
+
+        let sum = builder.mul_jubjubfield(&x, &y);
+        let result = builder.add_jubjubfield(&sum, &x);
+
+        builder.connect_jubjubfield(&result, &expected_result);
+
+        let x_value = BigUint::from_u32(3).unwrap();
+        let y_value = BigUint::from_u32(4).unwrap();
+        let expected_result_value = BigUint::from_u32(15).unwrap();
+
+        pw.set_jubjubfield_target(&x, &x_value);
+        pw.set_jubjubfield_target(&y, &y_value);
+        pw.set_jubjubfield_target(&expected_result, &expected_result_value);
+        
+        let data = builder.build::<C>();
+        let proof = data.prove(pw).unwrap();
+        data.verify(proof);
+
+        Ok(())
     }
 }
