@@ -231,9 +231,9 @@ where
         // the padding ones
         let selectors: [F; M + N] = array::from_fn(|i| {
             if i < M {
-                GoldilocksField(if i < schnorr_count { 1 } else { 0 })
+                GoldilocksField(if i < schnorr_count - 1 { 1 } else { 0 })
             } else {
-                GoldilocksField(if i < M + plonky_count { 1 } else { 0 })
+                GoldilocksField(if i < M + plonky_count - 1 { 1 } else { 0 })
             }
         });
 
@@ -268,7 +268,6 @@ where
         let inner_circuit_input: [POD; M] = array::from_fn(|i| schnorr_pods_padded[i].1.clone());
         let recursive_proofs: [PlonkyProof; N] = array::from_fn(|i| {
             // convert the PODProof.proof into an actual PlonkyProof:
-            
             match plonky_pods_padded[i].1.proof.clone() {
                 PODProof::Plonky(p) => p,
                 _ => panic!("Expected PODProof's Plonky variant"),

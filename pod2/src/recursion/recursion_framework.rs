@@ -509,9 +509,8 @@ mod tests {
         // we start with k dummy proofs, since at the leafs level we don't have proofs yet and we
         // just verify the signatures. At each level we divide the amount of proofs by N. At the
         // root level there is a single proof.
-        let mut proofs_at_level_i: Vec<PlonkyProof> = (0..(N * N))
-            .map(|_| dummy_proof.clone())
-            .collect();
+        let mut proofs_at_level_i: Vec<PlonkyProof> =
+            (0..(N * N)).map(|_| dummy_proof.clone()).collect();
 
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::new(config);
