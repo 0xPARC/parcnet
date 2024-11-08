@@ -1,0 +1,11 @@
+Scalar mult for jubjub curve.
+Test jubjub curve (should be all good).
+
+Poseidon:
+-- nonnative field arith
+-- port Poseidon stuff
+-- tests
+
+Eddsa
+-- write code (easy)
+-- copy tests (should pass)
