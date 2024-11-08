@@ -283,7 +283,7 @@ mod tests {
     }
 
     #[test]
-    fn test_scalar_mul() {
+    fn test_scalar_mul_1() { // 340 s
         type C = PoseidonGoldilocksConfig;
 
         let config = CircuitConfig::standard_recursion_config();
@@ -318,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn test_scalar_mul_2() {
+    fn test_scalar_mul_2() { // 3282 s
         type C = PoseidonGoldilocksConfig;
 
         let config = CircuitConfig::standard_recursion_config();
