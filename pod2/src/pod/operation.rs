@@ -110,7 +110,7 @@ impl Operation<Statement> {
                     anchkey3.clone(),
                 ))
             }
-            _ => Err(anyhow!(format!("Invalid claim. {:?}", self))),
+            _ => Err(anyhow!("Invalid claim: {:?}", self)),
         }
     }
 }
