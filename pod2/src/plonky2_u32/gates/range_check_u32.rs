@@ -200,9 +200,9 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F, D>
     }
 
     fn run_once(
-        &self, 
-        witness: &PartitionWitness<F>, 
-        out_buffer: &mut GeneratedValues<F>
+        &self,
+        witness: &PartitionWitness<F>,
+        out_buffer: &mut GeneratedValues<F>,
     ) -> Result<(), Error> {
         let num_input_limbs = self.gate.num_input_limbs;
         for i in 0..num_input_limbs {
@@ -224,7 +224,7 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F, D>
             for (b, b_value) in limbs.zip(limbs_value) {
                 out_buffer.set_target(b, b_value);
             }
-        };
+        }
         Ok(())
     }
 

@@ -24,38 +24,34 @@ pub struct JubjubConstantsTarget {
 pub trait CircuitBuilderJubjubCurve {
     fn jubjub_constants(&mut self) -> JubjubConstantsTarget;
 
-    fn connect_jubjub_curve(
-        &mut self, 
-        a: &JubjubCurveTarget, 
-        b: &JubjubCurveTarget
-    );
+    fn connect_jubjub_curve(&mut self, a: &JubjubCurveTarget, b: &JubjubCurveTarget);
 
     fn zero_jubjub_curve(&mut self) -> JubjubCurveTarget;
 
     fn B8_jubjub_curve(&mut self) -> JubjubCurveTarget;
 
     fn add_jubjub_curve(
-        &mut self, 
-        p: &JubjubCurveTarget, 
-        q: &JubjubCurveTarget
+        &mut self,
+        p: &JubjubCurveTarget,
+        q: &JubjubCurveTarget,
     ) -> JubjubCurveTarget;
 
     fn multiplex_biguint(
-        &mut self, 
-        a0: &BigUintTarget, 
-        a1: &BigUintTarget, 
-        sel: BoolTarget
+        &mut self,
+        a0: &BigUintTarget,
+        a1: &BigUintTarget,
+        sel: BoolTarget,
     ) -> BigUintTarget;
 
     fn multiplex_jubjub_curve(
-        &mut self, 
-        a0: &JubjubCurveTarget, 
-        a1: &JubjubCurveTarget, 
-        sel: BoolTarget
+        &mut self,
+        a0: &JubjubCurveTarget,
+        a1: &JubjubCurveTarget,
+        sel: BoolTarget,
     ) -> JubjubCurveTarget;
 
     fn verify_jubjub_point(&mut self, p: &JubjubCurveTarget);
- 
+
     fn mul_scalar(&mut self, p: &JubjubCurveTarget, s: &BigUintTarget) -> JubjubCurveTarget;
 }
 
@@ -65,14 +61,10 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
         let d_val = BigUint::from_str("168696").unwrap();
         let a = JubjubFieldTarget(self.constant_biguint(&a_val));
         let d = JubjubFieldTarget(self.constant_biguint(&d_val));
-        JubjubConstantsTarget{a, d}
+        JubjubConstantsTarget { a, d }
     }
 
-    fn connect_jubjub_curve(
-        &mut self, 
-        a: &JubjubCurveTarget, 
-        b: &JubjubCurveTarget
-    ) {
+    fn connect_jubjub_curve(&mut self, a: &JubjubCurveTarget, b: &JubjubCurveTarget) {
         self.connect_jubjubfield(&a.x, &b.x);
         self.connect_jubjubfield(&a.y, &b.y);
     }
@@ -80,7 +72,7 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
     fn zero_jubjub_curve(&mut self) -> JubjubCurveTarget {
         let x = self.zero_jubjubfield();
         let y = self.one_jubjubfield();
-        JubjubCurveTarget{x, y}
+        JubjubCurveTarget { x, y }
     }
 
     fn B8_jubjub_curve(&mut self) -> JubjubCurveTarget {
@@ -94,12 +86,12 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
         .unwrap();
         let x = JubjubFieldTarget(self.constant_biguint(&x_val));
         let y = JubjubFieldTarget(self.constant_biguint(&y_val));
-        JubjubCurveTarget{x, y}
+        JubjubCurveTarget { x, y }
     }
 
     fn verify_jubjub_point(&mut self, p: &JubjubCurveTarget) {
         // a x^2 + y^2 = 1 + d x^2 y^2
-        let JubjubConstantsTarget{a, d} = self.jubjub_constants();
+        let JubjubConstantsTarget { a, d } = self.jubjub_constants();
 
         let x2 = self.mul_jubjubfield(&p.x, &p.x);
         let first_term = self.mul_jubjubfield(&a, &x2);
@@ -109,16 +101,20 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
         let one = self.one_jubjubfield();
         let x2y2 = self.mul_jubjubfield(&x2, &y2);
         let last_term = self.mul_jubjubfield(&d, &x2y2);
-        let rhs = self.add_jubjubfield(&one, &last_term);        
+        let rhs = self.add_jubjubfield(&one, &last_term);
 
         self.connect_jubjubfield(&lhs, &rhs);
     }
 
-    fn add_jubjub_curve(&mut self, p: &JubjubCurveTarget, q: &JubjubCurveTarget) -> JubjubCurveTarget {
+    fn add_jubjub_curve(
+        &mut self,
+        p: &JubjubCurveTarget,
+        q: &JubjubCurveTarget,
+    ) -> JubjubCurveTarget {
         // lamb = d * p.x * q.x * p.y * q.y
         // res.x = (p.x * q.y + p.y * q.x) / (1 + lamb)
         // res.y = (p.y * q.y - a * p.x * q.x) / (1 - lamb)
-        let JubjubConstantsTarget{a, d} = self.jubjub_constants();
+        let JubjubConstantsTarget { a, d } = self.jubjub_constants();
 
         let pxqy = self.mul_jubjubfield(&p.x, &q.y);
         let pyqx = self.mul_jubjubfield(&p.y, &q.x);
@@ -137,14 +133,14 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
         let y_den = self.sub_jubjubfield(&one, &lambda);
         let res_y = self.div_jubjubfield(&y_num, &y_den);
 
-        JubjubCurveTarget{x: res_x, y: res_y}
+        JubjubCurveTarget { x: res_x, y: res_y }
     }
 
     fn multiplex_biguint(
-        &mut self, 
-        a0: &BigUintTarget, 
-        a1: &BigUintTarget, 
-        sel: BoolTarget
+        &mut self,
+        a0: &BigUintTarget,
+        a1: &BigUintTarget,
+        sel: BoolTarget,
     ) -> BigUintTarget {
         let sel_opp = self.not(sel);
         let term0 = self.mul_biguint_by_bool(a0, sel_opp);
@@ -153,19 +149,26 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
     }
 
     fn multiplex_jubjub_curve(
-        &mut self, 
-        a0: &JubjubCurveTarget, 
-        a1: &JubjubCurveTarget, 
-        sel: BoolTarget
+        &mut self,
+        a0: &JubjubCurveTarget,
+        a1: &JubjubCurveTarget,
+        sel: BoolTarget,
     ) -> JubjubCurveTarget {
         let x = self.multiplex_biguint(&a0.x.0, &a1.x.0, sel);
-        let y = self.multiplex_biguint( &a0.y.0, &a1.y.0, sel);
-        JubjubCurveTarget {x: JubjubFieldTarget(x), y: JubjubFieldTarget(y)}
+        let y = self.multiplex_biguint(&a0.y.0, &a1.y.0, sel);
+        JubjubCurveTarget {
+            x: JubjubFieldTarget(x),
+            y: JubjubFieldTarget(y),
+        }
     }
 
     fn mul_scalar(&mut self, p: &JubjubCurveTarget, s: &BigUintTarget) -> JubjubCurveTarget {
         // split s into bits
-        let s_bits: Vec<BoolTarget> = s.limbs.iter().flat_map(|limb| self.split_le(limb.0, 32)).collect();
+        let s_bits: Vec<BoolTarget> = s
+            .limbs
+            .iter()
+            .flat_map(|limb| self.split_le(limb.0, 32))
+            .collect();
         assert!(s_bits.len() <= 256);
         // compute powers of 2 times p
         // 0 to 255
@@ -180,15 +183,15 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
         let mut p_muls_conditional: Vec<JubjubCurveTarget> = Vec::new();
         let zero = self.zero_jubjub_curve();
         for idx in 0..s_bits.len() {
-            p_muls_conditional.push(
-                self.multiplex_jubjub_curve(
-                    &zero, &p_muls[idx], s_bits[idx])
-            )
+            p_muls_conditional.push(self.multiplex_jubjub_curve(&zero, &p_muls[idx], s_bits[idx]))
         }
         let mut p_muls_cml_sums: Vec<JubjubCurveTarget> = Vec::new();
         p_muls_cml_sums.push(self.zero_jubjub_curve());
         for idx in 0..s_bits.len() {
-            p_muls_cml_sums.push(self.add_jubjub_curve(&p_muls_cml_sums[p_muls_cml_sums.len() - 1], &p_muls_conditional[idx]));
+            p_muls_cml_sums.push(self.add_jubjub_curve(
+                &p_muls_cml_sums[p_muls_cml_sums.len() - 1],
+                &p_muls_conditional[idx],
+            ));
         }
 
         p_muls_cml_sums.pop().unwrap()
@@ -217,11 +220,17 @@ mod tests {
         let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
         let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
 
-        let x_val = BigUint::from_str("5299619240641551281634865583518297030282874472190772894086521144482721001553").unwrap();
-        let y_val = BigUint::from_str("16950150798460657717958625567821834550301663161624707787222815936182638968203").unwrap();
+        let x_val = BigUint::from_str(
+            "5299619240641551281634865583518297030282874472190772894086521144482721001553",
+        )
+        .unwrap();
+        let y_val = BigUint::from_str(
+            "16950150798460657717958625567821834550301663161624707787222815936182638968203",
+        )
+        .unwrap();
         let x = JubjubFieldTarget(builder.constant_biguint(&x_val));
         let y = JubjubFieldTarget(builder.constant_biguint(&y_val));
-        let p = JubjubCurveTarget{x, y};
+        let p = JubjubCurveTarget { x, y };
 
         builder.verify_jubjub_point(&p);
 
@@ -255,11 +264,11 @@ mod tests {
         )
         .unwrap();
         let res_x_val = BigUint::from_str(
-            "7916061937171219682591368294088513039687205273691143098332585753343424131937"
+            "7916061937171219682591368294088513039687205273691143098332585753343424131937",
         )
         .unwrap();
         let res_y_val = BigUint::from_str(
-            "14035240266687799601661095864649209771790948434046947201833777492504781204499"
+            "14035240266687799601661095864649209771790948434046947201833777492504781204499",
         )
         .unwrap();
 
@@ -270,8 +279,8 @@ mod tests {
         let res_x = JubjubFieldTarget(builder.constant_biguint(&res_x_val));
         let res_y = JubjubFieldTarget(builder.constant_biguint(&res_y_val));
 
-        let p = JubjubCurveTarget{x: px, y: py};
-        let q = JubjubCurveTarget{x: qx, y: qy};
+        let p = JubjubCurveTarget { x: px, y: py };
+        let q = JubjubCurveTarget { x: qx, y: qy };
         let res = builder.add_jubjub_curve(&p, &q);
 
         builder.connect_jubjubfield(&res.x, &res_x);
@@ -283,7 +292,8 @@ mod tests {
     }
 
     #[test]
-    fn test_scalar_mul_1() { // 340 s
+    fn test_scalar_mul_1() {
+        // 340 s
         type C = PoseidonGoldilocksConfig;
 
         let config = CircuitConfig::standard_recursion_config();
@@ -300,7 +310,7 @@ mod tests {
         .unwrap();
         let px = JubjubFieldTarget(builder.constant_biguint(&px_val));
         let py = JubjubFieldTarget(builder.constant_biguint(&py_val));
-        let p = JubjubCurveTarget{x: px, y: py};
+        let p = JubjubCurveTarget { x: px, y: py };
 
         let ten = builder.constant_biguint(&BigUint::new(vec![10]));
         let p_scalar_ten = builder.mul_scalar(&p, &ten);
@@ -318,7 +328,8 @@ mod tests {
     }
 
     #[test]
-    fn test_scalar_mul_2() { // 3282 s
+    fn test_scalar_mul_2() {
+        // 3282 s
         type C = PoseidonGoldilocksConfig;
 
         let config = CircuitConfig::standard_recursion_config();
@@ -327,12 +338,13 @@ mod tests {
 
         let p = builder.B8_jubjub_curve();
         let r_val = BigUint::from_str(
-            "2736030358979909402780800718157159386076813972158567259200215660948447373041"
-        ).unwrap();
+            "2736030358979909402780800718157159386076813972158567259200215660948447373041",
+        )
+        .unwrap();
         let r = builder.constant_biguint(&r_val);
         let zero = builder.zero_jubjub_curve();
 
-        let scalar_mul_res = builder.mul_scalar(&p,& r);
+        let scalar_mul_res = builder.mul_scalar(&p, &r);
 
         builder.connect_jubjub_curve(&zero, &scalar_mul_res);
 
@@ -351,12 +363,13 @@ mod tests {
 
         let p = builder.B8_jubjub_curve();
         let r_val = BigUint::from_str(
-            "2736030358979909402780800718157159386076813972158567259200215660948447373041"
-        ).unwrap();
+            "2736030358979909402780800718157159386076813972158567259200215660948447373041",
+        )
+        .unwrap();
         let r = builder.constant_biguint(&r_val);
         let zero = builder.zero_jubjub_curve();
 
-        let scalar_mul_res = builder.mul_scalar(&p,& r);
+        let scalar_mul_res = builder.mul_scalar(&p, &r);
 
         builder.connect_jubjub_curve(&p, &scalar_mul_res);
 

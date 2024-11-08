@@ -12,11 +12,8 @@ use std::iter::zip;
 
 use crate::{
     pod::{
-        circuit::operation::OpListTarget,
-        gadget::GadgetID,
-        operation::OpList,
-        payload::StatementList,
-        GPGInput,
+        circuit::operation::OpListTarget, gadget::GadgetID, operation::OpList,
+        payload::StatementList, GPGInput,
     },
     recursion::OpsExecutorTrait,
     D, F,
@@ -166,7 +163,8 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
 mod tests {
     use std::collections::HashMap;
 
-    use anyhow::Result;
+    use anyhow::{anyhow, Result};
+    use itertools::Itertools;
     use plonky2::{
         field::goldilocks_field::GoldilocksField,
         iop::witness::PartialWitness,
@@ -231,59 +229,39 @@ mod tests {
             &SchnorrSecretKey { sk: 20 },
         )?;
 
-        let pods_list = [
-            (schnorr_pod1_name.clone(), schnorr_pod1),
-            (schnorr_pod2_name.clone(), schnorr_pod2),
-            (schnorr_pod3_name.clone(), schnorr_pod3),
-            (schnorr_pod4_name.clone(), schnorr_pod4),
-        ];
+        let schnorr_pod5_name = "Test POD 5".to_string();
+        let schnorr_pod5 = POD::execute_schnorr_gadget::<NS, VL>(
+            &[
+                Entry::new_from_scalar("who", GoldilocksField(111)),
+                Entry::new_from_scalar("what", GoldilocksField(55 * 57)),
+            ],
+            &SchnorrSecretKey { sk: 20 },
+        )?;
 
-        const NP: usize = 4;
+        let schnorr_pod6_name = "Test POD 6".to_string();
+        let schnorr_pod6 = POD::execute_schnorr_gadget::<NS, VL>(
+            &[
+                Entry::new_from_vec(
+                    "whence",
+                    vec![GoldilocksField(5), GoldilocksField(6), GoldilocksField(7)],
+                ),
+                Entry::new_from_scalar("why", GoldilocksField(0)),
+            ],
+            &SchnorrSecretKey { sk: 20 },
+        )?;
 
-        // Ops
-        let op_lists = [
-            OpList(vec![
-                // NONE:pop
-                OpCmd::new(Op::None, "pop"),
-                // VALUEOF:op3
-                OpCmd::new(
-                    Op::CopyStatement(StatementRef::new(&schnorr_pod1_name, "VALUEOF:s2")),
-                    "op3",
-                ),
-                // NOTEQUAL:yolo
-                OpCmd::new(
-                    Op::NonequalityFromEntries(
-                        StatementRef::new(&schnorr_pod1_name, "VALUEOF:s1"),
-                        StatementRef::new(&schnorr_pod1_name, "VALUEOF:s2"),
-                    ),
-                    "yolo",
-                ),
-            ]),
-            OpList(vec![
-                // VALUEOF:nono
-                OpCmd::new(
-                    Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
-                    "nono",
-                ),
-                // EQUAL:op2
-                OpCmd::new(
-                    Op::EqualityFromEntries(
-                        StatementRef::new(&schnorr_pod1_name, "VALUEOF:s1"),
-                        StatementRef::new(&schnorr_pod2_name, "VALUEOF:s4"),
-                    ),
-                    "op2",
-                ),
-                // TODO: Fails with s4 in place of s3
-                OpCmd::new(
-                    Op::GtFromEntries(
-                        StatementRef::new(&schnorr_pod2_name, "VALUEOF:s3"),
-                        StatementRef::new(&schnorr_pod1_name, "VALUEOF:s1"),
-                    ),
-                    "bop",
-                ),
-            ]),
-            OpList(vec![
-                OpCmd::new(Op::None, "cons"),
+        let oracle_pod_name = "Oracle POD".to_string();
+        let oracle_pod = POD::execute_oracle_gadget(
+            &GPGInput::new(
+                [
+                    (schnorr_pod4_name.clone(), schnorr_pod4.clone()),
+                    (schnorr_pod6_name.clone(), schnorr_pod6.clone()),
+                ]
+                .into_iter()
+                .collect(),
+                HashMap::new(),
+            ),
+            &OpList(vec![
                 OpCmd::new(
                     Op::ContainsFromEntries(
                         StatementRef::new(&schnorr_pod4_name, "VALUEOF:who"),
@@ -291,14 +269,141 @@ mod tests {
                     ),
                     "car",
                 ),
-                OpCmd::new(Op::None, "cdr"),
-            ]),
-        ]
-        .into_iter()
-        .map(|op_list| op_list.pad::<NS>().map(|o| o.sort(&pods_list)))
-        .collect::<Result<Vec<_>>>()?;
+                OpCmd::new(
+                    Op::EqualityFromEntries(
+                        StatementRef::new(&schnorr_pod4_name, "VALUEOF:who"),
+                        StatementRef::new(&schnorr_pod6_name, "VALUEOF:whence"),
+                    ),
+                    "yes",
+                ),
+            ])
+            .pad::<NS>()?
+            .0,
+        )?;
 
-        let gpg_input = GPGInput::new(HashMap::from(pods_list.clone()), HashMap::new());
+        let pods_list = [
+            (schnorr_pod1_name.clone(), schnorr_pod1),
+            (schnorr_pod2_name.clone(), schnorr_pod2),
+            (schnorr_pod3_name.clone(), schnorr_pod3),
+            (schnorr_pod4_name.clone(), schnorr_pod4),
+            (schnorr_pod5_name.clone(), schnorr_pod5),
+            (schnorr_pod6_name.clone(), schnorr_pod6),
+            (oracle_pod_name.clone(), oracle_pod),
+        ];
+
+        const NP: usize = 7;
+        if pods_list.len() != NP {
+            return Err(anyhow!(
+                "Number of PODs in list must be equal to NP ({})!",
+                NP
+            ));
+        };
+
+        // Ops
+        let ops = [
+            // NONE:pop
+            OpCmd::new(Op::None, "pop"),
+            // VALUEOF:op3
+            OpCmd::new(
+                Op::CopyStatement(StatementRef::new(&schnorr_pod1_name, "VALUEOF:s2")),
+                "op3",
+            ),
+            // NOTEQUAL:yolo
+            OpCmd::new(
+                Op::NonequalityFromEntries(
+                    StatementRef::new(&schnorr_pod1_name, "VALUEOF:s1"),
+                    StatementRef::new(&schnorr_pod1_name, "VALUEOF:s2"),
+                ),
+                "yolo",
+            ),
+            // VALUEOF:nono
+            OpCmd::new(
+                Op::NewEntry(Entry::new_from_scalar("what", GoldilocksField(23))),
+                "nono",
+            ),
+            // EQUAL:op2
+            OpCmd::new(
+                Op::EqualityFromEntries(
+                    StatementRef::new(&schnorr_pod1_name, "VALUEOF:s1"),
+                    StatementRef::new(&schnorr_pod2_name, "VALUEOF:s4"),
+                ),
+                "op2",
+            ),
+            // TODO: Fails with s4 in place of s3
+            OpCmd::new(
+                Op::GtFromEntries(
+                    StatementRef::new(&schnorr_pod2_name, "VALUEOF:s3"),
+                    StatementRef::new(&schnorr_pod1_name, "VALUEOF:s1"),
+                ),
+                "bop",
+            ),
+            OpCmd::new(Op::None, "cons"),
+            OpCmd::new(
+                Op::ContainsFromEntries(
+                    StatementRef::new(&schnorr_pod4_name, "VALUEOF:who"),
+                    StatementRef::new(&schnorr_pod4_name, "VALUEOF:what"),
+                ),
+                "car",
+            ),
+            OpCmd::new(Op::None, "cdr"),
+            OpCmd::new(
+                Op::SumOf(
+                    StatementRef::new(&schnorr_pod5_name, "VALUEOF:who"),
+                    StatementRef::new(&schnorr_pod1_name, "VALUEOF:s2"),
+                    StatementRef::new(&schnorr_pod2_name, "VALUEOF:s4"),
+                ),
+                "cadr",
+            ),
+            OpCmd::new(
+                Op::ProductOf(
+                    StatementRef::new(&schnorr_pod5_name, "VALUEOF:what"),
+                    StatementRef::new(&schnorr_pod1_name, "VALUEOF:s1"),
+                    StatementRef::new(&schnorr_pod2_name, "VALUEOF:s3"),
+                ),
+                "caar",
+            ),
+            OpCmd::new(
+                Op::MaxOf(
+                    StatementRef::new(&schnorr_pod2_name, "VALUEOF:s3"),
+                    StatementRef::new(&schnorr_pod1_name, "VALUEOF:s1"),
+                    StatementRef::new(&schnorr_pod2_name, "VALUEOF:s3"),
+                ),
+                "cdar",
+            ),
+            OpCmd::new(
+                Op::RenameContainedBy(
+                    StatementRef::new(&oracle_pod_name, "CONTAINS:car"),
+                    StatementRef::new(&oracle_pod_name, "EQUAL:yes"),
+                ),
+                "cadadr",
+            ),
+        ];
+        let op_lists = ops
+            .iter()
+            .chunks(3)
+            .into_iter()
+            .map(|chunk| {
+                OpList(chunk.cloned().collect::<Vec<_>>())
+                    .pad::<NS>()
+                    .map(|o| o.sort(&pods_list))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let gpg_input = GPGInput::new(
+            HashMap::from(pods_list.clone()),
+            [
+                (
+                    (oracle_pod_name.clone(), schnorr_pod4_name.clone()),
+                    "parent".to_string(),
+                ),
+                (
+                    (oracle_pod_name.clone(), schnorr_pod6_name.clone()),
+                    "parent2".to_string(),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        );
 
         op_lists.into_iter().try_for_each(|op_list| {
             let config = CircuitConfig::standard_recursion_config();
