@@ -1,6 +1,6 @@
 // use alloc::vec::Vec;
-use plonky2::util::serialization::{Buffer, IoResult, Read, Write};
 use crate::plonky2_u32::serialization::{ReadU32, WriteU32};
+use plonky2::util::serialization::{Buffer, IoResult, Read, Write};
 
 use crate::signature::biguint::BigUintTarget;
 
@@ -47,8 +47,8 @@ impl ReadBigUintTarget for Buffer<'_> {
 
 #[cfg(test)]
 mod tests {
-    use plonky2::iop::{target::Target, wire::Wire};
     use crate::plonky2_u32::gadgets::arithmetic_u32::U32Target;
+    use plonky2::iop::{target::Target, wire::Wire};
 
     use super::*;
 

@@ -74,10 +74,8 @@ mod tests {
 
         let scalar1 = GoldilocksField(36);
         let entry1 = Entry::new_from_scalar("some key", scalar1);
-        let schnorr_pod3 = POD::execute_schnorr_gadget::<NS, VL>(
-            &[entry1.clone()],
-            &SchnorrSecretKey { sk: 25 },
-        )?;
+        let schnorr_pod3 =
+            POD::execute_schnorr_gadget::<NS, VL>(&[entry1.clone()], &SchnorrSecretKey { sk: 25 })?;
         let payload_hash = schnorr_pod3.payload.hash_payload();
 
         let config = CircuitConfig::standard_recursion_config();

@@ -14,7 +14,7 @@ use crate::signature::{
     schnorr::{SchnorrPublicKey, SchnorrSignature},
 };
 
-/* 
+/*
 type GoldF = GoldilocksField;
 
 pub struct MessageHashTarget {
@@ -57,7 +57,7 @@ impl EddsaBuilder for EddsaBuilder {
         sig: &EddsaSignatureTarget,
         msg: &MessageHashTarget,
         pk: &EddsaPublicKeyTarget,
-    ) -> BoolTarget {      
+    ) -> BoolTarget {
 //        builder.verify_jubjub_point(sig.r);
 //        builder.verify_jubjub_point(pk.a);
 //        let h: BigUintTarget = p_hash_to_implement(sig.r, msg, pk);
@@ -65,7 +65,7 @@ impl EddsaBuilder for EddsaBuilder {
 //        let rhs = pk.a.mul_scalar(h).add(sig.r);
 //        self.is_equal(lhs, rhs)
     }
-    
+
     fn constrain_sig<C: GenericConfig<2, F = GoldF>> (
         &self,
         builder: &mut CircuitBuilder<GoldF, 2>,

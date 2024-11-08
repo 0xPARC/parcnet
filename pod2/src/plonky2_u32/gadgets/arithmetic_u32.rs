@@ -273,9 +273,9 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F, D>
     }
 
     fn run_once(
-        &self, 
-        witness: &PartitionWitness<F>, 
-        out_buffer: &mut GeneratedValues<F>
+        &self,
+        witness: &PartitionWitness<F>,
+        out_buffer: &mut GeneratedValues<F>,
     ) -> Result<(), Error> {
         let x = witness.get_target(self.x);
         let x_u64 = x.to_canonical_u64();

@@ -83,11 +83,7 @@ impl POD {
                         _ => Err(anyhow!("Invalid signer entry in payload")),
                     })?;
 
-                Ok(protocol.verify(
-                    p,
-                    &payload_hash.elements.to_vec(),
-                    &SchnorrPublicKey { pk },
-                ))
+                Ok(protocol.verify(p, &payload_hash.elements.to_vec(), &SchnorrPublicKey { pk }))
             }
 
             PODProof::Oracle(p) => {
@@ -592,10 +588,8 @@ mod tests {
         assert!(schnorr_pod1.verify::<3, 2, 2, 0>()?);
         assert!(schnorr_pod2.verify::<3, 2, 2, 0>()?);
 
-        let mut schnorr_pod3 = POD::execute_schnorr_gadget::<NS, VL>(
-            &[entry1.clone()],
-            &SchnorrSecretKey { sk: 25 },
-        )?;
+        let mut schnorr_pod3 =
+            POD::execute_schnorr_gadget::<NS, VL>(&[entry1.clone()], &SchnorrSecretKey { sk: 25 })?;
 
         // modify the internal value of the valueOf statement in schnorrPOD3
         schnorr_pod3
@@ -947,20 +941,16 @@ mod tests {
 
         let gb1_user = Entry::new_from_scalar("user", bob_pk);
         let gb1_age = Entry::new_from_scalar("age", GoldilocksField(27));
-        let gb1 = POD::execute_schnorr_gadget::<NS, VL>(
-            &[gb1_user.clone(), gb1_age.clone()],
-            &goog_sk,
-        )?;
+        let gb1 =
+            POD::execute_schnorr_gadget::<NS, VL>(&[gb1_user.clone(), gb1_age.clone()], &goog_sk)?;
 
         let gb2_user = Entry::new_from_scalar("user", bob_pk);
         let gb2 = POD::execute_schnorr_gadget::<NS, VL>(&[gb2_user.clone()], &msft_sk)?;
 
         let gb3_user = Entry::new_from_scalar("user", charlie_pk);
         let gb3_age = Entry::new_from_scalar("age", GoldilocksField(18));
-        let gb3 = POD::execute_schnorr_gadget::<NS, VL>(
-            &[gb3_user.clone(), gb3_age.clone()],
-            &msft_sk,
-        )?;
+        let gb3 =
+            POD::execute_schnorr_gadget::<NS, VL>(&[gb3_user.clone(), gb3_age.clone()], &msft_sk)?;
 
         let gb4_user = Entry::new_from_scalar("user", charlie_pk);
         let gb4 = POD::execute_schnorr_gadget::<NS, VL>(&[gb4_user.clone()], &fb_sk)?;

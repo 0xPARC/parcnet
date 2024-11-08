@@ -22,7 +22,6 @@ use plonky2::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase
 
 use crate::plonky2_u32::util::ceil_div_usize;
 
-
 const LOG2_MAX_NUM_ADDENDS: usize = 4;
 const MAX_NUM_ADDENDS: usize = 16;
 
@@ -329,7 +328,11 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F, D>
             .collect()
     }
 
-    fn run_once(&self, witness: &PartitionWitness<F>, out_buffer: &mut GeneratedValues<F>) -> Result<(), Error> {
+    fn run_once(
+        &self,
+        witness: &PartitionWitness<F>,
+        out_buffer: &mut GeneratedValues<F>,
+    ) -> Result<(), Error> {
         let local_wire = |column| Wire {
             row: self.row,
             column,
