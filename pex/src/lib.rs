@@ -26,7 +26,7 @@ use plonky2::{
 use pod2::{
     pod::{
         entry::Entry,
-        gadget::GadgetID,
+        gadget::{plonky_pod::ProverParams, GadgetID, PlonkyButNotPlonkyGadget},
         origin::Origin,
         payload::HashablePayload,
         statement::{AnchoredKey, StatementRef},
@@ -214,6 +214,7 @@ pub struct Env {
     bindings: Arc<Mutex<HashMap<String, Value>>>,
     sk: Option<SchnorrSecretKey>,
     script_id: Option<ScriptId>,
+    prover_params: Option<Arc<Mutex<ProverParams<M, N, NS, VL>>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -741,7 +742,12 @@ impl PodBuilder {
                 .iter()
                 .map(|(_, ops)| ops.clone())
                 .collect::<Vec<OpCmd>>()[..];
-            POD::execute_plonky_gadget::<M, N, NS, VL>(&gpg_input, pending_ops)
+            if let Some(prover_params) = &env.prover_params {
+                let mut params = prover_params.lock().unwrap();
+                POD::execute_plonky_gadget::<M, N, NS, VL>(&mut params, &gpg_input, pending_ops)
+            } else {
+                POD::execute_oracle_gadget(&gpg_input, pending_ops)
+            }
         }
     }
 }
@@ -753,6 +759,7 @@ impl Env {
         pod_store: Arc<Mutex<MyPods>>,
         sk: Option<SchnorrSecretKey>,
         script_id: Option<ScriptId>,
+        prover_params: Option<Arc<Mutex<ProverParams<M, N, NS, VL>>>>,
     ) -> Self {
         Self {
             user,
@@ -763,6 +770,7 @@ impl Env {
             bindings: Arc::new(Mutex::new(HashMap::new())),
             sk,
             script_id,
+            prover_params,
         }
     }
 
@@ -777,6 +785,7 @@ impl Env {
             bindings: Arc::new(Mutex::new(self.bindings.lock().unwrap().clone())),
             sk: self.sk.clone(),
             script_id: self.script_id.clone(),
+            prover_params: self.prover_params.clone(),
         }
     }
 
@@ -1845,6 +1854,7 @@ mod tests {
             pod_store.clone(),
             Some(SchnorrSecretKey { sk: 42 }),
             None,
+            None,
         );
         (env, pod_store)
     }
@@ -2708,6 +2718,7 @@ mod tests {
             Arc::new(Mutex::new(MyPods::default())),
             Some(SchnorrSecretKey { sk: 42 }),
             None,
+            None,
         );
 
         // Create Bob's environment
@@ -2716,6 +2727,7 @@ mod tests {
             shared.clone(),
             Arc::new(Mutex::new(MyPods::default())),
             Some(SchnorrSecretKey { sk: 43 }),
+            None,
             None,
         );
 
@@ -2740,6 +2752,7 @@ mod tests {
             alice_pod_store.clone(),
             Some(SchnorrSecretKey { sk: 42 }),
             None,
+            None,
         );
 
         let bob_env = Env::new(
@@ -2747,6 +2760,7 @@ mod tests {
             shared.clone(),
             bob_pod_store.clone(),
             Some(SchnorrSecretKey { sk: 43 }),
+            None,
             None,
         );
 
@@ -2795,6 +2809,7 @@ mod tests {
             Arc::new(Mutex::new(MyPods::default())),
             Some(SchnorrSecretKey { sk: 42 }),
             None,
+            None,
         );
 
         // Try to get a value from Bob that doesn't exist
@@ -2820,6 +2835,7 @@ mod tests {
             alice_pod_store.clone(),
             Some(SchnorrSecretKey { sk: 42 }),
             None,
+            None,
         );
 
         let bob_env = Env::new(
@@ -2827,6 +2843,7 @@ mod tests {
             shared.clone(),
             bob_pod_store.clone(),
             Some(SchnorrSecretKey { sk: 43 }),
+            None,
             None,
         );
 

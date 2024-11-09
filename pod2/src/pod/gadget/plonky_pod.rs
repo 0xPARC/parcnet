@@ -314,10 +314,10 @@ where
         // can be connected using StatementTarget's `connect` method.
 
         let time_execute = start_execute.elapsed();
-        println!(
-            "| {} | {} | {} | {} | {:#.2?} | {:#.2?} |",
-            M, N, NS, VL, time_prove, time_execute,
-        );
+        // println!(
+        //     "| {} | {} | {} | {} | {:#.2?} | {:#.2?} |",
+        //     M, N, NS, VL, time_prove, time_execute,
+        // );
 
         Ok(POD {
             payload: PODPayload {

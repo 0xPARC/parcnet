@@ -82,7 +82,6 @@ impl IrohStore {
         let doc = self.doc.read().await;
         let iroh = self.iroh.read().await;
         if let (Some(doc), Some(iroh)) = (doc.as_ref(), iroh.as_ref()) {
-            dbg!("listening for events");
             let mut events = doc.subscribe().await.unwrap();
 
             let values = self.values.clone();
