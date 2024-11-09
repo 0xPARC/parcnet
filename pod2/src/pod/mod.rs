@@ -228,21 +228,17 @@ impl POD {
             proof_type: GadgetID::ORACLE,
         })
     }
+    // the prover_params is passed as parameter, because compunting it depends on first computing
+    // the circuit_data, which takes a considerable amount of time to compute. So we compute it
+    // once at the beginning and just reuse it through all the calls to execute_plonky_gadget.
     pub fn execute_plonky_gadget<const M: usize, const N: usize, const NS: usize, const VL: usize>(
+        prover_params: &mut crate::pod::gadget::plonky_pod::ProverParams<M, N, NS, VL>,
         input: &GPGInput,
         cmds: &[OpCmd],
     ) -> Result<Self>
     where
         [(); M + N]:,
     {
-        // TODO the circuit_data currently is computed here on the fly, but it will not be computed
-        // here and will be passed as parameter, bcs the circuit_data takes a considerable amount
-        // of time to compute. Need to think how we modify the interface to pass the circuit_data
-        // to this method.
-        let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS, VL>::circuit_data()?;
-        let prover_params =
-            PlonkyButNotPlonkyGadget::<M, N, NS, VL>::build_prover_params(circuit_data)?;
-
         PlonkyButNotPlonkyGadget::<M, N, NS, VL>::execute(
             prover_params,
             &input.pods_list,
@@ -868,7 +864,11 @@ mod tests {
             ),
         ];
 
-        let plonky_pod = POD::execute_plonky_gadget::<M, N, NS, VL>(&gpg_input, &ops)?;
+        let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS, VL>::circuit_data()?;
+        let mut prover_params =
+            PlonkyButNotPlonkyGadget::<M, N, NS, VL>::build_prover_params(circuit_data)?;
+        let plonky_pod =
+            POD::execute_plonky_gadget::<M, N, NS, VL>(&mut prover_params, &gpg_input, &ops)?;
         assert!(plonky_pod.verify::<M, N, NS, VL>()? == true);
 
         // make another oracle POD which takes that oracle POD and a schnorr POD
@@ -907,7 +907,8 @@ mod tests {
             ),
         ];
 
-        let plonky_pod2 = POD::execute_plonky_gadget::<M, N, NS, VL>(&gpg_input, &ops)?;
+        let plonky_pod2 =
+            POD::execute_plonky_gadget::<M, N, NS, VL>(&mut prover_params, &gpg_input, &ops)?;
         for statement in plonky_pod2.payload.statements_list.iter() {
             println!("{:?}", statement);
         }
