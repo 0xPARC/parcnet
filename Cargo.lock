@@ -5585,6 +5585,7 @@ dependencies = [
  "itertools 0.13.0",
  "log",
  "num",
+ "parcnet-pod",
  "plonky2",
  "rand 0.8.5",
  "serde",

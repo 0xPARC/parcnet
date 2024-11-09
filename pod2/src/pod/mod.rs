@@ -1,5 +1,10 @@
 use anyhow::anyhow;
 use anyhow::Result;
+use itertools::Itertools;
+use num::BigInt;
+use parcnet_pod::pod::pod_impl::string_hash;
+use parcnet_pod::pod::pod_impl::Pod;
+use parcnet_pod::pod::pod_impl::PodValue;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::types::Field;
 use serde::Deserialize;
@@ -162,6 +167,28 @@ impl POD {
             proof: PODProof::Schnorr(proof),
             proof_type: GadgetID::SCHNORR16,
         })
+    }
+
+    pub fn introduce_pod1<const NS: usize, const VL: usize>(pod: Pod) -> Result<Self> {
+        // TODO: Check input POD
+        // TODO: Fix
+        let signer_key: ScalarOrVec = Into::<ScalarOrVec>::into(&Into::<PodValue>::into(
+            BigInt::from_signed_bytes_be(&pod.signature()?.public_key),
+        ));
+        let entries = pod
+            .entries()
+            .iter()
+            .map(|(s, pod_value)| Entry::new_from_pod_value(s, pod_value))
+            .chain(
+                [Entry {
+                    key: "_pod1_signer".to_string(),
+                    value: signer_key,
+                }]
+                .into_iter(),
+            )
+            .collect::<Vec<_>>();
+
+        Self::execute_schnorr_gadget::<NS, VL>(&entries, &SchnorrSecretKey { sk: 0 })
     }
 
     pub fn execute_oracle_gadget(input: &GPGInput, cmds: &[OpCmd]) -> Result<Self> {
@@ -424,6 +451,7 @@ impl GPGInput {
 #[cfg(test)]
 mod tests {
     use operation::Operation as Op;
+    use parcnet_pod::{pod::pod_impl::create_pod, pod_entries};
     use statement::StatementRef;
 
     use super::*;
@@ -1567,6 +1595,41 @@ mod tests {
         //          [local-sum [+ [pod? [local-value]] 42]]
         //          [overall-max [max local-sum
         //                            custom-sum]]]]
+
+        Ok(())
+    }
+
+    #[test]
+    fn pod1_intro_test() -> Result<()> {
+        let test_pod = create_pod(
+            &[0u8; 32],
+            pod_entries![
+            "speed" => 5,
+            "jump" => 10,
+            "owner" => "gub"
+            ],
+        )?;
+
+        let introduced_pod = POD::introduce_pod1::<5, 8>(test_pod)?;
+
+        assert!(
+            introduced_pod
+                .payload
+                .statements_map
+                .get("VALUEOF:speed")
+                .ok_or(anyhow!(""))?
+                .value()?
+                == ScalarOrVec::Scalar(GoldilocksField(5))
+        );
+        assert!(
+            introduced_pod
+                .payload
+                .statements_map
+                .get("VALUEOF:jump")
+                .ok_or(anyhow!(""))?
+                .value()?
+                == ScalarOrVec::Scalar(GoldilocksField(10))
+        );
 
         Ok(())
     }
