@@ -162,7 +162,12 @@ pub fn print_pod_details(pod: &POD, pod_store: &MyPods) {
                     matched_pod.proof_type.to_string().bright_cyan()
                 );
 
-                for (stmt_id, stmt) in matched_pod.payload.statements_map.iter() {
+                for (stmt_id, stmt) in matched_pod
+                    .payload
+                    .statements_map
+                    .iter()
+                    .filter(|(_, p)| p.code() != GoldilocksField::ZERO)
+                {
                     print_statement(stmt_id, stmt, "    ");
                 }
                 println!();
