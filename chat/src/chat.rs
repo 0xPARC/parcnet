@@ -106,7 +106,8 @@ impl Chat {
     fn scroll_to_bottom(&mut self) {
         let messages_len = self.logic.get_messages().len();
         if messages_len > 0 {
-            self.scroll_handle.scroll_to_item(messages_len - 1);
+            self.scroll_handle
+                .scroll_to_item(messages_len - 1, gpui::ScrollStrategy::Center);
         }
     }
 }
