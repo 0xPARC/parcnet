@@ -58,7 +58,7 @@ impl<const VL: usize> OperationTarget<VL> {
         ref_index_map: &HashMap<StatementRef, (usize, usize)>,
         statement_table: &<StatementRef as StatementOrRef>::StatementTable,
     ) -> Result<()> {
-        let operation_as_fields = operation.to_fields::<VL>(ref_index_map, &statement_table)?;
+        let operation_as_fields = operation.to_fields::<VL>(ref_index_map, statement_table)?;
         pw.set_target(self.op, operation_as_fields[0])?;
         pw.set_target_arr(
             &[self.operand1.pod_index, self.operand1.statement_index],

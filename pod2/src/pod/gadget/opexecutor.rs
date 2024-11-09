@@ -14,16 +14,15 @@ use crate::{
     pod::{
         circuit::operation::OpListTarget,
         gadget::GadgetID,
-        operation::{OpList, OperationCmd},
+        operation::OpList,
         payload::StatementList,
-        statement::{StatementOrRef, StatementRef},
-        GPGInput, POD,
+        GPGInput,
     },
     recursion::OpsExecutorTrait,
     D, F,
 };
 
-use crate::pod::circuit::{operation::OperationTarget, statement::StatementTarget};
+use crate::pod::circuit::statement::StatementTarget;
 
 /// OpExecutorGadget implements the OpsExecutorTrait
 /// - NP: NumPODs (NP = M+N)
@@ -142,7 +141,7 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
         zip(&targets.0, &input.0.pods_list).try_for_each(|(s_targets, (_, pod))| {
             let pod_statements = &pod.payload.statements_list;
             zip(s_targets, pod_statements)
-                .try_for_each(|(s_target, (_, s))| s_target.set_witness(pw, &s))
+                .try_for_each(|(s_target, (_, s))| s_target.set_witness(pw, s))
         })?;
 
         // Set origin remapping targets.
@@ -159,7 +158,7 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
 
         // return a Vec<F> containing the public inputs. This must match the order of the
         // registered public inputs at the `add_targets` method.
-        Ok(output.into_iter().flat_map(|v| v.1.to_fields()).collect())
+        Ok(output.iter().flat_map(|v| v.1.to_fields()).collect())
     }
 }
 
@@ -296,7 +295,7 @@ mod tests {
             ]),
         ]
         .into_iter()
-        .map(|op_list| op_list.pad::<NS>().and_then(|o| Ok(o.sort(&pods_list))))
+        .map(|op_list| op_list.pad::<NS>().map(|o| o.sort(&pods_list)))
         .collect::<Result<Vec<_>>>()?;
 
         let gpg_input = GPGInput::new(HashMap::from(pods_list.clone()), HashMap::new());

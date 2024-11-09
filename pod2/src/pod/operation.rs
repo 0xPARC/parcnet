@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Result};
 use plonky2::field::{
     goldilocks_field::GoldilocksField,
-    packed::PackedField,
     types::{Field, PrimeField64},
 };
 use std::{collections::HashMap, fmt::Debug};

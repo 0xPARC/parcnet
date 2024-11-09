@@ -31,20 +31,16 @@ impl Entry {
     pub fn pad_if_vec<const VL: usize>(&self) -> Result<Self> {
         match &self.value {
             ScalarOrVec::Scalar(_) => Ok(self.clone()),
-            ScalarOrVec::Vector(v) if v.len() <= VL => v
-                .get(0)
+            ScalarOrVec::Vector(v) if v.len() <= VL => v.first()
                 .ok_or(anyhow!(
                     "Entry with key {} has empty vector as value!",
                     self.key
-                ))
-                .and_then(|padding| {
-                    Ok(Self {
+                )).map(|padding| Self {
                         key: self.key.clone(),
                         value: ScalarOrVec::Vector(
                             [v.clone(), (v.len()..VL).map(|_| *padding).collect()].concat(),
                         ),
-                    })
-                }),
+                    }),
             ScalarOrVec::Vector(v) => Err(anyhow!(
                 "Entry with key {} has vector of length {}, which exceeds the maximum ({})!",
                 self.key,

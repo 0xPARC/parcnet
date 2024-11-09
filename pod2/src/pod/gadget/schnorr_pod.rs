@@ -35,7 +35,7 @@ impl<const NS: usize> InnerCircuitTrait for SchnorrPODGadget<NS> {
         let (_, verified) = schnorr_pod_target.compute_targets_and_verify(builder, &hash_target)?;
 
         // If selector_booltarg=1, check verified.target.
-        assert_one_if_enabled(builder, verified.target, &selector_booltarg);
+        assert_one_if_enabled(builder, verified.target, selector_booltarg);
         Ok(schnorr_pod_target)
     }
 
@@ -75,7 +75,7 @@ mod tests {
         let scalar1 = GoldilocksField(36);
         let entry1 = Entry::new_from_scalar("some key", scalar1);
         let schnorr_pod3 = POD::execute_schnorr_gadget::<NS, VL>(
-            &vec![entry1.clone()],
+            &[entry1.clone()],
             &SchnorrSecretKey { sk: 25 },
         )?;
         let payload_hash = schnorr_pod3.payload.hash_payload();

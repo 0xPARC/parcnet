@@ -1,6 +1,6 @@
 mod macros;
 mod pex_constants;
-use constants::NS;
+use constants::{NS, VL};
 pub mod repl;
 pub mod store;
 
@@ -665,7 +665,7 @@ impl PodBuilder {
                 })
                 .collect::<Vec<_>>();
 
-            Ok(POD::execute_schnorr_gadget::<{ NS }>(&entries, &env.sk.unwrap()).unwrap())
+            Ok(POD::execute_schnorr_gadget::<NS, VL>(&entries, &env.sk.unwrap()).unwrap())
         } else {
             let mut origin_renaming_map = HashMap::new();
             let mut used_origin_names = HashSet::new();
