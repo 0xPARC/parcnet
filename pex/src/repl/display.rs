@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use colored::Colorize;
+use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
 use pod2::pod::{statement::AnchoredKey, Statement, POD};
 
 use crate::{MyPods, PodBuilder};
@@ -228,7 +229,12 @@ pub fn print_pod_details(pod: &POD, pod_store: &MyPods) {
     }
 
     print_section_header("POD Statements", Some(&pod.proof_type.to_string()));
-    for (statement_id, statement) in pod.payload.statements_map.iter() {
+    for (statement_id, statement) in pod
+        .payload
+        .statements_map
+        .iter()
+        .filter(|(_, p)| p.code() != GoldilocksField::ZERO)
+    {
         print_statement(statement_id, statement, "  ");
     }
     println!();
