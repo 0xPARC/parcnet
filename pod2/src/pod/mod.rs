@@ -1,8 +1,6 @@
 use anyhow::anyhow;
 use anyhow::Result;
-use itertools::Itertools;
 use num::BigInt;
-use parcnet_pod::pod::pod_impl::string_hash;
 use parcnet_pod::pod::pod_impl::Pod;
 use parcnet_pod::pod::pod_impl::PodValue;
 use plonky2::field::goldilocks_field::GoldilocksField;
@@ -24,6 +22,7 @@ use crate::signature::schnorr::{
     SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner,
 };
 use crate::PlonkyProof;
+use crate::{C, D, F};
 
 pub use operation::Operation as Op;
 pub use operation::OperationCmd as OpCmd;
@@ -839,7 +838,6 @@ mod tests {
         // Start with some values.
         let scalar1 = GoldilocksField(36);
         let scalar2 = GoldilocksField(52);
-        let scalar3 = GoldilocksField(88);
         let vector_value = vec![scalar1, scalar2];
 
         // make entries
@@ -847,10 +845,6 @@ mod tests {
         let entry2 = Entry::new_from_scalar("banana", scalar2);
         let entry3 = Entry::new_from_vec("vector entry", vector_value.clone());
         let entry4 = Entry::new_from_scalar("scalar entry", scalar2);
-        let entry5 = Entry::new_from_scalar("foo", GoldilocksField(100));
-        let entry6 = Entry::new_from_scalar("baz", GoldilocksField(120));
-        let entry7 = Entry::new_from_scalar("bar", scalar2);
-        let entry9 = Entry::new_from_scalar("claimed sum", scalar3);
 
         // two schnorr pods
         let schnorr_pod1 = POD::execute_schnorr_gadget::<NS, VL>(

@@ -1,6 +1,6 @@
 mod macros;
 mod pex_constants;
-use constants::{NS, VL};
+use constants::{M, N, NS, VL};
 pub mod repl;
 pub mod store;
 
@@ -18,7 +18,10 @@ use tracing::info;
 
 use anyhow::{anyhow, Result};
 use async_recursion::async_recursion;
-use plonky2::field::{goldilocks_field::GoldilocksField, types::PrimeField64};
+use plonky2::{
+    field::{goldilocks_field::GoldilocksField, types::PrimeField64},
+    plonk::config::GenericHashOut,
+};
 
 use pod2::{
     pod::{
@@ -579,8 +582,8 @@ impl PodBuilder {
         }
     }
     pub fn pod_id(pod: &POD) -> String {
-        let pod_hash = pod.payload.hash_payload();
-        let name = format!("{}{:?}", POD_PREFIX, pod_hash);
+        let pod_hash = pod.payload.hash_payload().to_vec()[0];
+        let name = format!("{}{}", POD_PREFIX, pod_hash);
         name
     }
     pub fn register_input_pod(&mut self, pod: &POD) -> String {
@@ -673,7 +676,7 @@ impl PodBuilder {
 
             for (pod_id, pod) in &self.input_pods {
                 // For _SELF origins, use the pod's payload hash
-                let pod_hash = format!("{:?}", pod.payload.hash_payload());
+                let pod_hash = format!("{}", pod.payload.hash_payload().to_vec()[0]);
                 if !used_origin_names.insert(pod_hash.clone()) {
                     while used_origin_names.contains(&format!("origin_{}", next_id)) {
                         next_id += 1;
@@ -738,7 +741,7 @@ impl PodBuilder {
                 .iter()
                 .map(|(_, ops)| ops.clone())
                 .collect::<Vec<OpCmd>>()[..];
-            POD::execute_oracle_gadget(&gpg_input, pending_ops)
+            POD::execute_plonky_gadget::<M, N, NS, VL>(&gpg_input, pending_ops)
         }
     }
 }
@@ -1321,7 +1324,7 @@ impl Expr {
                         }
 
                         // Handle assertions
-                        if matches!(op.as_str(), ">" | "=" | "!=") {
+                        if matches!(op.as_str(), ">" | "=" | "!=" | "<") {
                             if exprs.len() != 3 {
                                 return Err(anyhow!("Assert requires exactly two operands"));
                             }

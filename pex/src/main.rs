@@ -166,7 +166,7 @@ async fn main() -> Result<()> {
     println!("\nExamples:");
     println!("  [+ 1 2]");
     println!("  [createpod test x 42 y [+ 2 10]]");
-    println!("  [createpod test2 z [pod? x]]");
+    println!("  [createpod test2 z [pod? [x]]]");
     println!("  [list 1 2 3]");
 
     loop {
