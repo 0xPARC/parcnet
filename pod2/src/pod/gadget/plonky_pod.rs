@@ -128,7 +128,7 @@ where
 
     /// Generates a new POD from the given input PODs and the OpList (operations list)
     pub fn execute(
-        mut prover_params: ProverParams<M, N, NS, VL>,
+        prover_params: &mut ProverParams<M, N, NS, VL>,
         input_pods: &[(String, POD)],
         op_list: OpList,
         origin_renaming_map: HashMap<(String, String), String>,
@@ -475,12 +475,12 @@ mod tests {
         // PlonkyButNotPlonkyGadget::execute
         let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS, VL>::circuit_data()?;
         let verifier_data = circuit_data.verifier_data();
-        let prover_params =
+        let mut prover_params =
             PlonkyButNotPlonkyGadget::<M, N, NS, VL>::build_prover_params(circuit_data)?;
 
         let start = Instant::now();
         let new_pod = PlonkyButNotPlonkyGadget::<M, N, NS, VL>::execute(
-            prover_params,
+            &mut prover_params,
             &pods_list,
             op_list,
             HashMap::new(),
@@ -539,11 +539,11 @@ mod tests {
         );
 
         let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS, VL>::circuit_data()?;
-        let prover_params =
+        let mut prover_params =
             PlonkyButNotPlonkyGadget::<M, N, NS, VL>::build_prover_params(circuit_data)?;
 
         let _new_pod = PlonkyButNotPlonkyGadget::<M, N, NS, VL>::execute(
-            prover_params,
+            &mut prover_params,
             &pods_list,
             op_list,
             HashMap::new(),
