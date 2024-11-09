@@ -283,6 +283,23 @@ impl StatementTarget {
         }
     }
 
+    pub fn lt(
+        builder: &mut CircuitBuilder<F, D>,
+        statement1_target: StatementTarget,
+        statement2_target: StatementTarget,
+    ) -> Self {
+        Self {
+            predicate: builder.constant(Statement::LT),
+            origin1: statement1_target.origin1,
+            key1: statement1_target.key1,
+            origin2: statement2_target.origin1,
+            key2: statement2_target.key1,
+            origin3: OriginTarget::none(builder),
+            key3: builder.zero(),
+            value: builder.zero(),
+        }
+    }
+
     pub fn from_entry(
         builder: &mut CircuitBuilder<F, D>,
         entry_target: &EntryTarget,

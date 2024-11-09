@@ -144,6 +144,8 @@ impl OperationTarget {
                 statement2_target,
                 statement3_target,
             ), // TODO: MaxOf
+            StatementTarget::lt(builder, statement1_target, statement2_target), // TODO: Lt
+            StatementTarget::not_equal(builder, statement1_target, statement2_target), // LtToNonequality. TODO.
         ];
 
         // Indicators of whether the conditions on the operands were satisfied.
@@ -196,6 +198,8 @@ impl OperationTarget {
             builder._true(),                                    // TODO: SumOf
             builder._true(),                                    // TODO: ProductOf
             builder._true(),                                    // TODO: MaxOf
+            builder._true(),                                    // TODO: Lt
+            builder._true(),                                    // TODO: LtToNonequality
         ]
         .iter()
         .enumerate()
