@@ -15,6 +15,7 @@ pathfinder_simd = { git = "https://github.com/theoparis/pathfinder/" }
 
 [workspace.dependencies]
 assets = { path = "assets" }
+parcnet-pod = { path = "parcnet-pod" }
 pod2 = { path = "pod2" }
 constants = { path = "constants" }
 anyhow = "1.0.86"
