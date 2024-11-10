@@ -357,7 +357,6 @@ mod tests {
     use crate::signature::jubjubfield::CircuitBuilderJubjubField;
     use crate::signature::jubjubfield::WitnessJubjubField;
 
-
     #[test]
     fn test_jubjubfield_arith() -> Result<()> {
         // compute and verify (1 + 1/3 + 4/3) * 3 = 8

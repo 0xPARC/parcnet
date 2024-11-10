@@ -5433,7 +5433,6 @@ checksum = "953ec861398dccce10c670dfeaf3ec4911ca479e9c02154b3a215178c5f566f2"
 [[package]]
 name = "plonky2"
 version = "0.2.2"
-source = "git+https://github.com/mir-protocol/plonky2#2488cdacd49ede15737bc1172546d82e9521b79b"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5457,7 +5456,6 @@ dependencies = [
 [[package]]
 name = "plonky2_field"
 version = "0.2.2"
-source = "git+https://github.com/mir-protocol/plonky2#2488cdacd49ede15737bc1172546d82e9521b79b"
 dependencies = [
  "anyhow",
  "itertools 0.11.0",
@@ -5472,7 +5470,6 @@ dependencies = [
 [[package]]
 name = "plonky2_maybe_rayon"
 version = "0.2.0"
-source = "git+https://github.com/mir-protocol/plonky2#2488cdacd49ede15737bc1172546d82e9521b79b"
 dependencies = [
  "rayon",
 ]
@@ -5480,7 +5477,6 @@ dependencies = [
 [[package]]
 name = "plonky2_util"
 version = "0.2.0"
-source = "git+https://github.com/mir-protocol/plonky2#2488cdacd49ede15737bc1172546d82e9521b79b"
 
 [[package]]
 name = "plotters"
@@ -5570,6 +5566,7 @@ name = "pod2"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "env_logger",
  "hashbrown 0.14.5",
  "itertools 0.13.0",
