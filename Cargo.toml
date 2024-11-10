@@ -22,4 +22,6 @@ anyhow = "1.0.86"
 iroh = "0.26.0"
 rust-embed = { version = "8.4", features = ["include-exclude"] }
 gpui = { git = "https://github.com/zed-industries/zed" }
-plonky2 = { git = "https://github.com/mir-protocol/plonky2" }
+#plonky2 = { git = "https://github.com/mir-protocol/plonky2" }
+plonky2 = { path = "../clones/plonky2/plonky2" }
+chrono = "0.4"
