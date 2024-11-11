@@ -1,0 +1,2 @@
+thread 'signature::eddsa::tests::test_constrain_sig' panicked at pod2/src/signature/eddsa.rs:226:36:
+called `Result::unwrap()` on an `Err` value: Partition containing VirtualTarget { index: 283104 } was set twice with different values: 2160886644 != 927483561

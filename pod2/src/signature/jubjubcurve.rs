@@ -24,6 +24,12 @@ pub trait CircuitBuilderJubjubCurve {
 
     fn connect_jubjub_curve(&mut self, a: &JubjubCurveTarget, b: &JubjubCurveTarget);
 
+    fn is_equal_jubjub_curve(
+        &mut self, 
+        a: &JubjubCurveTarget, 
+        b: &JubjubCurveTarget
+    ) -> BoolTarget;
+
     fn zero_jubjub_curve(&mut self) -> JubjubCurveTarget;
 
     fn B8_jubjub_curve(&mut self) -> JubjubCurveTarget;
@@ -65,6 +71,17 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
     fn connect_jubjub_curve(&mut self, a: &JubjubCurveTarget, b: &JubjubCurveTarget) {
         self.connect_jubjubfield(&a.x, &b.x);
         self.connect_jubjubfield(&a.y, &b.y);
+    }
+
+    fn is_equal_jubjub_curve(
+        &mut self, 
+        a: &JubjubCurveTarget, 
+        b: &JubjubCurveTarget
+    ) -> BoolTarget {
+        let x_is_equal = self.is_equal_jubjubfield(&a.x, &b.x).target;
+        let y_is_equal = self.is_equal_jubjubfield(&a.y, &b.y).target;
+        let result_is_equal = self.mul(x_is_equal, y_is_equal);
+        BoolTarget::new_unsafe(result_is_equal)
     }
 
     fn zero_jubjub_curve(&mut self) -> JubjubCurveTarget {
@@ -405,7 +422,6 @@ mod tests {
         )
         .unwrap();
         let r = builder.constant_biguint(&r_val);
-        let zero = builder.zero_jubjub_curve();
 
         let scalar_mul_res = builder.mul_scalar(&p, &r);
 
