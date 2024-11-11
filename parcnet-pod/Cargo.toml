@@ -14,6 +14,10 @@ name = "parcnet_pod"
 path = "src/lib.rs"
 
 [dependencies]
+ark-bn254 = "0.4.0"
+ark-ff = "0.4.0"
+ark-std = "0.4.0"
+babyjubjub-ark = { git = "https://github.com/ax0/babyjubjub-ark", version = "0.0.1" }
 base64 = "0.22.1"
 ff = { package = "ff_ce", version = "0.11", features = ["derive"] }
 hex = "0.4.3"
@@ -21,6 +25,7 @@ indexmap = { version = "2.5.0", features = ["serde"] }
 lazy_static = "1.5.0"
 num-bigint = { version = "0.4.6", features = ["serde"] }
 num-traits = "0.2.19"
+poseidon-ark = { git = "https://github.com/arnaucube/poseidon-ark", version = "0.0.1" }
 poseidon-rs = "0.0.10"
 rand = "0.8.5"
 serde = { version = "1.0.210", features = ["derive"] }
