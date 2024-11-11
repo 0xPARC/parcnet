@@ -4,3 +4,4 @@
 *.log
 history.txt
 */_todo
+*/_debug

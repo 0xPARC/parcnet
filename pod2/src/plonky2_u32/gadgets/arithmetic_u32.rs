@@ -18,6 +18,12 @@ use crate::plonky2_u32::gates::arithmetic_u32::U32ArithmeticGate;
 use crate::plonky2_u32::gates::subtraction_u32::U32SubtractionGate;
 use crate::plonky2_u32::serialization::{ReadU32, WriteU32};
 use crate::plonky2_u32::witness::GeneratedValuesU32;
+use crate::signature::biguint::{
+    BigUintTarget, 
+    CircuitBuilderBiguint, 
+    GeneratedValuesBigUint,
+    WitnessBigUint
+};
 
 #[derive(Clone, Copy, Debug)]
 pub struct U32Target(pub Target);

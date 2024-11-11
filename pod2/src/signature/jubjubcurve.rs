@@ -31,6 +31,12 @@ pub trait CircuitBuilderJubjubCurve {
         b: &JubjubCurveTarget
     );
 
+    fn is_equal_jubjub_curve(
+        &mut self, 
+        a: &JubjubCurveTarget, 
+        b: &JubjubCurveTarget
+    ) -> BoolTarget;
+
     fn zero_jubjub_curve(&mut self) -> JubjubCurveTarget;
 
     fn B8_jubjub_curve(&mut self) -> JubjubCurveTarget;
@@ -76,6 +82,17 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
     ) {
         self.connect_jubjubfield(&a.x, &b.x);
         self.connect_jubjubfield(&a.y, &b.y);
+    }
+
+    fn is_equal_jubjub_curve(
+        &mut self, 
+        a: &JubjubCurveTarget, 
+        b: &JubjubCurveTarget
+    ) -> BoolTarget {
+        let x_is_equal = self.is_equal_jubjubfield(&a.x, &b.x).target;
+        let y_is_equal = self.is_equal_jubjubfield(&a.y, &b.y).target;
+        let result_is_equal = self.mul(x_is_equal, y_is_equal);
+        BoolTarget::new_unsafe(result_is_equal)
     }
 
     fn zero_jubjub_curve(&mut self) -> JubjubCurveTarget {
@@ -216,7 +233,7 @@ mod tests {
         type C = PoseidonGoldilocksConfig;
 
         let config = CircuitConfig::standard_recursion_config();
-        let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
+        let pw: PartialWitness<GoldilocksField> = PartialWitness::new();
         let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
 
         let x_val = BigUint::from_str("5299619240641551281634865583518297030282874472190772894086521144482721001553").unwrap();
@@ -237,7 +254,7 @@ mod tests {
         type C = PoseidonGoldilocksConfig;
 
         let config = CircuitConfig::standard_recursion_config();
-        let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
+        let pw: PartialWitness<GoldilocksField> = PartialWitness::new();
         let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
 
         let px_val = BigUint::from_str(
@@ -289,7 +306,7 @@ mod tests {
         type C = PoseidonGoldilocksConfig;
 
         let config = CircuitConfig::standard_recursion_config();
-        let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
+        let pw: PartialWitness<GoldilocksField> = PartialWitness::new();
         let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
 
         let px_val = BigUint::from_str(
@@ -388,7 +405,7 @@ mod tests {
         type C = PoseidonGoldilocksConfig;
 
         let config = CircuitConfig::standard_recursion_config();
-        let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
+        let pw: PartialWitness<GoldilocksField> = PartialWitness::new();
         let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
 
         let p = builder.B8_jubjub_curve();
@@ -396,7 +413,6 @@ mod tests {
             "2736030358979909402780800718157159386076813972158567259200215660948447373041"
         ).unwrap();
         let r = builder.constant_biguint(&r_val);
-        let zero = builder.zero_jubjub_curve();
 
         let scalar_mul_res = builder.mul_scalar(&p,& r);
 

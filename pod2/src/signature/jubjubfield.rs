@@ -2,7 +2,7 @@ use anyhow::Error;
 use num::BigUint;
 use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
 use plonky2::iop::generator::{GeneratedValues, SimpleGenerator};
-use plonky2::iop::target::Target;
+use plonky2::iop::target::{BoolTarget, Target};
 use plonky2::iop::witness::{PartitionWitness, Witness};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::circuit_data::CommonCircuitData;
@@ -58,6 +58,12 @@ pub trait CircuitBuilderJubjubField {
         a: &JubjubFieldTarget, 
         b: &JubjubFieldTarget
     );
+
+    fn is_equal_jubjubfield(
+        &mut self, 
+        a: &JubjubFieldTarget, 
+        b: &JubjubFieldTarget
+    ) -> BoolTarget;
 
     fn add_jubjubfield(
         &mut self, 
@@ -153,6 +159,14 @@ impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
         b: &JubjubFieldTarget
     ) {
         self.connect_biguint(&a.0, &b.0);
+    }
+
+    fn is_equal_jubjubfield(
+        &mut self, 
+        a: &JubjubFieldTarget, 
+        b: &JubjubFieldTarget
+    ) -> BoolTarget {
+        self.is_equal_biguint(&a.0, &b.0)
     }
 
     fn add_jubjubfield(
