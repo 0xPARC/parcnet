@@ -42,6 +42,8 @@ pub trait CircuitBuilderBiguint<F: RichField + Extendable<D>, const D: usize> {
 
     fn connect_biguint(&mut self, lhs: &BigUintTarget, rhs: &BigUintTarget);
 
+    fn is_equal_biguint(&mut self, lhs: &BigUintTarget, rhs: &BigUintTarget) -> BoolTarget;
+
     fn pad_biguints(
         &mut self,
         a: &BigUintTarget,
@@ -135,6 +137,20 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilderBiguint<F, D>
         let (a, b) = self.pad_biguints(a, b);
 
         list_le_u32_circuit(self, a.limbs, b.limbs)
+    }
+
+    fn is_equal_biguint(&mut self, lhs: &BigUintTarget, rhs: &BigUintTarget) -> BoolTarget {
+        let (a, b) = self.pad_biguints(lhs, rhs);
+
+        let n = a.num_limbs();
+        let mut result: Vec<Target> = Vec::new();
+        result.push(self._true().target);
+        for i in 0..n {
+            let this_limb_cmp_result = self.is_equal(a.limbs[i].0, b.limbs[i].0);
+            let result_after_this_limb = self.mul(*result.last().unwrap(), this_limb_cmp_result.target);
+            result.push(result_after_this_limb);
+        }
+        BoolTarget::new_unsafe(*result.last().unwrap())
     }
 
     fn add_virtual_biguint_target(&mut self, num_limbs: usize) -> BigUintTarget {
@@ -545,5 +561,80 @@ mod tests {
         let data = builder.build::<C>();
         let proof = data.prove(pw).unwrap();
         data.verify(proof)
+    }
+
+    #[test]
+    fn test_is_equal_true() {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+
+        let config = CircuitConfig::standard_recursion_config();
+        let pw = PartialWitness::new();
+        let mut builder = CircuitBuilder::<F, D>::new(config);
+
+        let x_val = BigUint::new(vec![100, 200]);
+        let y_val = BigUint::new(vec![100, 200, 0, 0, 0]);
+        let x = builder.constant_biguint(&x_val);
+        let y = builder.constant_biguint(&y_val);
+
+        let cmp = builder.is_equal_biguint(&x, &y);
+        let cmp_expected = builder._true();
+        builder.connect(cmp.target, cmp_expected.target);
+
+        let data = builder.build::<C>();
+        let proof = data.prove(pw).unwrap();
+        data.verify(proof);
+        ()
+    }
+    
+    #[test]
+    fn test_is_equal_false_0() {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+
+        let config = CircuitConfig::standard_recursion_config();
+        let pw = PartialWitness::new();
+        let mut builder = CircuitBuilder::<F, D>::new(config);
+
+        let x_val = BigUint::new(vec![100, 200]);
+        let y_val = BigUint::new(vec![100, 200, 0, 0, 1]);
+        let x = builder.constant_biguint(&x_val);
+        let y = builder.constant_biguint(&y_val);
+
+        let cmp = builder.is_equal_biguint(&x, &y);
+        let cmp_expected = builder._false();
+        builder.connect(cmp.target, cmp_expected.target);
+
+        let data = builder.build::<C>();
+        let proof = data.prove(pw).unwrap();
+        data.verify(proof);
+        ()
+    }
+    
+    #[test]
+    fn test_is_equal_false_1() {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+
+        let config = CircuitConfig::standard_recursion_config();
+        let pw = PartialWitness::new();
+        let mut builder = CircuitBuilder::<F, D>::new(config);
+
+        let x_val = BigUint::new(vec![100, 200]);
+        let y_val = BigUint::new(vec![101, 200, 0, 0, 0]);
+        let x = builder.constant_biguint(&x_val);
+        let y = builder.constant_biguint(&y_val);
+
+        let cmp = builder.is_equal_biguint(&x, &y);
+        let cmp_expected = builder._false();
+        builder.connect(cmp.target, cmp_expected.target);
+
+        let data = builder.build::<C>();
+        let proof = data.prove(pw).unwrap();
+        data.verify(proof);
+        ()
     }
 }
