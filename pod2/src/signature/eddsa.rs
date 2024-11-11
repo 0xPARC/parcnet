@@ -65,7 +65,6 @@ impl EddsaBuilder for CircuitBuilder<GoldF, 2> {
         pk: &EddsaPublicKeyTarget,
         hash: &PoseidonOutputTarget, // will not be needed in final version
     ) -> BoolTarget {      
-        // WARNING this constrains the sig to be true
         self.verify_jubjub_point(&sig.r);
         self.verify_jubjub_point(&pk.a);
 //        HASH TO BE IMPLEMENTED: h should be Poseidon hash of sig.r, pk, msg
@@ -120,9 +119,6 @@ mod tests {
 
     #[test]
     fn test_constrain_sig() {
-        dbg!("Start");
-        dbg!(Local::now());
-
         type C = PoseidonGoldilocksConfig;
 
         let config = CircuitConfig::standard_recursion_config();
@@ -172,33 +168,80 @@ mod tests {
             552733937179642407,
         ]));
 
-        // debugging stuff below
-        let l_x_val = BigUint::new(u64_to_u32(vec![
-            6769147921293935476,
-            15234125309804266507,
-            13638367337124659210,
-            2737797199439730818,
-        ]));
-        let l_y_val = BigUint::new(u64_to_u32(vec![
-            8193767042881930160,
-            8036380828119749438,
-            15022032414377487346,
-            2478297568907217475,
-        ]));
-        let htpk_x_val = BigUint::new(u64_to_u32(vec![
-            9360752292746738455,
-            7922225397280932462,
-            2682949893567020685,
-            1952627290260948083,
-        ]));
-        let htpk_y_val = BigUint::new(u64_to_u32(vec![
-            11852217244879769029,
-            733283315823029871,
-            4390128762781367190,
-            1336738926330490135,
-        ]));
+        let px = JubjubFieldTarget(builder.constant_biguint(&px_val));
+        let py = JubjubFieldTarget(builder.constant_biguint(&py_val));
+        let msg = JubjubFieldTarget(builder.constant_biguint(&msg_val));
+        let sig_r_x = JubjubFieldTarget(builder.constant_biguint(&sig_r_x_val));
+        let sig_r_y = JubjubFieldTarget(builder.constant_biguint(&sig_r_y_val));
+        let sig_s = JubjubFieldTarget(builder.constant_biguint(&sig_s_val));
+        let hash = JubjubFieldTarget(builder.constant_biguint(&hash_val));
 
-        dbg!(());
+        let pk = JubjubCurveTarget{ x: px, y: py };
+        let sig_r = JubjubCurveTarget{ x: sig_r_x, y: sig_r_y };
+
+        let msg = MessageHashTarget{ m: msg.0 };
+        let hash = PoseidonOutputTarget{ h: hash.0 };
+        let sig = EddsaSignatureTarget{ r: sig_r, s: sig_s.0 };
+        let pk = EddsaPublicKeyTarget{ a: pk };
+
+        builder.constrain_eddsa::<C>(&sig, &msg, &pk, &hash);
+
+        let data = builder.build::<C>();
+        let proof = data.prove(pw).unwrap();
+        data.verify(proof);
+    }
+    
+    #[test]
+    fn test_verify_sig_to_false() {
+        // this signature is incorrect, test should fail
+        type C = PoseidonGoldilocksConfig;
+
+        let config = CircuitConfig::standard_recursion_config();
+        let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
+        let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
+
+        let px_val = BigUint::new(u64_to_u32(vec![
+            14816813974455191966,
+            5621129177994019323,
+            12490529648725145515,
+            2248846258813109077,
+        ]));
+        let py_val = BigUint::new(u64_to_u32(vec![
+            3097575793274345236,
+            15962616084270543162,
+            8589537196731344667,
+            1113026192110903546,
+        ]));
+        let msg_val = BigUint::new(u64_to_u32(vec![
+            14083847773837265618,
+            6692605942,
+            0,
+            0,
+        ]));
+        let sig_r_x_val = BigUint::new(u64_to_u32(vec![
+            3702867781738010923,
+            14038445494684018940,
+            2926507124369429729,
+            656908260954674802,
+        ]));
+        let sig_r_y_val = BigUint::new(u64_to_u32(vec![
+            15389942651936426876,
+            9092269394130748824,
+            5881620769130576924,
+            3001649752140069537,
+        ]));
+        let sig_s_val = BigUint::new(u64_to_u32(vec![
+            6537028312969761294,
+            10681752862721662900,
+            14992547060379445581,
+            133925459310743681, // this value was changed from the correct val
+        ]));
+        let hash_val = BigUint::new(u64_to_u32(vec![ // should be computed automatically later
+            2709608945152055826,
+            8217237346447623338,
+            9578917324956230137,
+            552733937179642407,
+        ]));
 
         let px = JubjubFieldTarget(builder.constant_biguint(&px_val));
         let py = JubjubFieldTarget(builder.constant_biguint(&py_val));
@@ -216,39 +259,12 @@ mod tests {
         let sig = EddsaSignatureTarget{ r: sig_r, s: sig_s.0 };
         let pk = EddsaPublicKeyTarget{ a: pk };
 
-        //debug
-        /* 
-        let l_x = JubjubFieldTarget(builder.constant_biguint(&l_x_val));
-        let l_y = JubjubFieldTarget(builder.constant_biguint(&l_y_val));
-        let l = JubjubCurveTarget{ x: l_x, y: l_y };
-
-        let b8 = builder.B8_jubjub_curve();
-        let lhs: JubjubCurveTarget = builder.mul_scalar(&b8, &sig.s);
-        builder.connect_jubjub_curve(&lhs, &l);
-
-        let htpk_x = JubjubFieldTarget(builder.constant_biguint(&htpk_x_val));
-        let htpk_y = JubjubFieldTarget(builder.constant_biguint(&htpk_y_val));
-        let htpk = JubjubCurveTarget{ x: htpk_x, y: htpk_y };
-
-        let eight = builder.constant_biguint(&BigUint::new(vec![8]));
-        let eight_times_pk = builder.mul_scalar(&pk.a, &eight);
-        let hash_times_pk = builder.mul_scalar(&eight_times_pk, &hash.h);
-        */
-
-        builder.constrain_eddsa::<C>(&sig, &msg, &pk, &hash);
-
-        dbg!(&pk);
-        dbg!(&sig.r);
-        dbg!(&sig.s);
-
-        dbg!("look");
-        dbg!(Local::now());
+        let sig_result = builder.verify_eddsa::<C>(&sig, &msg, &pk, &hash);
+        let false_target = builder._false();
+        builder.connect(sig_result.target, false_target.target);
 
         let data = builder.build::<C>();
-        dbg!(());
-        dbg!(Local::now());
         let proof = data.prove(pw).unwrap();
-        dbg!(());
         data.verify(proof);
     }
 }
