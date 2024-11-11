@@ -339,28 +339,12 @@ mod tests {
         builder.connect_jubjub_curve(&p_10, &p_scalar_ten);
 
         let data = builder.build::<C>();
-        /*
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/iop/generator.rs:51:5] &witness.values.len() = 8865048
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/iop/generator.rs:52:5] &witness.values.iter().filter(|&x| x.is_some()).count() = 0
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/iop/generator.rs:58:5] pending_generator_indices.len() = 193793
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/iop/generator.rs:71:13] pending_generator_indices.len() = 193793
-        */
-
-        /*
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/plonk/prover.rs:136:5] &partition_witness.values.len() = 8865048
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/plonk/prover.rs:137:5] &partition_witness.num_wires = 135
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/plonk/prover.rs:138:5] &partition_witness.representative_map.len() = 8865048
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/plonk/prover.rs:139:5] &partition_witness.degree = 65536
-        */
         let proof = data.prove(pw).unwrap();
         data.verify(proof);
     }
 
     #[test]
-    fn test_scalar_mul_2() { // 3282 s --> 278 s
-        //dbg!("Start test");
-        //dbg!(Local::now());
-
+    fn test_scalar_mul_2() {
         type C = PoseidonGoldilocksConfig;
 
         let config = CircuitConfig::standard_recursion_config();
@@ -379,33 +363,10 @@ mod tests {
 
         builder.connect_jubjub_curve(&zero, &scalar_mul_res);
 
-        dbg!("Before build"); // 15 sec in --> 5 secs
-        dbg!(Local::now());
         let data = builder.build::<C>();
-        dbg!("Before prove"); // 12 mins in --> 1 min (35:55)
-        dbg!(Local::now());
 
-        // 70912023
-        /*
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/iop/generator.rs:51:5] &witness.values.len() = 70912023
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/iop/generator.rs:52:5] &witness.values.iter().filter(|&x| x.is_some()).count() = 0
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/iop/generator.rs:58:5] pending_generator_indices.len() = 1483890
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/iop/generator.rs:71:13] pending_generator_indices.len() = 1483890
-        */
-
-        /* 
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/plonk/prover.rs:135:5] "Let's look at the partition witness" = "Let's look at the partition witness"
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/plonk/prover.rs:136:5] &partition_witness.values.len() = 70912023
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/plonk/prover.rs:137:5] &partition_witness.num_wires = 135
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/plonk/prover.rs:138:5] &partition_witness.representative_map.len() = 70912023
-        [/Users/brian/Documents/work/code/clones/plonky2/plonky2/src/plonk/prover.rs:139:5] &partition_witness.degree = 524288
-        */
         let proof: plonky2::plonk::proof::ProofWithPublicInputs<GoldilocksField, PoseidonGoldilocksConfig, 2> = data.prove(pw).unwrap();
-        dbg!("Before verify"); // 5 mins in
-        dbg!(Local::now());
         data.verify(proof);
-        dbg!("Done!"); // 5 mins in (verify takes 40 ms)
-        dbg!(Local::now());
     }
 
     #[test]
