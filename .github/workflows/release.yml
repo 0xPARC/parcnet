@@ -3,9 +3,6 @@ name: Build & release chat
 on:
   push:
     branches: [main]
-  pull_request:
-    branches:
-      - "**"
   workflow_dispatch:
     inputs:
       release:
