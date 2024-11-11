@@ -21,8 +21,10 @@ pub enum Operation<S: StatementOrRef> {
     EqualityFromEntries(S, S),
     NonequalityFromEntries(S, S),
     GtFromEntries(S, S),
+    LtFromEntries(S, S),
     TransitiveEqualityFromStatements(S, S),
     GtToNonequality(S),
+    LtToNonequality(S),
     ContainsFromEntries(S, S),
     RenameContainedBy(S, S),
     SumOf(S, S, S),
@@ -51,11 +53,20 @@ impl Operation<Statement> {
             ) if v1.to_canonical_u64() > v2.to_canonical_u64() => {
                 Ok(Statement::Gt(anchkey1.clone(), anchkey2.clone()))
             }
+            Self::LtFromEntries(
+                Statement::ValueOf(anchkey1, ScalarOrVec::Scalar(v1)),
+                Statement::ValueOf(anchkey2, ScalarOrVec::Scalar(v2)),
+            ) if v1.to_canonical_u64() < v2.to_canonical_u64() => {
+                Ok(Statement::Lt(anchkey1.clone(), anchkey2.clone()))
+            }
             Self::TransitiveEqualityFromStatements(
                 Statement::Equal(anchkey1, anchkey2),
                 Statement::Equal(anchkey3, anchkey4),
             ) if anchkey2.eq(anchkey3) => Ok(Statement::Equal(anchkey1.clone(), anchkey4.clone())),
             Self::GtToNonequality(Statement::Gt(anchkey1, anchkey2)) => {
+                Ok(Statement::NotEqual(anchkey1.clone(), anchkey2.clone()))
+            }
+            Self::LtToNonequality(Statement::Lt(anchkey1, anchkey2)) => {
                 Ok(Statement::NotEqual(anchkey1.clone(), anchkey2.clone()))
             }
             Self::ContainsFromEntries(
@@ -99,7 +110,7 @@ impl Operation<Statement> {
                     anchkey3.clone(),
                 ))
             }
-            _ => Err(anyhow!("Invalid claim.")),
+            _ => Err(anyhow!("Invalid claim: {:?}", self)),
         }
     }
 }
@@ -124,6 +135,10 @@ impl<S: StatementOrRef> Operation<S> {
                 s1.deref_cloned(table)?,
                 s2.deref_cloned(table)?,
             )),
+            Self::LtFromEntries(s1, s2) => Ok(Op::LtFromEntries(
+                s1.deref_cloned(table)?,
+                s2.deref_cloned(table)?,
+            )),
             Self::TransitiveEqualityFromStatements(s1, s2) => {
                 Ok(Op::TransitiveEqualityFromStatements(
                     s1.deref_cloned(table)?,
@@ -131,6 +146,7 @@ impl<S: StatementOrRef> Operation<S> {
                 ))
             }
             Self::GtToNonequality(s) => Ok(Op::GtToNonequality(s.deref_cloned(table)?)),
+            Self::LtToNonequality(s) => Ok(Op::LtToNonequality(s.deref_cloned(table)?)),
             Self::ContainsFromEntries(s1, s2) => Ok(Op::ContainsFromEntries(
                 s1.deref_cloned(table)?,
                 s2.deref_cloned(table)?,
@@ -170,6 +186,8 @@ impl<S: StatementOrRef> Operation<S> {
     pub const SUM_OF: GoldilocksField = GoldilocksField(10);
     pub const PRODUCT_OF: GoldilocksField = GoldilocksField(11);
     pub const MAX_OF: GoldilocksField = GoldilocksField(12);
+    pub const LT_FROM_ENTRIES: GoldilocksField = GoldilocksField(13);
+    pub const LT_TO_NONEQUALITY: GoldilocksField = GoldilocksField(14);
 
     /// Method specifying opcodes.
     pub fn code(&self) -> GoldilocksField {
@@ -189,6 +207,8 @@ impl<S: StatementOrRef> Operation<S> {
             Self::SumOf(_, _, _) => Self::SUM_OF,
             Self::ProductOf(_, _, _) => Self::PRODUCT_OF,
             Self::MaxOf(_, _, _) => Self::MAX_OF,
+            Self::LtFromEntries(_, _) => Self::LT_FROM_ENTRIES,
+            Self::LtToNonequality(_) => Self::LT_TO_NONEQUALITY,
         }
     }
     /// Method specifying operands.
@@ -232,14 +252,19 @@ impl OperationCmd {
 
 impl Operation<StatementRef> {
     /// Representation of operation command as field vector of length
-    /// 9 of the form
+    /// 9 + VL of the form
     /// [code] ++ [pod_num1, statement_num1] ++ [pod_num2,
-    ///   statement_num2] ++ [pod_num3, statement_num3] ++ [entry],
-    /// where we substitute 0s for unused operands and entries.
-    pub fn to_fields(
+    ///   statement_num2] ++ [pod_num3, statement_num3] ++ [entry]
+    ///   ++ contains_proof,
+    /// where `VL` stands for the length of the vector involved in a
+    /// `contains` op and we substitute 0s for unused operands and
+    /// entries.
+    pub fn to_fields<const VL: usize>(
         &self,
         ref_index_map: &HashMap<StatementRef, (usize, usize)>,
+        statement_table: &<StatementRef as StatementOrRef>::StatementTable,
     ) -> Result<Vec<GoldilocksField>> {
+        let op_code = self.code();
         // Enumerate operands, substitute indices and pad with 0s.
         let operands = self
             .operands()
@@ -266,7 +291,33 @@ impl Operation<StatementRef> {
             .entry()
             .map_or(vec![GoldilocksField::ZERO; 2], |e| e.to_fields());
 
-        Ok([vec![self.code()], padded_operands, entry].concat())
+        // Check for `contains` op.
+        let contains_proof = match self {
+            Self::ContainsFromEntries(s_ref, _) => {
+                // Look up statement
+                let statement = s_ref.deref_cloned(statement_table)?;
+                match statement {
+                    Statement::ValueOf(_, ScalarOrVec::Vector(v)) => {
+                        if v.len() == VL {
+                            Ok(v.clone())
+                        } else {
+                            Err(anyhow!(
+                                "Vector {:?} in CONTAINS op is not of length {}.",
+                                v,
+                                VL
+                            ))
+                        }
+                    }
+                    _ => Err(anyhow!(
+                        "Improper statement argument to CONTAINS op: {:?}",
+                        statement
+                    )),
+                }
+            }
+            _ => Ok(vec![GoldilocksField::ZERO; VL]),
+        }?;
+
+        Ok([vec![op_code], padded_operands, entry, contains_proof].concat())
     }
 }
 
@@ -303,6 +354,8 @@ impl OpList {
                 Operation::SumOf(_, _, _) => 6,
                 Operation::ProductOf(_, _, _) => 7,
                 Operation::MaxOf(_, _, _) => 8,
+                Operation::LtFromEntries(_, _) => 9,
+                Operation::LtToNonequality(_) => 3,
             }))
         };
 
@@ -315,17 +368,22 @@ impl OpList {
         });
         Self(sorted_opcmds)
     }
-    pub fn to_fields(&self, pods_list: &[(String, POD)]) -> Result<Vec<Vec<GoldilocksField>>> {
-        // Map from StatementRef to pair of the form (pod index, statement index)
-        let ref_index_map = StatementRef::index_map(pods_list);
-
-        // Arrange OpCmds by output statement name and convert.
-        let sorted_oplist = self.sort(pods_list);
-
-        sorted_oplist
-            .0
-            .iter()
-            .map(|OperationCmd(op, _)| op.to_fields(&ref_index_map))
-            .collect::<Result<Vec<Vec<_>>>>()
+    pub fn pad<const NS: usize>(self) -> Result<Self> {
+        let op_list_len = self.0.len();
+        if op_list_len > NS {
+            return Err(anyhow!(
+                "The operation list must contain at most {} operations.",
+                NS
+            ));
+        }
+        Ok(Self(
+            [
+                self.0,
+                (op_list_len..NS)
+                    .map(|i| OperationCmd(Operation::None, format!("_DUMMY_STATEMENT{}", i)))
+                    .collect(),
+            ]
+            .concat(),
+        ))
     }
 }

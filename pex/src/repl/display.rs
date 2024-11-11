@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use colored::Colorize;
+use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
 use pod2::pod::{statement::AnchoredKey, Statement, POD};
 
 use crate::{MyPods, PodBuilder};
@@ -111,6 +112,9 @@ impl<'a> StatementFormatter<'a> {
             ),
 
             Statement::Equal(op1, op2) => self.binary_op(op1, "=", op2),
+            Statement::Gt(op1, op2) => self.binary_op(op1, ">", op2),
+            Statement::Lt(op1, op2) => self.binary_op(op1, "<", op2),
+            Statement::NotEqual(op1, op2) => self.binary_op(op1, "!=", op2),
 
             Statement::ValueOf(key, value) => format!(
                 "{} {} = {}",
@@ -158,7 +162,12 @@ pub fn print_pod_details(pod: &POD, pod_store: &MyPods) {
                     matched_pod.proof_type.to_string().bright_cyan()
                 );
 
-                for (stmt_id, stmt) in matched_pod.payload.statements_map.iter() {
+                for (stmt_id, stmt) in matched_pod
+                    .payload
+                    .statements_map
+                    .iter()
+                    .filter(|(_, p)| p.code() != GoldilocksField::ZERO)
+                {
                     print_statement(stmt_id, stmt, "    ");
                 }
                 println!();
@@ -225,7 +234,12 @@ pub fn print_pod_details(pod: &POD, pod_store: &MyPods) {
     }
 
     print_section_header("POD Statements", Some(&pod.proof_type.to_string()));
-    for (statement_id, statement) in pod.payload.statements_map.iter() {
+    for (statement_id, statement) in pod
+        .payload
+        .statements_map
+        .iter()
+        .filter(|(_, p)| p.code() != GoldilocksField::ZERO)
+    {
         print_statement(statement_id, statement, "  ");
     }
     println!();

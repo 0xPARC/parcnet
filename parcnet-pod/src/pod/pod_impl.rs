@@ -108,6 +108,10 @@ impl From<BigInt> for PodValue {
 }
 
 impl Pod {
+    pub fn entries(&self) -> PodEntries {
+        self.claim.entries.clone()
+    }
+    
     pub fn get(&self, key: &str) -> Option<&PodValue> {
         self.claim.entries.get(key)
     }
@@ -132,10 +136,7 @@ impl Pod {
 pub fn pod_hash(value: &PodValue) -> Result<BigInt, PodCreationError> {
     match value {
         PodValue::String(s) => {
-            let digest = Sha256::digest(s.as_bytes());
-            let big_int = BigInt::from_bytes_be(num_bigint::Sign::Plus, &digest);
-            let shifted = big_int >> 8; // Add this line to shift right by 8 bits
-            Ok(shifted)
+            Ok(string_hash(s))
         }
         PodValue::Int(i) => hash_int(*i)
             .map_err(|e| PodCreationError::HashError(format!("Intenger hash failed: {}", e))),
@@ -143,6 +144,12 @@ pub fn pod_hash(value: &PodValue) -> Result<BigInt, PodCreationError> {
             PodCreationError::HashError(format!("Cryptographic hash (Big Int) failed: {}", e))
         }),
     }
+}
+
+pub fn string_hash(s: &str) -> BigInt {
+    let digest = Sha256::digest(s.as_bytes());
+    let big_int = BigInt::from_bytes_be(num_bigint::Sign::Plus, &digest);
+    big_int >> 8 // Add this line to shift right by 8 bits
 }
 
 #[derive(Error, Debug)]

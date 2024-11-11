@@ -90,7 +90,7 @@ impl Chat {
         let message = message_input.read(cx).get_content().to_string();
         let logic = self.logic.clone();
         cx.spawn(|view, mut cx| async move {
-            let _ = logic.send_message(&message).await.unwrap();
+            logic.send_message(&message).await.unwrap();
             let _ = cx.update(|cx| {
                 message_input.update(cx, |input, _| input.reset());
                 view.update(cx, |this, cx| {
@@ -106,7 +106,8 @@ impl Chat {
     fn scroll_to_bottom(&mut self) {
         let messages_len = self.logic.get_messages().len();
         if messages_len > 0 {
-            self.scroll_handle.scroll_to_item(messages_len - 1);
+            self.scroll_handle
+                .scroll_to_item(messages_len - 1, gpui::ScrollStrategy::Center);
         }
     }
 }

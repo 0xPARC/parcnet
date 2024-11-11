@@ -495,9 +495,9 @@ mod tests {
         assert_eq!(sig_vec.len(), M);
 
         type RC<const M: usize, const N: usize, const NS: usize, const VL: usize> =
-            RecursionCircuit<ExampleGadget, ExampleOpsExecutor<1>, M, N, NS, VL>;
+            RecursionCircuit<ExampleGadget, ExampleOpsExecutor<1, VL>, M, N, NS, VL>;
         type RT<const M: usize, const N: usize, const NS: usize, const VL: usize> =
-            RecursionTree<ExampleGadget, ExampleOpsExecutor<1>, M, N, NS, VL>;
+            RecursionTree<ExampleGadget, ExampleOpsExecutor<1, VL>, M, N, NS, VL>;
 
         // build the circuit_data & verifier_data for the recursive circuit
         let circuit_data = RC::<M, N, NS, VL>::circuit_data()?;
@@ -509,10 +509,8 @@ mod tests {
         // we start with k dummy proofs, since at the leafs level we don't have proofs yet and we
         // just verify the signatures. At each level we divide the amount of proofs by N. At the
         // root level there is a single proof.
-        let mut proofs_at_level_i: Vec<PlonkyProof> = (0..(N * N))
-            .into_iter()
-            .map(|_| dummy_proof.clone())
-            .collect();
+        let mut proofs_at_level_i: Vec<PlonkyProof> =
+            (0..(N * N)).map(|_| dummy_proof.clone()).collect();
 
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::new(config);
@@ -526,7 +524,7 @@ mod tests {
             let mut next_level_proofs: Vec<PlonkyProof> = vec![];
 
             // loop over the nodes of each recursion tree level
-            for j in (0..proofs_at_level_i.len()).into_iter().step_by(N) {
+            for j in (0..proofs_at_level_i.len()).step_by(N) {
                 println!(
                     "\n------ recursion node: (level) i={}, (node in level) j={}",
                     i, j

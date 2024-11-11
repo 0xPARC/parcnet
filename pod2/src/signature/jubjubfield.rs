@@ -10,13 +10,10 @@ use plonky2::util::serialization::{Buffer, IoResult};
 use std::fmt;
 use std::fmt::Display;
 
-use crate::signature::biguint::{
-    BigUintTarget, 
-    CircuitBuilderBiguint, 
-    GeneratedValuesBigUint,
-    WitnessBigUint
-};
 use crate::plonky2_u32::gadgets::arithmetic_u32::{CircuitBuilderU32, U32Target};
+use crate::signature::biguint::{
+    BigUintTarget, CircuitBuilderBiguint, GeneratedValuesBigUint, WitnessBigUint,
+};
 use crate::signature::serialization::{ReadBigUintTarget, WriteBigUintTarget};
 
 pub trait JubjubP {
@@ -26,17 +23,17 @@ pub trait JubjubP {
 // 21888242871839275222246405745257275088548364400416034343698204186575808495617
 impl JubjubP for BigUint {
     fn jubjub_p() -> BigUint {
-        BigUint::new( {vec![
-            4026531841, 1138881939, 2042196113, 674490440,
-            2172737629, 3092268470, 3778125865, 811880050,
-        ]})
+        BigUint::new({
+            vec![
+                4026531841, 1138881939, 2042196113, 674490440, 2172737629, 3092268470, 3778125865,
+                811880050,
+            ]
+        })
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct JubjubFieldTarget (
-    pub BigUintTarget,
-);
+pub struct JubjubFieldTarget(pub BigUintTarget);
 
 pub trait CircuitBuilderJubjubField {
     const JUBJUB_P_NUM_LIMBS: usize;
@@ -53,11 +50,7 @@ pub trait CircuitBuilderJubjubField {
 
     fn from_biguint_jubjubfield(&mut self, a: &BigUintTarget) -> JubjubFieldTarget;
 
-    fn connect_jubjubfield(
-        &mut self, 
-        a: &JubjubFieldTarget, 
-        b: &JubjubFieldTarget
-    );
+    fn connect_jubjubfield(&mut self, a: &JubjubFieldTarget, b: &JubjubFieldTarget);
 
     fn is_equal_jubjubfield(
         &mut self, 
@@ -66,37 +59,31 @@ pub trait CircuitBuilderJubjubField {
     ) -> BoolTarget;
 
     fn add_jubjubfield(
-        &mut self, 
-        a: &JubjubFieldTarget, 
-        b: &JubjubFieldTarget
-    ) -> JubjubFieldTarget;
-
-    fn neg_jubjubfield(
         &mut self,
         a: &JubjubFieldTarget,
+        b: &JubjubFieldTarget,
     ) -> JubjubFieldTarget;
+
+    fn neg_jubjubfield(&mut self, a: &JubjubFieldTarget) -> JubjubFieldTarget;
 
     fn sub_jubjubfield(
         &mut self,
-        a: &JubjubFieldTarget, 
-        b: &JubjubFieldTarget
+        a: &JubjubFieldTarget,
+        b: &JubjubFieldTarget,
     ) -> JubjubFieldTarget;
 
     fn mul_jubjubfield(
         &mut self,
-        a: &JubjubFieldTarget, 
-        b: &JubjubFieldTarget
+        a: &JubjubFieldTarget,
+        b: &JubjubFieldTarget,
     ) -> JubjubFieldTarget;
 
-    fn recip_jubjubfield(
-        &mut self,
-        a: &JubjubFieldTarget,
-    ) -> JubjubFieldTarget;
+    fn recip_jubjubfield(&mut self, a: &JubjubFieldTarget) -> JubjubFieldTarget;
 
     fn div_jubjubfield(
         &mut self,
-        a: &JubjubFieldTarget, 
-        b: &JubjubFieldTarget
+        a: &JubjubFieldTarget,
+        b: &JubjubFieldTarget,
     ) -> JubjubFieldTarget;
 }
 
@@ -104,47 +91,33 @@ impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
     const JUBJUB_P_NUM_LIMBS: usize = 8;
 
     fn jubjub_p(&mut self) -> BigUintTarget {
-        let limbs: Vec::<U32Target> = BigUint::jubjub_p()
+        let limbs: Vec<U32Target> = BigUint::jubjub_p()
             .iter_u32_digits()
             .map(|x| self.constant_u32(x))
             .collect();
-        BigUintTarget {limbs}
+        BigUintTarget { limbs }
     }
 
     fn add_virtual_jubjubfield_target(&mut self) -> JubjubFieldTarget {
-        JubjubFieldTarget (
-            self.add_virtual_biguint_target(Self::JUBJUB_P_NUM_LIMBS)
-        )
+        JubjubFieldTarget(self.add_virtual_biguint_target(Self::JUBJUB_P_NUM_LIMBS))
     }
 
     fn zero_jubjubfield(&mut self) -> JubjubFieldTarget {
-        JubjubFieldTarget (
-            BigUintTarget {
-                limbs: vec![
-                    self.constant_u32(0),
-                ]        
-            }
-        )
+        JubjubFieldTarget(BigUintTarget {
+            limbs: vec![self.constant_u32(0)],
+        })
     }
 
     fn one_jubjubfield(&mut self) -> JubjubFieldTarget {
-        JubjubFieldTarget (
-            BigUintTarget {
-                limbs: vec![
-                    self.constant_u32(1),
-                ]        
-            }
-        )
+        JubjubFieldTarget(BigUintTarget {
+            limbs: vec![self.constant_u32(1)],
+        })
     }
 
     fn from_u32_jubjubfield(&mut self, a: u32) -> JubjubFieldTarget {
-        JubjubFieldTarget (
-            BigUintTarget {
-                limbs: vec![
-                    self.constant_u32(a)
-                ]
-            }
-        )
+        JubjubFieldTarget(BigUintTarget {
+            limbs: vec![self.constant_u32(a)],
+        })
     }
 
     // reduces a mod jubjub_p, then converts to JubjubFieldTarget
@@ -153,11 +126,7 @@ impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
         JubjubFieldTarget(self.rem_biguint(a, &p))
     }
 
-    fn connect_jubjubfield(
-        &mut self, 
-        a: &JubjubFieldTarget, 
-        b: &JubjubFieldTarget
-    ) {
+    fn connect_jubjubfield(&mut self, a: &JubjubFieldTarget, b: &JubjubFieldTarget) {
         self.connect_biguint(&a.0, &b.0);
     }
 
@@ -170,19 +139,16 @@ impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
     }
 
     fn add_jubjubfield(
-        &mut self, 
-        a: &JubjubFieldTarget, 
-        b: &JubjubFieldTarget
+        &mut self,
+        a: &JubjubFieldTarget,
+        b: &JubjubFieldTarget,
     ) -> JubjubFieldTarget {
         let p = self.jubjub_p();
         let sum = self.add_biguint(&a.0, &b.0);
         JubjubFieldTarget(self.rem_biguint(&sum, &p))
     }
 
-    fn neg_jubjubfield(
-        &mut self,
-        a: &JubjubFieldTarget,
-    ) -> JubjubFieldTarget {
+    fn neg_jubjubfield(&mut self, a: &JubjubFieldTarget) -> JubjubFieldTarget {
         let p = self.jubjub_p();
         let diff = self.sub_biguint(&p, &a.0);
         JubjubFieldTarget(self.rem_biguint(&diff, &p))
@@ -190,8 +156,8 @@ impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
 
     fn sub_jubjubfield(
         &mut self,
-        a: &JubjubFieldTarget, 
-        b: &JubjubFieldTarget
+        a: &JubjubFieldTarget,
+        b: &JubjubFieldTarget,
     ) -> JubjubFieldTarget {
         let neg_b = self.neg_jubjubfield(b);
         self.add_jubjubfield(a, &neg_b)
@@ -199,26 +165,20 @@ impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
 
     fn mul_jubjubfield(
         &mut self,
-        a: &JubjubFieldTarget, 
-        b: &JubjubFieldTarget
+        a: &JubjubFieldTarget,
+        b: &JubjubFieldTarget,
     ) -> JubjubFieldTarget {
         let p = self.jubjub_p();
         let prod = self.mul_biguint(&a.0, &b.0);
         JubjubFieldTarget(self.rem_biguint(&prod, &p))
     }
 
-    fn recip_jubjubfield(
-        &mut self,
-        a: &JubjubFieldTarget,
-    ) -> JubjubFieldTarget {
-        let a_inv = self
-                .add_virtual_jubjubfield_target();
-        self.add_simple_generator(
-            JubjubFieldReciprocalGenerator {
-                a: a.clone(),
-                a_inv: a_inv.clone(),
-            }
-        );
+    fn recip_jubjubfield(&mut self, a: &JubjubFieldTarget) -> JubjubFieldTarget {
+        let a_inv = self.add_virtual_jubjubfield_target();
+        self.add_simple_generator(JubjubFieldReciprocalGenerator {
+            a: a.clone(),
+            a_inv: a_inv.clone(),
+        });
         let prod = self.mul_jubjubfield(a, &a_inv);
         let one = self.one_jubjubfield();
         self.connect_jubjubfield(&prod, &one);
@@ -227,8 +187,8 @@ impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
 
     fn div_jubjubfield(
         &mut self,
-        a: &JubjubFieldTarget, 
-        b: &JubjubFieldTarget
+        a: &JubjubFieldTarget,
+        b: &JubjubFieldTarget,
     ) -> JubjubFieldTarget {
         let b_inv = self.recip_jubjubfield(b);
         self.mul_jubjubfield(a, &b_inv)
@@ -236,59 +196,31 @@ impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
 }
 
 pub trait WitnessJubjubField {
-    fn get_jubjubfield_target(
-        &self, 
-        target: JubjubFieldTarget
-    ) -> BigUint;
-    fn get_jubjubfield_target_borrow(
-        &self,
-        target: &JubjubFieldTarget
-    ) -> BigUint;
-    fn set_jubjubfield_target(
-        &mut self, 
-        target: &JubjubFieldTarget, 
-        value: &BigUint
-    );
+    fn get_jubjubfield_target(&self, target: JubjubFieldTarget) -> BigUint;
+    fn get_jubjubfield_target_borrow(&self, target: &JubjubFieldTarget) -> BigUint;
+    fn set_jubjubfield_target(&mut self, target: &JubjubFieldTarget, value: &BigUint);
 }
 
 impl<T: Witness<GoldilocksField>> WitnessJubjubField for T {
-    fn get_jubjubfield_target(
-        &self, 
-        target: JubjubFieldTarget
-    ) -> BigUint {
+    fn get_jubjubfield_target(&self, target: JubjubFieldTarget) -> BigUint {
         self.get_biguint_target(target.0)
     }
 
-    fn get_jubjubfield_target_borrow(
-        &self,
-        target: &JubjubFieldTarget
-    ) -> BigUint {
+    fn get_jubjubfield_target_borrow(&self, target: &JubjubFieldTarget) -> BigUint {
         self.get_biguint_target(target.0.clone())
     }
 
-    fn set_jubjubfield_target(
-        &mut self, 
-        target: &JubjubFieldTarget, 
-        value: &BigUint
-    ) {
+    fn set_jubjubfield_target(&mut self, target: &JubjubFieldTarget, value: &BigUint) {
         self.set_biguint_target(&target.0, value);
     }
 }
 
 pub trait GeneratedValuesJubjubField {
-    fn set_jubjubfield_target(
-        &mut self, 
-        target: &JubjubFieldTarget, 
-        value: &BigUint
-    );
+    fn set_jubjubfield_target(&mut self, target: &JubjubFieldTarget, value: &BigUint);
 }
 
 impl GeneratedValuesJubjubField for GeneratedValues<GoldilocksField> {
-    fn set_jubjubfield_target(
-        &mut self, 
-        target: &JubjubFieldTarget, 
-        value: &BigUint
-    ) {
+    fn set_jubjubfield_target(&mut self, target: &JubjubFieldTarget, value: &BigUint) {
         self.set_biguint_target(&target.0, value);
     }
 }
@@ -297,9 +229,9 @@ impl GeneratedValuesJubjubField for GeneratedValues<GoldilocksField> {
 struct DivisionByZeroError {}
 
 impl Display for DivisionByZeroError {
-     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-         write!(f, "Attempted division by zero in jubjub field.")
-     }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Attempted division by zero in jubjub field.")
+    }
 }
 
 impl std::error::Error for DivisionByZeroError {}
@@ -320,22 +252,21 @@ impl SimpleGenerator<GoldilocksField, 2> for JubjubFieldReciprocalGenerator {
     }
 
     fn run_once(
-        &self, 
-        witness: &PartitionWitness<GoldilocksField>, 
-        out_buffer: &mut GeneratedValues<GoldilocksField>
+        &self,
+        witness: &PartitionWitness<GoldilocksField>,
+        out_buffer: &mut GeneratedValues<GoldilocksField>,
     ) -> Result<(), Error> {
         let a: BigUint = witness.get_jubjubfield_target(self.a.clone());
         let p: BigUint = BigUint::jubjub_p();
-        let a_inv: BigUint = a.modinv(&p)
-                .ok_or(Error::new(DivisionByZeroError{}))?;
+        let a_inv: BigUint = a.modinv(&p).ok_or(Error::new(DivisionByZeroError {}))?;
         out_buffer.set_jubjubfield_target(&self.a_inv, &a_inv);
         Ok(())
     }
 
     fn serialize(
-        &self, 
-        dst: &mut Vec<u8>, 
-        _common_data: &CommonCircuitData<GoldilocksField, 2>
+        &self,
+        dst: &mut Vec<u8>,
+        _common_data: &CommonCircuitData<GoldilocksField, 2>,
     ) -> IoResult<()> {
         dst.write_biguint_target(self.a.0.clone())?;
         dst.write_biguint_target(self.a_inv.0.clone())?;
@@ -344,17 +275,14 @@ impl SimpleGenerator<GoldilocksField, 2> for JubjubFieldReciprocalGenerator {
 
     fn deserialize(
         src: &mut Buffer,
-        _common_data: &CommonCircuitData<GoldilocksField, 2>
+        _common_data: &CommonCircuitData<GoldilocksField, 2>,
     ) -> IoResult<Self>
     where
         Self: Sized,
     {
         let a = JubjubFieldTarget(src.read_biguint_target()?);
         let a_inv = JubjubFieldTarget(src.read_biguint_target()?);
-        Ok(Self {
-            a,
-            a_inv,
-        })
+        Ok(Self { a, a_inv })
     }
 }
 
@@ -366,7 +294,10 @@ mod tests {
     use plonky2::iop::witness::PartialWitness;
     use plonky2::plonk::circuit_builder::CircuitBuilder;
     use plonky2::plonk::circuit_data::CircuitConfig;
-    use plonky2::{field::goldilocks_field::GoldilocksField, plonk::config::{GenericConfig, PoseidonGoldilocksConfig}};
+    use plonky2::{
+        field::goldilocks_field::GoldilocksField,
+        plonk::config::{GenericConfig, PoseidonGoldilocksConfig},
+    };
 
     use crate::signature::jubjubfield::CircuitBuilderJubjubField;
     use crate::signature::jubjubfield::WitnessJubjubField;
@@ -403,7 +334,7 @@ mod tests {
         pw.set_jubjubfield_target(&x, &x_value);
         pw.set_jubjubfield_target(&y, &y_value);
         pw.set_jubjubfield_target(&expected_result, &expected_result_value);
-        
+
         let data = builder.build::<C>();
         let proof = data.prove(pw).unwrap();
         data.verify(proof);
@@ -437,11 +368,11 @@ mod tests {
         pw.set_jubjubfield_target(&x, &x_value);
         pw.set_jubjubfield_target(&y, &y_value);
         pw.set_jubjubfield_target(&expected_result, &expected_result_value);
-        
+
         let data = builder.build::<C>();
         let proof = data.prove(pw);
         assert!(proof.is_err());
-        
+
         Ok(())
     }
 
@@ -469,7 +400,7 @@ mod tests {
         pw.set_jubjubfield_target(&x, &x_value);
         pw.set_jubjubfield_target(&y, &y_value);
         pw.set_jubjubfield_target(&expected_result, &expected_result_value);
-        
+
         let data = builder.build::<C>();
         let try_proof = data.prove(pw);
         let proof = try_proof.unwrap();
@@ -478,7 +409,6 @@ mod tests {
         Ok(())
     }
 
-    
     #[test]
     fn test_jubjubfield_muladd() -> Result<()> {
         // compute and verify (1 + 1/3 + 4/3) * 3 = 8
@@ -507,7 +437,7 @@ mod tests {
         pw.set_jubjubfield_target(&x, &x_value);
         pw.set_jubjubfield_target(&y, &y_value);
         pw.set_jubjubfield_target(&expected_result, &expected_result_value);
-        
+
         let data = builder.build::<C>();
         let proof = data.prove(pw).unwrap();
         data.verify(proof);

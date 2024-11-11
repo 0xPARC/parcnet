@@ -37,20 +37,20 @@ impl InnerCircuitTrait for ExampleGadget {
     type Input = ExampleGadgetInput;
 
     fn add_targets(
-        mut builder: &mut CircuitBuilder<F, D>,
+        builder: &mut CircuitBuilder<F, D>,
         selector_booltarg: &BoolTarget, // 1==inner circuit check enabled
     ) -> Result<Self::Targets> {
         // signature verification:
         let sb: SchnorrBuilder = SchnorrBuilder {};
-        let pk_targ = SchnorrPublicKeyTarget::new_virtual(&mut builder);
-        let sig_targ = SchnorrSignatureTarget::new_virtual(&mut builder);
-        let msg_targ = MessageTarget::new_with_size(&mut builder, 4);
-        let sig_verif_targ = sb.verify_sig::<C>(&mut builder, &sig_targ, &msg_targ, &pk_targ);
+        let pk_targ = SchnorrPublicKeyTarget::new_virtual(builder);
+        let sig_targ = SchnorrSignatureTarget::new_virtual(builder);
+        let msg_targ = MessageTarget::new_with_size(builder, 4);
+        let sig_verif_targ = sb.verify_sig::<C>(builder, &sig_targ, &msg_targ, &pk_targ);
 
         // if selector==1: verify the signature; else: don't check it. ie:
         //   if selector=1: check that sig_verif==1
         //   if selector=0: check that one==1
-        assert_one_if_enabled(builder, sig_verif_targ.target, &selector_booltarg);
+        assert_one_if_enabled(builder, sig_verif_targ.target, selector_booltarg);
 
         Ok(Self::Targets {
             pk_targ,
@@ -73,10 +73,10 @@ impl InnerCircuitTrait for ExampleGadget {
     }
 }
 
-pub struct ExampleOpsExecutor<const NS: usize>;
+pub struct ExampleOpsExecutor<const NS: usize, const VL: usize>;
 
-impl<const NS: usize> OpsExecutorTrait for ExampleOpsExecutor<NS> {
-    type Targets = [OperationTarget; NS];
+impl<const NS: usize, const VL: usize> OpsExecutorTrait for ExampleOpsExecutor<NS, VL> {
+    type Targets = [OperationTarget<VL>; NS];
     type Input = ();
     type Output = ();
 

@@ -6,7 +6,7 @@ mod pods;
 
 use auto_update::AutoUpdater;
 pub use auto_update::{get_app_path, get_current_version, is_dev};
-use constants::NS;
+use constants::{NS, VL};
 use futures::StreamExt;
 use identity::Identities;
 use iroh::client::Doc;
@@ -181,7 +181,7 @@ impl Logic {
 
         self.add_message(self.secret_key.public(), &message);
 
-        let schnorr_secret_key = self.schnorr_secret_key.clone();
+        let schnorr_secret_key = self.schnorr_secret_key;
         let pod_store = self.pod_store.clone();
         let input = input.to_string();
         let pod_watch = self.pod_watch.clone();
@@ -282,8 +282,8 @@ fn store_message_pod(
     input: &str,
 ) -> anyhow::Result<()> {
     let field_elem = get_string_field_elem(input);
-    let pod = POD::execute_schnorr_gadget::<NS>(
-        &vec![Entry::new_from_scalar("message", field_elem)],
+    let pod = POD::execute_schnorr_gadget::<NS, VL>(
+        &[Entry::new_from_scalar("message", field_elem)],
         &schnorr_secret_key,
     )
     .unwrap();

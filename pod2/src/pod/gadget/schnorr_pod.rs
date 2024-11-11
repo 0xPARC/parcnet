@@ -25,13 +25,17 @@ impl<const NS: usize> InnerCircuitTrait for SchnorrPODGadget<NS> {
     ) -> Result<Self::Targets> {
         let schnorr_pod_target = SchnorrPODTarget::new_virtual(builder, NS);
 
+        // Check thaht payload is valid.
+        schnorr_pod_target.check_payload(builder);
+
+        // Compute hash target.
         let hash_target = schnorr_pod_target.compute_hash_target(builder);
 
-        // add POD in-circuit verification logic
+        // Add POD in-circuit verification logic.
         let (_, verified) = schnorr_pod_target.compute_targets_and_verify(builder, &hash_target)?;
 
-        // if selector_booltarg=1, we check the verified.target
-        assert_one_if_enabled(builder, verified.target, &selector_booltarg);
+        // If selector_booltarg=1, check verified.target.
+        assert_one_if_enabled(builder, verified.target, selector_booltarg);
         Ok(schnorr_pod_target)
     }
 
@@ -66,11 +70,12 @@ mod tests {
     #[test]
     fn schnorr_pod_test() -> Result<()> {
         const NS: usize = 2; // NS: NumStatements
+        const VL: usize = 0; // VL: Vector Length
 
         let scalar1 = GoldilocksField(36);
         let entry1 = Entry::new_from_scalar("some key", scalar1);
         let schnorr_pod3 =
-            POD::execute_schnorr_gadget::<NS>(&vec![entry1.clone()], &SchnorrSecretKey { sk: 25 })?;
+            POD::execute_schnorr_gadget::<NS, VL>(&[entry1.clone()], &SchnorrSecretKey { sk: 25 })?;
         let payload_hash = schnorr_pod3.payload.hash_payload();
 
         let config = CircuitConfig::standard_recursion_config();

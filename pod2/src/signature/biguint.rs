@@ -12,8 +12,8 @@ use plonky2::iop::target::{BoolTarget, Target};
 use plonky2::iop::witness::{PartitionWitness, Witness};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::circuit_data::CommonCircuitData;
-use plonky2::util::serialization::{Buffer, IoResult};
 use plonky2::util::serialization::Write;
+use plonky2::util::serialization::{Buffer, IoResult};
 // use std::error::Error;
 
 use crate::plonky2_u32::gadgets::arithmetic_u32::{CircuitBuilderU32, U32Target};
@@ -351,7 +351,7 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F, D>
     fn id(&self) -> String {
         "BigUintDivRemGenerator".to_string()
     }
-    
+
     fn dependencies(&self) -> Vec<Target> {
         self.a
             .limbs
@@ -362,9 +362,9 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F, D>
     }
 
     fn run_once(
-        &self, 
-        witness: &PartitionWitness<F>, 
-        out_buffer: &mut GeneratedValues<F>
+        &self,
+        witness: &PartitionWitness<F>,
+        out_buffer: &mut GeneratedValues<F>,
     ) -> Result<(), Error> {
         let a = witness.get_biguint_target(self.a.clone());
         let b = witness.get_biguint_target(self.b.clone());
@@ -400,7 +400,6 @@ impl<F: RichField + Extendable<D>, const D: usize> SimpleGenerator<F, D>
             _phantom: PhantomData,
         })
     }
-
 }
 
 #[cfg(test)]

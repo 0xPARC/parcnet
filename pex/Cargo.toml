@@ -5,8 +5,10 @@ edition = "2021"
 
 [dependencies]
 plonky2.workspace = true
+constants.workspace = true
 pod2.workspace = true
 anyhow.workspace = true
+iroh.workspace = true
 async-recursion = "1.1.1"
 eyre = "0.6.12"
 tokio = { version = "1", features = [
@@ -20,3 +22,12 @@ tracing = "0.1.40"
 colored = "2.1.0"
 reedline = "0.36.0"
 nu-ansi-term = "0.50.1"
+async-trait = "0.1.83"
+uuid = "1.11.0"
+sha2 = "0.10.8"
+hex = "0.4.3"
+futures = "0.3.31"
+postcard = "1.0.10"
+serde = "1.0.214"
+rand = "0.8.5"
+indicatif = "0.17.8"

@@ -113,8 +113,8 @@ pub fn statement_matrix_ref(
     ))
 }
 
-/// Less than assertion for targets known to fit within `num_bits` bits. This assumption is
-/// also checked here.
+/// Less than assertion for targets known to fit within `num_bits`
+/// bits. This assumption is also checked here.
 pub fn assert_less<const NUM_BITS: usize>(
     builder: &mut CircuitBuilder<F, D>,
     x: Target,
@@ -147,4 +147,9 @@ pub fn member(builder: &mut CircuitBuilder<F, D>, x: Target, v: &[Target]) -> Bo
         let eq_x_y = builder.is_equal(x, *y);
         builder.or(acc, eq_x_y)
     })
+}
+
+pub fn and(builder: &mut CircuitBuilder<F, D>, v: &[BoolTarget]) -> BoolTarget {
+    v.iter()
+        .fold(builder._true(), |acc, ind| builder.and(acc, *ind))
 }

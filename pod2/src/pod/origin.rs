@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::gadget::GadgetID;
 
 // An Origin, which represents a reference to an ancestor POD.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 pub struct Origin {
     pub origin_id: GoldilocksField, // reserve 0 for NONE, 1 for SELF
     pub origin_name: String,

@@ -15,9 +15,11 @@ pathfinder_simd = { git = "https://github.com/theoparis/pathfinder/" }
 
 [workspace.dependencies]
 assets = { path = "assets" }
+parcnet-pod = { path = "parcnet-pod" }
 pod2 = { path = "pod2" }
 constants = { path = "constants" }
 anyhow = "1.0.86"
+iroh = "0.26.0"
 rust-embed = { version = "8.4", features = ["include-exclude"] }
 gpui = { git = "https://github.com/zed-industries/zed" }
 plonky2 = { git = "https://github.com/mir-protocol/plonky2" }
