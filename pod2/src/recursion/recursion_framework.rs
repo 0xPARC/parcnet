@@ -75,19 +75,20 @@ where
     I: InnerCircuitTrait,
     O: OpsExecutorTrait,
     [(); L + M + N]:,
+    [(); L + N]:,
 {
     /// returns the full-recursive CircuitData
-    pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
-        RecursionCircuit::<I, O, L, M, N, NS, VL>::circuit_data()
+    pub fn circuit_data(pod1_verifier_data: VerifierCircuitData<F,C, D>) -> Result<CircuitData<F, C, D>> {
+        RecursionCircuit::<I, O, L, M, N, NS, VL>::circuit_data(pod1_verifier_data)
     }
 
     pub fn prepare_public_inputs(
-        verifier_data: VerifierCircuitData<F, C, D>,
         public_inputs: Vec<F>,
+        verifier_data: VerifierCircuitData<F, C, D>,
     ) -> Vec<F> {
         RecursionCircuit::<I, O, L, M, N, NS, VL>::prepare_public_inputs(
-            verifier_data,
             public_inputs,
+            verifier_data,
         )
     }
 
@@ -99,7 +100,7 @@ where
         ops_executor_output: O::Output,
         // pod1's public inputs needed to verify pod1's proof, not public inputs in the current
         // RecursiveCircuit
-        pod1_public_inputs: [Vec<F>; L],
+        pod1_public_inputs: &[Vec<F>; L],
         pod1_proofs: &[PlonkyProof; L],
         inner_circuits_input: [I::Input; M],
         recursive_proofs: &[PlonkyProof; N],
@@ -108,8 +109,8 @@ where
         for i in 0..L + M + N {
             let what = match i {
                 0..L => "pod1 proof",
-                L..M => "inner circuit",
-                M..N => "recursive proof",
+                L..(L+M) => "inner circuit",
+                (L+M)..N => "recursive proof",
                 _ => "unknown",
             };
             if selectors[i].is_nonzero() {
@@ -129,6 +130,7 @@ where
             ops_executor_output,
             pod1_public_inputs,
             pod1_proofs,
+            inner_circuits_input,
             recursive_proofs,
         )?;
         println!("circuit.set_targets(): {:?}", start.elapsed());
@@ -185,15 +187,17 @@ where
     I: InnerCircuitTrait,
     O: OpsExecutorTrait,
     [(); L + M + N]:,
+    [(); L + N]:,
 {
     /// returns the full-recursive CircuitData
-    pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
+    pub fn circuit_data(pod1_verifier_data: VerifierCircuitData<F,C,D>) -> Result<CircuitData<F, C, D>> {
         let mut data = common_data_for_recursion::<I, O, L, M, N, NS, VL>()?;
 
         // build the actual RecursionCircuit circuit data
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::new(config);
-        let _ = Self::add_targets(&mut builder, data.verifier_data())?;
+
+        let _ = Self::add_targets(&mut builder, pod1_verifier_data, data.verifier_data())?;
         data = builder.build::<C>();
 
         Ok(data)
@@ -201,12 +205,13 @@ where
 
     /// returns ProverCircuitData
     pub fn build_prover(
+        pod1_verifier_data: VerifierCircuitData<F, C, D>,
         verifier_data: VerifierCircuitData<F, C, D>,
     ) -> Result<ProverCircuitData<F, C, D>> {
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::new(config);
 
-        let _ = Self::add_targets(&mut builder, verifier_data.clone())?;
+        let _ = Self::add_targets(&mut builder, pod1_verifier_data, verifier_data.clone())?;
 
         Ok(builder.build_prover::<C>())
     }
@@ -273,7 +278,7 @@ where
 
         let pod1_verifier_data_targ = builder.add_verifier_data_public_inputs();
 
-        let pod1_proofs_targ: Result<[ProofWithPublicInputsTarget<D>; M]> =
+        let pod1_proofs_targ: Result<[ProofWithPublicInputsTarget<D>; L]> =
             array::try_from_fn(|i| {
                 let pod1_proof_targ = builder.add_virtual_proof_with_pis(&pod1_common_data);
                 builder.conditionally_verify_proof_or_dummy::<C>(
@@ -325,15 +330,15 @@ where
         // the first M selectors correspond to the M InnerCircuits, and the following N selectors
         // correspond to the N PlonkyProofs verifications. If the selector is set to 1, it enables
         // the verification (either of the InnerCircuit or the Plonky2Proof verification).
-        selectors: [F; M + N],
+        selectors: [F; L + M + N],
         ops_executor_input: O::Input,
         ops_executor_output: O::Output, // public inputs
-        pod1_public_inputs: [Vec<Target>; L],
+        pod1_public_inputs: &[Vec<F>; L],
         pod1_recursive_proofs: &[PlonkyProof; L],
         inner_circuit_input: [I::Input; M],
         recursive_proofs: &[PlonkyProof; N],
     ) -> Result<()> {
-        for i in 0..(M + N) {
+        for i in 0..(L + M + N) {
             pw.set_target(self.selectors_targ[i], selectors[i])?;
         }
 
@@ -351,8 +356,8 @@ where
         pw.set_verifier_data_target(&self.verifier_data_targ, &self.verifier_data.verifier_only)?;
         for i in 0..L {
             // put together the public inputs with the verifier_data
-            let pub_inp =
-                Self::prepare_public_inputs(pod1_public_inputs, self.pod1_verifier_data.clone());
+            let pub_inp = Self::prepare_public_inputs(vec![], self.pod1_verifier_data.clone());
+            // Self::prepare_public_inputs(pod1_public_inputs[i], self.pod1_verifier_data.clone());
             pw.set_proof_with_pis_target(
                 &self.pod1_proofs_targ[i],
                 &ProofWithPublicInputs {
@@ -404,6 +409,7 @@ pub fn common_data_for_recursion<
 >() -> Result<CircuitData<F, C, D>>
 where
     [(); L + M + N]:,
+    [(); L + N]:,
 {
     // 1st
     let config = CircuitConfig::standard_recursion_config();
@@ -510,7 +516,7 @@ mod tests {
 
     use super::*;
 
-    use crate::pod::gadget::SchnorrPODGadget;
+    use crate::pod::gadget::{IntroducerCircuit, SchnorrPODGadget};
     use crate::recursion::traits_examples::{
         ExampleGadget, ExampleGadgetInput, ExampleOpsExecutor,
     };
@@ -542,6 +548,7 @@ mod tests {
     >() -> Result<()>
     where
         [(); L + M + N]:,
+        [(); L + N]:,
     {
         set_log();
         println!("\n--------------------------------------------------");
@@ -581,22 +588,12 @@ mod tests {
             .collect();
         assert_eq!(sig_vec.len(), M);
 
-        // TODO
-        // // POD1 introducer logic:
-        // let config = CircuitConfig::standard_recursion_config();
-        // let mut builder = CircuitBuilder::<F, D>::new(config);
-        // let selector_targ = builder.add_virtual_target();
-        // let selector_booltarg = BoolTarget::new_unsafe(selector_targ);
-        // let _ = SchnorrPODGadget::<NS>::add_targets(&mut builder, &selector_booltarg)?;
-        // let data = builder.build::<C>();
-        // let pod1_circuit_data: CircuitData<F, C, D> = data.circuit_data;
-        //
-        // let pod1_public_inputs: [Vec<F>; M] = array::from_fn(|k| vec![]);
-        // let pod1_proofs: [PlonkyProof; M] = array::from_fn(|k| dummy_proof(&pod1_circuit_data));
-        
-        let pod1_public_inputs: [Vec<F>; M] = array::from_fn(|k| vec![]);
+        // POD1 introducer logic:
+        let pod1_circuit_data = IntroducerCircuit::circuit_data()?;
+        let pod1_verifier_data = pod1_circuit_data.verifier_data();
         let pod1_dummy_proof: PlonkyProof = IntroducerCircuit::dummy_proof(pod1_circuit_data)?;
-        let pod1_proofs: [PlonkyProof; M] = array::from_fn(|k| pod1_dummy_proof.clone()));
+        let pod1_proofs: [PlonkyProof; L] = array::from_fn(|k| pod1_dummy_proof.clone());
+        let pod1_public_inputs: [Vec<F>; L] = array::from_fn(|k| vec![]);
 
         type RC<const L: usize, const M: usize, const N: usize, const NS: usize, const VL: usize> =
             RecursionCircuit<ExampleGadget, ExampleOpsExecutor<1, VL>, L, M, N, NS, VL>;
@@ -604,9 +601,10 @@ mod tests {
             RecursionTree<ExampleGadget, ExampleOpsExecutor<1, VL>, L, M, N, NS, VL>;
 
         // build the circuit_data & verifier_data for the recursive circuit
-        let circuit_data = RC::<L, M, N, NS, VL>::circuit_data()?;
+        let circuit_data = RC::<L, M, N, NS, VL>::circuit_data(pod1_verifier_data.clone())?;
         let verifier_data = circuit_data.verifier_data();
-        let prover = RC::<L, M, N, NS, VL>::build_prover(verifier_data.clone())?;
+        let prover =
+            RC::<L, M, N, NS, VL>::build_prover(pod1_verifier_data.clone(), verifier_data.clone())?;
 
         let dummy_proof = RC::<L, M, N, NS, VL>::dummy_proof(circuit_data);
 
@@ -619,7 +617,11 @@ mod tests {
         let config = CircuitConfig::standard_recursion_config();
         let mut builder = CircuitBuilder::new(config);
         let start = Instant::now();
-        let mut circuit = RC::<M, N, NS, VL>::add_targets(&mut builder, verifier_data.clone())?;
+        let mut circuit = RC::<L, M, N, NS, VL>::add_targets(
+            &mut builder,
+            pod1_verifier_data.clone(),
+            verifier_data.clone(),
+        )?;
         println!("RecursionCircuit::add_targets(): {:?}", start.elapsed());
 
         // loop over the recursion levels
@@ -635,11 +637,12 @@ mod tests {
                 );
 
                 // prepare the inputs for the `RecursionTree::prove_node` call
-                let mut selectors: [F; M + N] = [F::ONE; M + N];
+                let mut selectors: [F; L + M + N] = [F::ONE; L + M + N];
                 if i == 0 {
                     // if we're at the base level, set to 0 (=disable) the N selectors of the
                     // proofs verifications
-                    selectors[M..M + N].fill(F::ZERO);
+                    selectors[0..L].fill(F::ZERO); // pod1 proof verifications
+                    selectors[M..L + M + N].fill(F::ZERO); // recursive proof verifications
                 }
                 let innercircuits_input: [ExampleGadgetInput; M] =
                     array::from_fn(|k| ExampleGadgetInput {
@@ -656,13 +659,13 @@ mod tests {
 
                 // do the recursive step
                 let start = Instant::now();
-                let new_proof = RT::<M, N, NS, VL>::prove_node(
+                let new_proof = RT::<L, M, N, NS, VL>::prove_node(
                     &prover,
                     &mut circuit,
                     selectors,
                     ops_executor_input,
                     ops_executor_output,
-                    pod1_public_inputs,
+                    &pod1_public_inputs,
                     &pod1_proofs,
                     innercircuits_input,
                     &proofs,
@@ -676,7 +679,7 @@ mod tests {
 
                 // verify the recursive proof
                 let public_inputs =
-                    RT::<M, N, NS, VL>::prepare_public_inputs(verifier_data.clone(), vec![]);
+                    RT::<L, M, N, NS, VL>::prepare_public_inputs(vec![], verifier_data.clone());
                 verifier_data.clone().verify(ProofWithPublicInputs {
                     proof: new_proof.clone(),
                     public_inputs: public_inputs.clone(),
@@ -692,7 +695,7 @@ mod tests {
 
         // verify the last proof
         let public_inputs =
-            RT::<M, N, NS, VL>::prepare_public_inputs(verifier_data.clone(), vec![]);
+            RT::<L, M, N, NS, VL>::prepare_public_inputs(vec![], verifier_data.clone());
         verifier_data.clone().verify(ProofWithPublicInputs {
             proof: last_proof.clone(),
             public_inputs: public_inputs.clone(),
