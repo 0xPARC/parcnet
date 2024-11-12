@@ -7,3 +7,4 @@ history.txt
 */Cargo.lock
 */_debug
 Cargo.lock
+.cargo/config.toml
