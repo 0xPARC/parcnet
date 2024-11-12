@@ -18,6 +18,10 @@ use crate::{PlonkyProof, C, D, F};
 
 pub struct IntroducerCircuit {}
 
+/// IntroducerCircuit defines the circuit whose plonky2 proof is verified in the RecursiveCircuit
+/// (1-level recursion).
+// TODO probably traitify this, and in the RecursionCircuit use the trait and not this specific
+// struct directly.
 impl IntroducerCircuit {
     pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
         todo!();

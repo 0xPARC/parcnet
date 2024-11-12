@@ -1,10 +1,12 @@
 use core::fmt;
 use serde::{Deserialize, Serialize};
 
+pub mod introducer;
 pub mod opexecutor;
 pub mod plonky_pod;
 pub mod schnorr_pod;
 
+pub use introducer::IntroducerCircuit;
 pub use opexecutor::OpExecutorGadget;
 pub use plonky_pod::PlonkyButNotPlonkyGadget;
 pub use schnorr_pod::SchnorrPODGadget;

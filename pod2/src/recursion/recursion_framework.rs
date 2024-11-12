@@ -78,7 +78,9 @@ where
     [(); L + N]:,
 {
     /// returns the full-recursive CircuitData
-    pub fn circuit_data(pod1_verifier_data: VerifierCircuitData<F,C, D>) -> Result<CircuitData<F, C, D>> {
+    pub fn circuit_data(
+        pod1_verifier_data: VerifierCircuitData<F, C, D>,
+    ) -> Result<CircuitData<F, C, D>> {
         RecursionCircuit::<I, O, L, M, N, NS, VL>::circuit_data(pod1_verifier_data)
     }
 
@@ -107,12 +109,21 @@ where
     ) -> Result<PlonkyProof> {
         println!("prove_node:");
         for i in 0..L + M + N {
-            let what = match i {
-                0..L => "pod1 proof",
-                L..(L+M) => "inner circuit",
-                (L+M)..N => "recursive proof",
-                _ => "unknown",
+            let what = if i < L {
+                "pod1 proof"
+            } else if i > L && i < L + M {
+                "inner circuit"
+            } else if i > L + M && i < L + M + N {
+                "recursive proof"
+            } else {
+                "unknown"
             };
+            // let what = match i {
+            //     0..L => "pod1 proof",
+            //     L..(L+M) => "inner circuit",
+            //     (L+M)..(L+M+N) => "recursive proof",
+            //     _ => "unknown",
+            // };
             if selectors[i].is_nonzero() {
                 println!("  (selectors[{}] enabled), verify {}", i, what);
             } else {
@@ -190,7 +201,9 @@ where
     [(); L + N]:,
 {
     /// returns the full-recursive CircuitData
-    pub fn circuit_data(pod1_verifier_data: VerifierCircuitData<F,C,D>) -> Result<CircuitData<F, C, D>> {
+    pub fn circuit_data(
+        pod1_verifier_data: VerifierCircuitData<F, C, D>,
+    ) -> Result<CircuitData<F, C, D>> {
         let mut data = common_data_for_recursion::<I, O, L, M, N, NS, VL>()?;
 
         // build the actual RecursionCircuit circuit data

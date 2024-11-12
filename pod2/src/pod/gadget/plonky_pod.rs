@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use crate::pod::entry::Entry;
 use crate::pod::gadget::GadgetID;
-use crate::pod::gadget::{opexecutor::OpExecutorGadget, schnorr_pod::SchnorrPODGadget};
+use crate::pod::gadget::{IntroducerCircuit, OpExecutorGadget, SchnorrPODGadget};
 use crate::pod::operation::OpList;
 use crate::pod::payload::{PODPayload, StatementList};
 use crate::pod::statement::Statement;
@@ -21,13 +21,27 @@ use crate::signature::schnorr::SchnorrSecretKey;
 
 use crate::{PlonkyProof, C, D, F};
 
-pub struct ProverParams<const M: usize, const N: usize, const NS: usize, const VL: usize>
-where
-    [(); M + N]:,
+pub struct ProverParams<
+    const L: usize,
+    const M: usize,
+    const N: usize,
+    const NS: usize,
+    const VL: usize,
+> where
+    [(); L + M + N]:,
+    [(); L + N]:,
 {
-    circuit:
-        RecursionCircuit<SchnorrPODGadget<NS>, OpExecutorGadget<{ M + N }, NS, VL>, M, N, NS, VL>,
+    circuit: RecursionCircuit<
+        SchnorrPODGadget<NS>,
+        OpExecutorGadget<{ L + M + N }, NS, VL>,
+        L,
+        M,
+        N,
+        NS,
+        VL,
+    >,
     prover: ProverCircuitData<F, C, D>,
+    pod1_dummy_proof: PlonkyProof,
     dummy_proof: PlonkyProof,
 }
 
@@ -57,36 +71,44 @@ where
 /// ```
 // TODO: `PlonkyButNotPlonkyGadget` is a placeholder name, set better struct name.
 pub struct PlonkyButNotPlonkyGadget<
+    const L: usize,
     const M: usize,
     const N: usize,
     const NS: usize,
     const VL: usize,
 > where
-    [(); M + N]:;
+    [(); L + M + N]:,
+    [(); L + N]:;
 
-impl<const M: usize, const N: usize, const NS: usize, const VL: usize>
-    PlonkyButNotPlonkyGadget<M, N, NS, VL>
+impl<const L: usize, const M: usize, const N: usize, const NS: usize, const VL: usize>
+    PlonkyButNotPlonkyGadget<L, M, N, NS, VL>
 where
-    [(); M + N]:,
+    [(); L + M + N]:,
+    [(); L + N]:,
 {
     /// Returns the RecursiveCircuit's CircuitData, which is reused for all calls of the `execute`
     /// method
-    pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
+    pub fn circuit_data(
+        pod1_verifier_data: VerifierCircuitData<F, C, D>,
+    ) -> Result<CircuitData<F, C, D>> {
         // generate circuit data
         RecursionCircuit::<
             SchnorrPODGadget<NS>,
-            OpExecutorGadget<{ M + N }, NS, VL>, // NP=M+N
+            OpExecutorGadget<{ L + M + N }, NS, VL>, // NP=L+M+N
+            L,
             M,
             N,
             NS,
             VL,
-        >::circuit_data()
+        >::circuit_data(pod1_verifier_data)
     }
 
     /// returns ProverCircuitData
     pub fn build_prover_params(
+        pod1_circuit_data: CircuitData<F, C, D>,
         circuit_data: CircuitData<F, C, D>,
-    ) -> Result<ProverParams<M, N, NS, VL>> {
+    ) -> Result<ProverParams<L, M, N, NS, VL>> {
+        let pod1_verifier_data = pod1_circuit_data.verifier_data();
         let verifier_data = circuit_data.verifier_data();
 
         let config = CircuitConfig::standard_recursion_config();
@@ -94,41 +116,50 @@ where
 
         let circuit = RecursionCircuit::<
             SchnorrPODGadget<NS>,
-            OpExecutorGadget<{ M + N }, NS, VL>,
+            OpExecutorGadget<{ L + M + N }, NS, VL>,
+            L,
             M,
             N,
             NS,
             VL,
-        >::add_targets(&mut builder, verifier_data.clone())?;
+        >::add_targets(
+            &mut builder,
+            pod1_verifier_data.clone(),
+            verifier_data.clone(),
+        )?;
 
         let prover = RecursionCircuit::<
             SchnorrPODGadget<NS>,
-            OpExecutorGadget<{ M + N }, NS, VL>, // NP=M+N
+            OpExecutorGadget<{ L + M + N }, NS, VL>, // NP=L+M+N
+            L,
             M,
             N,
             NS,
             VL,
-        >::build_prover(verifier_data)?;
+        >::build_prover(pod1_verifier_data, verifier_data)?;
 
         let dummy_proof = RecursionCircuit::<
             SchnorrPODGadget<NS>,
-            OpExecutorGadget<{ M + N }, NS, VL>,
+            OpExecutorGadget<{ L + M + N }, NS, VL>,
+            L,
             M,
             N,
             NS,
             VL,
         >::dummy_proof(circuit_data);
+        let pod1_dummy_proof = IntroducerCircuit::dummy_proof(pod1_circuit_data)?;
 
         Ok(ProverParams {
             circuit,
             prover,
+            pod1_dummy_proof,
             dummy_proof,
         })
     }
 
     /// Generates a new POD from the given input PODs and the OpList (operations list)
     pub fn execute(
-        prover_params: &mut ProverParams<M, N, NS, VL>,
+        prover_params: &mut ProverParams<L, M, N, NS, VL>,
         input_pods: &[(String, POD)],
         op_list: OpList,
         origin_renaming_map: HashMap<(String, String), String>,
@@ -137,6 +168,8 @@ where
         // Check that the input data is valid, i.e. that we have at most M
         // SchnorrPODs and N PlonkyPODs in our list, *and each POD
         // contains exactly `NS` statements*.
+        //
+        // TODO do the same with L pod1 pods
         let mut schnorr_pods: Vec<(String, POD)> = input_pods
             .to_vec()
             .into_iter()
@@ -203,6 +236,8 @@ where
             &SchnorrSecretKey { sk: 0 },
         )?;
 
+        // TODO do the same with L POD1-Introducer PODs
+        //
         // Arrange input PODs as a list of M SchnorrPODs followed by N
         // PlonkyPODs. Pad with appropriate dummy data.
         let schnorr_pods_padded: [(String, POD); M] = array::from_fn(|i| {
@@ -219,7 +254,8 @@ where
                 (format!("_DUMMYPLONKY{}", i), dummy_plonky_pod.clone())
             }
         });
-        let padded_pod_list: [(String, POD); M + N] = array::from_fn(|i| {
+        // TODO add L pod1introducer_pods_padded here:
+        let padded_pod_list: [(String, POD); L + M + N] = array::from_fn(|i| {
             if i < M {
                 schnorr_pods_padded[i].clone()
             } else {
@@ -229,7 +265,10 @@ where
 
         // Prepare selectors. Set them enabled for the given schnorr & plonky pods, and disabled for
         // the padding ones
-        let selectors: [F; M + N] = array::from_fn(|i| {
+        //
+        // TODO add L selectors here for the pod1_introducer_pods
+        let selectors: [F; L + M + N] = array::from_fn(|i| {
+            // TODO match i? maybe can not bcs L,M,N are consts
             if i < M {
                 GoldilocksField(if i < schnorr_count - 1 { 1 } else { 0 })
             } else {
@@ -265,7 +304,14 @@ where
         // proof verification circuit.
 
         // prepare inputs for the circuit
+
+        // TODO add prepare also the L POD1introducer PODs
+        let pod1_proofs: [PlonkyProof; L] =
+            array::from_fn(|k| prover_params.pod1_dummy_proof.clone());
+        let pod1_public_inputs: [Vec<F>; L] = array::from_fn(|k| vec![]);
+
         let inner_circuit_input: [POD; M] = array::from_fn(|i| schnorr_pods_padded[i].1.clone());
+
         let recursive_proofs: [PlonkyProof; N] = array::from_fn(|i| {
             // convert the PODProof.proof into an actual PlonkyProof:
             match plonky_pods_padded[i].1.proof.clone() {
@@ -283,7 +329,8 @@ where
         // let start_add_targets = Instant::now();
         // let mut circuit = RecursionCircuit::<
         //     SchnorrPODGadget<NS>,
-        //     OpExecutorGadget<{ M + N }, NS, VL>,
+        //     OpExecutorGadget<{ L+M + N }, NS, VL>,
+        //     L,
         //     M,
         //     N,
         //     NS,
@@ -295,9 +342,11 @@ where
         prover_params.circuit.set_targets(
             &mut pw,
             selectors,
-            inner_circuit_input,       // =[InnerCircuit::Input; M]
             (gpg_input, op_list),      // =OpsExecutor::Input
             output_statements.clone(), // =OpsExecutor::Output
+            &pod1_public_inputs,
+            &pod1_proofs,        // =[PlonkyProof; L] (non-cyclic proofs))
+            inner_circuit_input, // =[InnerCircuit::Input; M]
             &recursive_proofs,
         )?;
 
@@ -315,8 +364,8 @@ where
 
         let time_execute = start_execute.elapsed();
         // println!(
-        //     "| {} | {} | {} | {} | {:#.2?} | {:#.2?} |",
-        //     M, N, NS, VL, time_prove, time_execute,
+        //     "| {} | {} | {} | {} | {} | {:#.2?} | {:#.2?} |",
+        //     L, M, N, NS, VL, time_prove, time_execute,
         // );
 
         Ok(POD {
@@ -389,6 +438,7 @@ mod tests {
     use crate::{
         pod::{
             entry::Entry,
+            gadget::{IntroducerCircuit, OpExecutorGadget, SchnorrPODGadget},
             operation::{OpList, Operation as Op, OperationCmd as OpCmd},
             statement::StatementRef,
             POD,
@@ -425,6 +475,7 @@ mod tests {
     // TODO: `PlonkyButNotPlonkyGadget` is tmp, put better name.
     #[test]
     fn test_PlonkyButNotPlonkyGadget() -> Result<()> {
+        const L: usize = 0; // max num POD1-Introducer PODs // TODO use L!=0
         const M: usize = 3; // max num SchnorrPOD
         const N: usize = 2; // max num Plonky2 recursive proof
         const NS: usize = 3; // num statements
@@ -473,13 +524,18 @@ mod tests {
 
         // build the circuit_data, this struct is reused for all the calls of
         // PlonkyButNotPlonkyGadget::execute
-        let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS, VL>::circuit_data()?;
+        let pod1_circuit_data = IntroducerCircuit::circuit_data()?;
+        let pod1_verifier_data = pod1_circuit_data.verifier_data();
+        let circuit_data =
+            PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::circuit_data(pod1_verifier_data)?;
         let verifier_data = circuit_data.verifier_data();
-        let mut prover_params =
-            PlonkyButNotPlonkyGadget::<M, N, NS, VL>::build_prover_params(circuit_data)?;
+        let mut prover_params = PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::build_prover_params(
+            pod1_circuit_data,
+            circuit_data,
+        )?;
 
         let start = Instant::now();
-        let new_pod = PlonkyButNotPlonkyGadget::<M, N, NS, VL>::execute(
+        let new_pod = PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::execute(
             &mut prover_params,
             &pods_list,
             op_list,
@@ -488,7 +544,7 @@ mod tests {
         println!("PlonkyButNotPlonkyGadget::execute(): {:?}", start.elapsed());
 
         // verify the new_pod's plonky2 proof
-        PlonkyButNotPlonkyGadget::<M, N, NS, VL>::verify_plonky_pod(verifier_data, new_pod)?;
+        PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::verify_plonky_pod(verifier_data, new_pod)?;
 
         // TODO do a 2nd iteration where the generated plonky2-pod is (recursively) verified
         Ok(())
@@ -496,11 +552,12 @@ mod tests {
 
     #[test]
     fn get_numbers_PlonkyButNotPlonkyGadget() -> Result<()> {
-        println!("| M | N | NS | VL | prove | total |");
-        println!("|--- | --- | --- | --- | ------ | ------ |");
+        println!("| L | M | N | NS | VL | prove | total |");
+        println!("| --- | --- | --- | --- | --- | ------ | ------ |");
 
-        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 1, 1, 0>()?;
-        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 1, 3, 0>()?;
+        // TODO use L!=0, maybe L=1 (to verify 1 POD1introducer POD at each recursion
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<0, 3, 1, 1, 0>()?;
+        test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<0, 3, 1, 3, 0>()?;
         // the next tests are commented out by default because they take longer time to compute
         // test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 1, 5, 0>()?;
         // test_empty_inputs_PlonkyButNotPlonkyGadget_opt::<3, 1, 10, 0>()?;
@@ -519,13 +576,15 @@ mod tests {
     }
 
     fn test_empty_inputs_PlonkyButNotPlonkyGadget_opt<
+        const L: usize,  // max num POD1-Introducer PODs // TODO use L!=0
         const M: usize,  // max num SchnorrPOD
         const N: usize,  // max num Plonky2 recursive proof
         const NS: usize, // num statements
         const VL: usize, // vec length in contains op
     >() -> Result<()>
     where
-        [(); M + N]:,
+        [(); L + M + N]:,
+        [(); L + N]:,
     {
         let pods_list = vec![];
         let out_statement_names = (0..NS)
@@ -538,11 +597,16 @@ mod tests {
                 .collect(),
         );
 
-        let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS, VL>::circuit_data()?;
-        let mut prover_params =
-            PlonkyButNotPlonkyGadget::<M, N, NS, VL>::build_prover_params(circuit_data)?;
+        let pod1_circuit_data = IntroducerCircuit::circuit_data()?;
+        let pod1_verifier_data = pod1_circuit_data.verifier_data();
+        let circuit_data =
+            PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::circuit_data(pod1_verifier_data)?;
+        let mut prover_params = PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::build_prover_params(
+            pod1_circuit_data,
+            circuit_data,
+        )?;
 
-        let _new_pod = PlonkyButNotPlonkyGadget::<M, N, NS, VL>::execute(
+        let _new_pod = PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::execute(
             &mut prover_params,
             &pods_list,
             op_list,
