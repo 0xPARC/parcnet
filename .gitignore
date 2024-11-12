@@ -4,3 +4,6 @@
 *.log
 history.txt
 */_todo
+*/_debug
+Cargo.lock
+.cargo/config.toml
