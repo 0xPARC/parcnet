@@ -11,7 +11,7 @@ use serde::Serialize;
 use plonky2::field::types::PrimeField64;
 use std::collections::HashMap;
 
-use crate::pod::gadget::plonky_pod::PlonkyButNotPlonkyGadget;
+use crate::pod::gadget::{IntroducerCircuit, PlonkyButNotPlonkyGadget};
 use crate::pod::{
     entry::Entry,
     gadget::GadgetID,
@@ -58,15 +58,23 @@ pub struct POD {
 }
 
 impl POD {
+    /// L: number of POD1-Introducer PODs
     /// M: number of PODs
     /// N: number of Plonky PODs
     /// NS: number of Statements
     /// VL: vector length
-    pub fn verify<const M: usize, const N: usize, const NS: usize, const VL: usize>(
+    pub fn verify<
+        const L: usize,
+        const M: usize,
+        const N: usize,
+        const NS: usize,
+        const VL: usize,
+    >(
         &self,
     ) -> Result<bool>
     where
-        [(); M + N]:,
+        [(); L + M + N]:,
+        [(); L + N]:,
     {
         match &self.proof {
             PODProof::Schnorr(p) => {
@@ -113,9 +121,12 @@ impl POD {
                 // get the verifier_data on the fly) takes a considerable amount of time to
                 // compute. Need to think how we modify the interface to pass the verifier_data to
                 // this method.
-                let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS, VL>::circuit_data()?;
+                let pod1_circuit_data = IntroducerCircuit::circuit_data()?;
+                let pod1_verifier_data = pod1_circuit_data.verifier_data();
+                let circuit_data =
+                    PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::circuit_data(pod1_verifier_data)?;
                 let verifier_data = circuit_data.verifier_data();
-                PlonkyButNotPlonkyGadget::<M, N, NS, VL>::verify_plonky_pod(
+                PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::verify_plonky_pod(
                     verifier_data,
                     self.clone(),
                 )?;
@@ -231,15 +242,22 @@ impl POD {
     // the prover_params is passed as parameter, because compunting it depends on first computing
     // the circuit_data, which takes a considerable amount of time to compute. So we compute it
     // once at the beginning and just reuse it through all the calls to execute_plonky_gadget.
-    pub fn execute_plonky_gadget<const M: usize, const N: usize, const NS: usize, const VL: usize>(
-        prover_params: &mut crate::pod::gadget::plonky_pod::ProverParams<M, N, NS, VL>,
+    pub fn execute_plonky_gadget<
+        const L: usize,
+        const M: usize,
+        const N: usize,
+        const NS: usize,
+        const VL: usize,
+    >(
+        prover_params: &mut crate::pod::gadget::plonky_pod::ProverParams<L, M, N, NS, VL>,
         input: &GPGInput,
         cmds: &[OpCmd],
     ) -> Result<Self>
     where
-        [(); M + N]:,
+        [(); L + M + N]:,
+        [(); L + N]:,
     {
-        PlonkyButNotPlonkyGadget::<M, N, NS, VL>::execute(
+        PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::execute(
             prover_params,
             &input.pods_list,
             crate::pod::operation::OpList(cmds.to_vec()),
@@ -608,8 +626,8 @@ mod tests {
             &SchnorrSecretKey { sk: 42 },
         )?;
 
-        assert!(schnorr_pod1.verify::<3, 2, 2, 0>()?);
-        assert!(schnorr_pod2.verify::<3, 2, 2, 0>()?);
+        assert!(schnorr_pod1.verify::<0, 3, 2, 2, 0>()?); // TODO use L!=0
+        assert!(schnorr_pod2.verify::<0, 3, 2, 2, 0>()?); // TODO use L!=0
 
         let mut schnorr_pod3 =
             POD::execute_schnorr_gadget::<NS, VL>(&[entry1.clone()], &SchnorrSecretKey { sk: 25 })?;
@@ -622,7 +640,7 @@ mod tests {
         schnorr_pod3.payload.statements_list[1].1 = other_statement;
 
         // now signature shouldn't verify
-        assert!(!(schnorr_pod3.verify::<3, 2, 2, 0>()?));
+        assert!(!(schnorr_pod3.verify::<0, 3, 2, 2, 0>()?)); // TODO use L!=0
 
         Ok(())
     }
@@ -736,7 +754,7 @@ mod tests {
         ];
 
         let oracle_pod = POD::execute_oracle_gadget(&gpg_input, &ops).unwrap();
-        assert!(oracle_pod.verify::<3, 2, 2, 0>()?);
+        assert!(oracle_pod.verify::<0, 3, 2, 2, 0>()?); // TODO use L!=0
 
         // make another oracle POD which takes that oracle POD and a schnorr POD
 
@@ -819,12 +837,13 @@ mod tests {
         for statement in oracle_pod2.payload.statements_list.iter() {
             println!("{:?}", statement);
         }
-        assert!(oracle_pod2.verify::<3, 2, 2, 0>()?);
+        assert!(oracle_pod2.verify::<0, 3, 2, 2, 0>()?); // TODO use L!=0
         Ok(())
     }
 
     #[test]
     fn plonky_pod_from_schnorr() -> Result<()> {
+        const L: usize = 0; // TODO L=0, use L!=0
         const M: usize = 2;
         const N: usize = 1;
         const NS: usize = 3;
@@ -884,12 +903,17 @@ mod tests {
             ),
         ];
 
-        let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS, VL>::circuit_data()?;
-        let mut prover_params =
-            PlonkyButNotPlonkyGadget::<M, N, NS, VL>::build_prover_params(circuit_data)?;
+        let pod1_circuit_data = IntroducerCircuit::circuit_data()?;
+        let pod1_verifier_data = pod1_circuit_data.verifier_data();
+        let circuit_data =
+            PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::circuit_data(pod1_verifier_data)?;
+        let mut prover_params = PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::build_prover_params(
+            pod1_circuit_data,
+            circuit_data,
+        )?;
         let plonky_pod =
-            POD::execute_plonky_gadget::<M, N, NS, VL>(&mut prover_params, &gpg_input, &ops)?;
-        assert!(plonky_pod.verify::<M, N, NS, VL>()? == true);
+            POD::execute_plonky_gadget::<L, M, N, NS, VL>(&mut prover_params, &gpg_input, &ops)?;
+        assert!(plonky_pod.verify::<L, M, N, NS, VL>()? == true);
 
         // make another oracle POD which takes that oracle POD and a schnorr POD
 
@@ -928,11 +952,11 @@ mod tests {
         ];
 
         let plonky_pod2 =
-            POD::execute_plonky_gadget::<M, N, NS, VL>(&mut prover_params, &gpg_input, &ops)?;
+            POD::execute_plonky_gadget::<L, M, N, NS, VL>(&mut prover_params, &gpg_input, &ops)?;
         for statement in plonky_pod2.payload.statements_list.iter() {
             println!("{:?}", statement);
         }
-        assert!(plonky_pod2.verify::<M, N, NS, VL>()? == true);
+        assert!(plonky_pod2.verify::<L, M, N, NS, VL>()? == true);
 
         Ok(())
     }
@@ -1049,7 +1073,7 @@ mod tests {
         ];
 
         let bob_tf = POD::execute_oracle_gadget(&bob_tf_input, &bob_tf_ops).unwrap();
-        assert!(bob_tf.verify::<3, 2, 2, 0>()?);
+        assert!(bob_tf.verify::<0, 3, 2, 2, 0>()?); // TODO L=0, use L!=0
 
         // make the "bob trusted friend" POD
         let mut charlie_tf_input_pods = HashMap::new();
@@ -1114,7 +1138,7 @@ mod tests {
         ];
 
         let charlie_tf = POD::execute_oracle_gadget(&charlie_tf_input, &charlie_tf_ops).unwrap();
-        assert!(charlie_tf.verify::<3, 2, 2, 0>()?);
+        assert!(charlie_tf.verify::<0, 3, 2, 2, 0>()?); // TODO L=0, use L!=0
 
         // make the "great boy" POD
         let age_bound_entry = Entry::new_from_scalar("known_attestors", GoldilocksField(17));
@@ -1284,7 +1308,7 @@ mod tests {
         ];
 
         let alice_grb = POD::execute_oracle_gadget(&grb_input, &grb_ops).unwrap();
-        assert!(alice_grb.verify::<3, 2, 2, 0>()?);
+        assert!(alice_grb.verify::<0, 3, 2, 2, 0>()?); // TODO L=0, use L!=0
 
         for statement in alice_grb.payload.statements_list {
             println!("{:?}", statement);
@@ -1424,7 +1448,7 @@ mod tests {
         ];
 
         let sum_pod = POD::execute_oracle_gadget(&sum_pod_input, &sum_pod_ops).unwrap();
-        assert!(sum_pod.verify::<3, 2, 2, 0>()?);
+        assert!(sum_pod.verify::<0, 3, 2, 2, 0>()?); // TODO L=0, use L!=0
 
         // [defpod sum-pod
         //   result 25
@@ -1459,7 +1483,7 @@ mod tests {
         ];
 
         let product_pod = POD::execute_oracle_gadget(&product_pod_input, &product_pod_ops)?;
-        assert!(product_pod.verify::<3, 2, 2, 0>()?);
+        assert!(product_pod.verify::<0, 3, 2, 2, 0>()?); // TODO L=0, use L!=0
 
         // [defpod product-pod
         //   result 1200
@@ -1573,7 +1597,7 @@ mod tests {
         ];
 
         let final_pod = POD::execute_oracle_gadget(&final_pod_input, &final_pod_ops).unwrap();
-        assert!(final_pod.verify::<3, 2, 2, 0>()?);
+        assert!(final_pod.verify::<0, 3, 2, 2, 0>()?); // TODO L=0, use L!=0
 
         // If you are curious what the statements in this POD are
         // for statement in final_pod.payload.statements_list {
