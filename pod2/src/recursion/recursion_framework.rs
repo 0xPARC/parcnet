@@ -289,7 +289,10 @@ where
         // pod1 proof verification
         let pod1_common_data = verifier_data.common.clone();
 
-        let pod1_verifier_data_targ = builder.add_verifier_data_public_inputs();
+        // notice that pod1_verifier_data is not registered as public input, while the cyclic
+        // recursive verifier_data is registered as public input.
+        let pod1_verifier_data_targ = builder
+            .add_virtual_verifier_data(pod1_verifier_data.common.config.fri_config.cap_height);
 
         let pod1_proofs_targ: Result<[ProofWithPublicInputsTarget<D>; L]> =
             array::try_from_fn(|i| {
@@ -467,7 +470,8 @@ where
     let _: O::Targets = O::add_targets(&mut builder)?;
 
     // pod1 proofs // TODO group with N in a single loop
-    let pod1_verifier_data = builder.add_verifier_data_public_inputs();
+    let pod1_verifier_data =
+        builder.add_virtual_verifier_data(data.common.config.fri_config.cap_height);
     for _ in 0..L {
         let proof = builder.add_virtual_proof_with_pis(&data.common);
         builder.verify_proof::<C>(&proof, &pod1_verifier_data, &data.common);
@@ -567,14 +571,14 @@ mod tests {
         println!("\n--------------------------------------------------");
         println!("\n--------------------------------------------------");
         println!(
-            "\nrunning test:\n===test_tree_recursion_opt with M={} (num InnerCircuits) N={} (arity of the recursion tree)",
-            M, N
+            "\nrunning test:\n===test_tree_recursion_opt with L={} (num POD1-Introducer proofs) M={} (num InnerCircuits) N={} (arity of the recursion tree)",
+            L, M, N
         );
 
         let l: u32 = 2; // levels of the recursion (binary) tree
         println!(
-            "Testing {} recursive iterations, where each iteration checks M={} InnerCircuits and N={} plonky2 proofs",
-            l, M, N
+            "Testing {} recursive iterations, where each iteration checks L={} POD1-Introducer plonky2 proofs, M={} InnerCircuits and N={} cyclic plonky2 proofs",
+            l, L, M, N
         );
 
         let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
