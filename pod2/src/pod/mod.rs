@@ -18,6 +18,7 @@ use crate::pod::{
     payload::{HashablePayload, PODPayload},
     value::ScalarOrVec,
 };
+use crate::recursion::IntroducerCircuitTrait;
 use crate::signature::schnorr::{
     SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner,
 };
@@ -463,6 +464,7 @@ impl GPGInput {
 
 #[cfg(test)]
 mod tests {
+    use crate::recursion::IntroducerCircuitTrait;
     use operation::Operation as Op;
     use parcnet_pod::{pod::pod_impl::create_pod, pod_entries};
     use statement::StatementRef;

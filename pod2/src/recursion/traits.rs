@@ -3,7 +3,70 @@ use plonky2::iop::target::BoolTarget;
 use plonky2::iop::witness::PartialWitness;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 
-use crate::{D, F};
+use plonky2::plonk::circuit_data::CircuitConfig;
+use plonky2::plonk::circuit_data::CircuitData;
+use plonky2::plonk::circuit_data::ProverCircuitData;
+
+use crate::{PlonkyProof, C, D, F};
+
+/// IntroducerCircuitTrait defines the circuit whose plonky2 proof is verified in the
+/// RecursiveCircuit (1-level recursion). This is, the POD1-Introducer circuit.
+///
+/// Notice that the methods `circuit_data`, `dummy_proof`, `build_prover` are already implemented
+/// at the trait level, in a generic way agnostic to the specific logic of the circuit. So the only
+/// methods that need to be implemented are `add_targets` and `set_targets`.
+pub trait IntroducerCircuitTrait {
+    type Targets;
+    type Input;
+
+    fn circuit_data() -> Result<CircuitData<F, C, D>> {
+        let config = CircuitConfig::standard_recursion_zk_config();
+
+        let mut builder = CircuitBuilder::<F, D>::new(config.clone());
+        Self::add_targets(&mut builder);
+
+        let data = builder.build::<C>();
+        Ok(data)
+    }
+    fn dummy_proof(circuit_data: CircuitData<F, C, D>) -> Result<PlonkyProof> {
+        // fn dummy_proof(prover: ProverCircuitData<F, C, D>) -> Result<PlonkyProof> {
+        let config = CircuitConfig::standard_recursion_config();
+        let mut builder = CircuitBuilder::new(config);
+
+        // prepare some dummy signature
+        let input = Self::dummy_inputs()?;
+
+        let targets = Self::add_targets(&mut builder)?;
+
+        let mut pw = PartialWitness::new();
+        Self::set_targets(&mut pw, &targets, &input)?;
+
+        let proof = circuit_data.prove(pw)?;
+        Ok(proof.proof)
+    }
+    fn build_prover() -> Result<ProverCircuitData<F, C, D>> {
+        let config = CircuitConfig::standard_recursion_config();
+        let mut builder = CircuitBuilder::new(config);
+
+        let _ = Self::add_targets(&mut builder)?;
+
+        Ok(builder.build_prover::<C>())
+    }
+
+    /// return dummy inputs that will satisfy the circuit. This is used to generate the
+    /// dummy_proof.
+    fn dummy_inputs() -> Result<Self::Input>;
+
+    /// set up the circuit logic
+    fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets>;
+
+    /// set the actual witness values for the current instance of the circuit
+    fn set_targets(
+        pw: &mut PartialWitness<F>,
+        targets: &Self::Targets,
+        input: &Self::Input,
+    ) -> Result<()>;
+}
 
 /// InnerCircuit is the trait that is used to define the logic of the circuit that is used at each
 /// node of the recursive tree.

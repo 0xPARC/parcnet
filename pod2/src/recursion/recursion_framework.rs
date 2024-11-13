@@ -107,7 +107,7 @@ where
         inner_circuits_input: [I::Input; M],
         recursive_proofs: &[PlonkyProof; N],
     ) -> Result<PlonkyProof> {
-        println!("prove_node:");
+        println!("prove_node with L={}, M={}, N={}:", L, M, N);
         for i in 0..L + M + N {
             let what = if i < L {
                 "pod1 proof"
@@ -533,9 +533,10 @@ mod tests {
 
     use super::*;
 
-    use crate::pod::gadget::{IntroducerCircuit, SchnorrPODGadget};
+    use crate::pod::gadget::SchnorrPODGadget;
+    use crate::recursion::traits::IntroducerCircuitTrait;
     use crate::recursion::traits_examples::{
-        ExampleGadget, ExampleGadgetInput, ExampleOpsExecutor,
+        ExampleGadget, ExampleGadgetInput, ExampleIntroducer, ExampleOpsExecutor,
     };
     use crate::signature::schnorr::*;
 
@@ -606,9 +607,9 @@ mod tests {
         assert_eq!(sig_vec.len(), M);
 
         // POD1 introducer logic:
-        let pod1_circuit_data = IntroducerCircuit::circuit_data()?;
+        let pod1_circuit_data = ExampleIntroducer::circuit_data()?;
         let pod1_verifier_data = pod1_circuit_data.verifier_data();
-        let pod1_dummy_proof: PlonkyProof = IntroducerCircuit::dummy_proof(pod1_circuit_data)?;
+        let pod1_dummy_proof: PlonkyProof = ExampleIntroducer::dummy_proof(pod1_circuit_data)?;
         let pod1_proofs: [PlonkyProof; L] = array::from_fn(|k| pod1_dummy_proof.clone());
         let pod1_public_inputs: [Vec<F>; L] = array::from_fn(|k| vec![]);
 
