@@ -1,6 +1,7 @@
 /// This file contains a simple example implementing the InnerCircuit trait, by a circuit that
 /// checks a signature over the given msg.
 use anyhow::Result;
+use plonky2::field::types::Field;
 use plonky2::iop::target::BoolTarget;
 use plonky2::iop::witness::PartialWitness;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
@@ -10,8 +11,62 @@ use crate::pod::circuit::operation::OperationTarget;
 use crate::signature::schnorr::*;
 use crate::signature::schnorr_prover::*;
 
-use super::{utils::assert_one_if_enabled, InnerCircuitTrait, OpsExecutorTrait};
+use super::{
+    utils::assert_one_if_enabled, InnerCircuitTrait, IntroducerCircuitTrait, OpsExecutorTrait,
+};
 use crate::{C, D, F};
+
+pub struct ExampleIntroducer {}
+
+impl IntroducerCircuitTrait for ExampleIntroducer {
+    type Targets = ExampleGadgetTargets;
+    type Input = ExampleGadgetInput;
+
+    /// Notice that the methods `circuit_data`, `dummy_proof`, `build_prover` are already
+    /// implemented at the trait level, in a generic way agnostic to the specific logic of the
+    /// circuit.
+
+    fn dummy_inputs() -> Result<Self::Input> {
+        let mut rng: rand::rngs::ThreadRng = rand::thread_rng();
+        let schnorr = SchnorrSigner::new();
+        let msg: Vec<F> = vec![F::ZERO, F::ZERO, F::ZERO, F::ZERO];
+        let sk: SchnorrSecretKey = SchnorrSecretKey { sk: 0u64 };
+        let pk: SchnorrPublicKey = schnorr.keygen(&sk);
+        let sig: SchnorrSignature = schnorr.sign(&msg.to_vec(), &sk, &mut rng);
+        Ok(Self::Input { pk, sig, msg })
+    }
+
+    fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets> {
+        // signature verification:
+        let sb: SchnorrBuilder = SchnorrBuilder {};
+        let pk_targ = SchnorrPublicKeyTarget::new_virtual(builder);
+        let sig_targ = SchnorrSignatureTarget::new_virtual(builder);
+        let msg_targ = MessageTarget::new_with_size(builder, 4);
+        let sig_verif_targ = sb.verify_sig::<C>(builder, &sig_targ, &msg_targ, &pk_targ);
+
+        let true_target = builder._true();
+        builder.connect(sig_verif_targ.target, true_target.target);
+
+        Ok(Self::Targets {
+            pk_targ,
+            sig_targ,
+            msg_targ,
+        })
+    }
+
+    fn set_targets(
+        pw: &mut PartialWitness<F>,
+        targets: &Self::Targets,
+        pod: &Self::Input,
+    ) -> Result<()> {
+        // set signature related values:
+        targets.pk_targ.set_witness(pw, &pod.pk).unwrap();
+        targets.sig_targ.set_witness(pw, &pod.sig).unwrap();
+        targets.msg_targ.set_witness(pw, &pod.msg).unwrap();
+
+        Ok(())
+    }
+}
 
 pub struct ExampleGadgetInput {
     pub pk: SchnorrPublicKey,

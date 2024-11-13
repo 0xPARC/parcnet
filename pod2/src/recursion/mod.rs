@@ -5,4 +5,4 @@ pub mod utils;
 
 // expose at the recursion module level the objects needed to use it
 pub use recursion_framework::{RecursionCircuit, RecursionTree};
-pub use traits::{InnerCircuitTrait, OpsExecutorTrait};
+pub use traits::{InnerCircuitTrait, IntroducerCircuitTrait, OpsExecutorTrait};

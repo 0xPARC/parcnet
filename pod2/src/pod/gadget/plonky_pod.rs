@@ -16,7 +16,7 @@ use crate::pod::operation::OpList;
 use crate::pod::payload::{PODPayload, StatementList};
 use crate::pod::statement::Statement;
 use crate::pod::{GPGInput, PODProof, POD};
-use crate::recursion::RecursionCircuit;
+use crate::recursion::{IntroducerCircuitTrait, RecursionCircuit};
 use crate::signature::schnorr::SchnorrSecretKey;
 
 use crate::{PlonkyProof, C, D, F};
@@ -443,6 +443,7 @@ mod tests {
             statement::StatementRef,
             POD,
         },
+        recursion::IntroducerCircuitTrait,
         signature::schnorr::SchnorrSecretKey,
     };
 

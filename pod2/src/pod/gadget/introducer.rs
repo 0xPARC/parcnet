@@ -14,36 +14,36 @@ use std::array;
 use std::marker::PhantomData;
 use std::time::Instant;
 
+use crate::pod::gadget::SchnorrPODGadget;
+use crate::recursion::IntroducerCircuitTrait;
 use crate::{PlonkyProof, C, D, F};
 
 pub struct IntroducerCircuit {}
 
 /// IntroducerCircuit defines the circuit whose plonky2 proof is verified in the RecursiveCircuit
 /// (1-level recursion). This is, the POD1-Introducer circuit.
-// TODO probably traitify this, and in the RecursionCircuit use the trait and not this specific
-// struct directly.
-// But for the moment we can implement here the circuit that verifies a POD1 (POD1-Introducer).
-impl IntroducerCircuit {
-    pub fn circuit_data() -> Result<CircuitData<F, C, D>> {
-        let config = CircuitConfig::standard_recursion_zk_config();
+impl IntroducerCircuitTrait for IntroducerCircuit {
+    type Input = (); // TODO
+    type Targets = ();
 
-        let mut builder = CircuitBuilder::<F, D>::new(config.clone());
-        Self::circuit_logic(&mut builder);
-
-        let data = builder.build::<C>();
-        Ok(data)
+    /// return dummy inputs that will satisfy the circuit. This is used to generate the
+    /// dummy_proof.
+    fn dummy_inputs() -> Result<Self::Input> {
+        todo!();
     }
 
-    pub fn dummy_proof(circuit_data: CircuitData<F, C, D>) -> Result<PlonkyProof> {
-        let inputs = PartialWitness::new();
-        let proof = circuit_data.prove(inputs)?;
-        Ok(proof.proof)
+    /// set up the circuit logic
+    fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets> {
+        todo!();
     }
 
-    pub fn circuit_logic(builder: &mut CircuitBuilder<F, D>) {
-        let num_dummy_gates = 5_000;
-        for _ in 0..num_dummy_gates {
-            builder.add_gate(NoopGate, vec![]);
-        }
+    /// set the actual witness values for the current instance of the circuit. Returns a Vec<F>
+    /// containing the values that will be set as public inputs
+    fn set_targets(
+        pw: &mut PartialWitness<F>,
+        targets: &Self::Targets,
+        input: &Self::Input,
+    ) -> Result<()> {
+        todo!();
     }
 }
