@@ -18,7 +18,5 @@ jobs:
       with:
         toolchain: nightly
         rustflags: ""
-    - name: Build
-      run: cargo build --release --verbose
     - name: Run tests
       run: cargo test --release --verbose
