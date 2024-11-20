@@ -111,9 +111,9 @@ where
         for i in 0..L + M + N {
             let what = if i < L {
                 "pod1 proof"
-            } else if i > L && i < L + M {
+            } else if i >= L && i < L + M {
                 "inner circuit"
-            } else if i > L + M && i < L + M + N {
+            } else if i >= L + M && i < L + M + N {
                 "recursive proof"
             } else {
                 "unknown"
@@ -124,11 +124,12 @@ where
             //     (L+M)..(L+M+N) => "recursive proof",
             //     _ => "unknown",
             // };
-            if selectors[i].is_nonzero() {
-                println!("  (selectors[{}] enabled), verify {}", i, what);
+            let action = if selectors[i].is_nonzero() {
+                "verify"
             } else {
-                println!("  (selectors[{}] disabled), skip {}", i, what);
-            }
+                "skip"
+            };
+            println!("  (selectors[{}]={}), {} {}", i, selectors[i], action, what);
         }
 
         // fill the targets
@@ -287,16 +288,17 @@ where
         // proof verification is infinity-levels-depth recursion (cyclic recursion).
 
         // pod1 proof verification
-        let pod1_common_data = verifier_data.common.clone();
+        let pod1_common_data = pod1_verifier_data.common.clone();
 
-        // notice that pod1_verifier_data is not registered as public input, while the cyclic
-        // recursive verifier_data is registered as public input.
+        // notice that pod1_verifier_data is not registered as public input, while the
+        // cyclic-recursive verifier_data is registered as public input.
         let pod1_verifier_data_targ = builder
             .add_virtual_verifier_data(pod1_verifier_data.common.config.fri_config.cap_height);
 
         let pod1_proofs_targ: Result<[ProofWithPublicInputsTarget<D>; L]> =
             array::try_from_fn(|i| {
                 let pod1_proof_targ = builder.add_virtual_proof_with_pis(&pod1_common_data);
+                // let pod1_proof_targ = builder.add_virtual_proof(&pod1_common_data);
                 builder.conditionally_verify_proof_or_dummy::<C>(
                     selectors_bool_targ[i],
                     &pod1_proof_targ,
@@ -349,6 +351,11 @@ where
         selectors: [F; L + M + N],
         ops_executor_input: O::Input,
         ops_executor_output: O::Output, // public inputs
+
+        // notice that the pod1_public_inputs are not the public
+        // inputs for the current RecursiveCircuit, but the public
+        // inputs used to verify (inside the RecursiveCircuit) the
+        // POD1-Introducer plonky2 proof.
         pod1_public_inputs: &[Vec<F>; L],
         pod1_recursive_proofs: &[PlonkyProof; L],
         inner_circuit_input: [I::Input; M],
@@ -372,15 +379,17 @@ where
         pw.set_verifier_data_target(&self.verifier_data_targ, &self.verifier_data.verifier_only)?;
         for i in 0..L {
             // put together the public inputs with the verifier_data
-            let pub_inp = Self::prepare_public_inputs(vec![], self.pod1_verifier_data.clone());
+            // let pub_inp = Self::prepare_public_inputs(vec![], self.pod1_verifier_data.clone());
             // Self::prepare_public_inputs(pod1_public_inputs[i], self.pod1_verifier_data.clone());
             pw.set_proof_with_pis_target(
                 &self.pod1_proofs_targ[i],
                 &ProofWithPublicInputs {
                     proof: pod1_recursive_proofs[i].clone(),
-                    public_inputs: pub_inp.clone(),
+                    // public_inputs: pod1_public_inputs[i].clone(),
+                    public_inputs: vec![],
                 },
             )?;
+            // pw.set_proof_target(&self.pod1_proofs_targ[i], pod1_recursive_proofs[i].clone())?;
         }
 
         // set the InnerCircuit related values
@@ -552,7 +561,7 @@ mod tests {
     /// cargo test --release test_recursion -- --nocapture
     #[test]
     fn test_recursion() -> Result<()> {
-        test_recursion_opt::<0, 3, 2, 2, 0>()?; // <L, M, N, NS, VL>
+        test_recursion_opt::<0, 3, 1, 2, 0>()?; // <L, M, N, NS, VL>
 
         Ok(())
     }
@@ -578,7 +587,7 @@ mod tests {
 
         let l: u32 = 2; // levels of the recursion (binary) tree
         println!(
-            "Testing {} recursive iterations, where each iteration checks L={} POD1-Introducer plonky2 proofs, M={} InnerCircuits and N={} cyclic plonky2 proofs",
+            "Testing {} recursive iterations, where each iteration checks:\n    L={} POD1-Introducer plonky2 proofs\n    M={} InnerCircuits\n    N={} cyclic plonky2 proofs",
             l, L, M, N
         );
 
@@ -610,8 +619,8 @@ mod tests {
         let pod1_circuit_data = ExampleIntroducer::circuit_data()?;
         let pod1_verifier_data = pod1_circuit_data.verifier_data();
         let pod1_dummy_proof: PlonkyProof = ExampleIntroducer::dummy_proof(pod1_circuit_data)?;
-        let pod1_proofs: [PlonkyProof; L] = array::from_fn(|k| pod1_dummy_proof.clone());
-        let pod1_public_inputs: [Vec<F>; L] = array::from_fn(|k| vec![]);
+        let pod1_proofs: [PlonkyProof; L] = array::from_fn(|_| pod1_dummy_proof.clone());
+        let pod1_public_inputs: [Vec<F>; L] = array::from_fn(|_| vec![]);
 
         type RC<const L: usize, const M: usize, const N: usize, const NS: usize, const VL: usize> =
             RecursionCircuit<ExampleGadget, ExampleOpsExecutor<1, VL>, L, M, N, NS, VL>;
@@ -657,10 +666,10 @@ mod tests {
                 // prepare the inputs for the `RecursionTree::prove_node` call
                 let mut selectors: [F; L + M + N] = [F::ONE; L + M + N];
                 if i == 0 {
-                    // if we're at the base level, set to 0 (=disable) the N selectors of the
+                    // if we're at the base level, set to 0 (=disable) the L & N selectors of the
                     // proofs verifications
                     selectors[0..L].fill(F::ZERO); // pod1 proof verifications
-                    selectors[M..L + M + N].fill(F::ZERO); // recursive proof verifications
+                    selectors[L + M..L + M + N].fill(F::ZERO); // recursive proof verifications
                 }
                 let innercircuits_input: [ExampleGadgetInput; M] =
                     array::from_fn(|k| ExampleGadgetInput {
