@@ -47,6 +47,13 @@ impl IntroducerCircuitTrait for ExampleIntroducer {
         let true_target = builder._true();
         builder.connect(sig_verif_targ.target, true_target.target);
 
+        // TODO TMP rm
+        // use plonky2::gates::noop::NoopGate;
+        // pad min gates
+        // while builder.num_gates() < 1 << 12 {
+        //     builder.add_gate(NoopGate, vec![]);
+        // }
+
         Ok(Self::Targets {
             pk_targ,
             sig_targ,
@@ -59,6 +66,7 @@ impl IntroducerCircuitTrait for ExampleIntroducer {
         targets: &Self::Targets,
         pod: &Self::Input,
     ) -> Result<()> {
+        assert_eq!(pod.msg.len(), 4);
         // set signature related values:
         targets.pk_targ.set_witness(pw, &pod.pk).unwrap();
         targets.sig_targ.set_witness(pw, &pod.sig).unwrap();
