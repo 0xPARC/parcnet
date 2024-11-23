@@ -12,11 +12,20 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container: archlinux
     steps:
     - uses: actions/checkout@v4
-    - uses: actions-rust-lang/setup-rust-toolchain@v1.10.1
-      with:
-        toolchain: nightly
-        rustflags: ""
+    - name: Install dependencies
+      run: |
+        yes | pacman -Syu
+        yes | pacman -S gcc clang cmake alsa-lib fontconfig wayland libgit2 libxkbcommon-x11 openssl zstd pkgconf mold sqlite jq git
+    - name: Install Rust toolchain
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        rustup toolchain install nightly
+        rustup default nightly
     - name: Run tests
-      run: cargo test --release --verbose
+      run: |
+        . "$HOME/.cargo/env"
+        cargo test --release --verbose
