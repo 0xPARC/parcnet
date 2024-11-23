@@ -23,9 +23,9 @@ jobs:
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         . "$HOME/.cargo/env"
-        rustup toolchain install nightly
-        rustup default nightly
+        rustup toolchain install nightly-2024-09-28
+        rustup default nightly-2024-09-28
     - name: Run tests
       run: |
         . "$HOME/.cargo/env"
-        cargo test --release --verbose
+        cargo test --release
