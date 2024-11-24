@@ -1,29 +1,33 @@
 /*
- N-arity tree of recursion, which at each recursive node it also verifies M InnerCircuits.
+ N-arity tree of recursion, which at each recursive node it also verifies L POD1-Introducer proofs
+ and M InnerCircuits.
 
-                 p_root
-                  ▲
-        ┌─────────┴──────────┐
-        │         F          │
-        └────────────────────┘
-         ▲ ▲    ▲       ▲   ▲
-  ┌──────┘┌┘    │       │   │
-  │       │     │       │   └──┐
-c''_1...c''_M   │p''_1  │      │p''_N
-            ┌───┴────┐  │  ┌───┴────┐
-            │   F    │(...)│   F    │
-            └────────┘     └────────┘
-            ▲ ▲ ▲  ▲          ▲ ▲ ▲  ▲
-        ┌───┘┌┘ └┐ └──┐    ┌──┘┌┘ └─┐└───┐
-        │    │   │    │    │   │    └┐   │
-       c_1..c_M p_1..p_N c'_1..c'_M p'_1..p'_N
+                      π_root
+                       ▲
+        ┌──────────────┴───────────────────┐
+        │              F                   │
+        └──────────────────────────────────┘
+         ▲ ▲           ▲             ▲  ▲
+  ┌──────┘┌┘           │             │  │
+  │       │            │             │  └──┐
+c''_1...c''_M          │π''_1        │     │π''_N
+             ┌─────────┴─────────┐   │    ┌┴───────────────────┐
+             │         F         │ (...)  │         F          │
+             └───────────────────┘        └────────────────────┘
+              ▲ ▲    ▲  ▲    ▲  ▲           ▲ ▲    ▲  ▲    ▲  ▲
+          ┌───┘┌┘   ┌┘  └┐   └┐ └──┐    ┌───┘┌┘   ┌┘  └┐   └┐ └──┐
+          │    │    │    │    │    │    │    │    │    │    │    │
+         p_1..p_L  c_1..c_M  π_1..π_N  p_1..p_L  c_1..c_M  π_1..π_N
 
  where
+ - each p_i is a POD1-Introducer plonky2 proof
  - each c_i is an InnerCircuit
- - each p_i is a plonky2 proof
+ - each π_i is a plonky2 proof
  and each of them is enabled/disabled by a selector s_i.
 
- Current version has M+N selectors, but we could make them shared between c's and p's.
+
+ There are L POD1-Introducer plonky2 proofs verifications, M InnerCircuit verifications, and N
+ plonky2 full-recursive proofs verifications. Enalbed/disabled by the L+M+N selectors.
 
  To run the tests that checks this logic:
  cargo test --release test_recursion -- --nocapture
@@ -376,7 +380,10 @@ where
         // set proof related values:
 
         // pod1 proof verification
-        pw.set_verifier_data_target(&self.verifier_data_targ, &self.verifier_data.verifier_only)?;
+        pw.set_verifier_data_target(
+            &self.pod1_verifier_data_targ,
+            &self.pod1_verifier_data.verifier_only,
+        )?;
         for i in 0..L {
             // put together the public inputs with the verifier_data
             // let pub_inp = Self::prepare_public_inputs(vec![], self.pod1_verifier_data.clone());
@@ -561,7 +568,7 @@ mod tests {
     /// cargo test --release test_recursion -- --nocapture
     #[test]
     fn test_recursion() -> Result<()> {
-        test_recursion_opt::<0, 3, 1, 2, 0>()?; // <L, M, N, NS, VL>
+        test_recursion_opt::<1, 3, 1, 2, 0>()?; // <L, M, N, NS, VL>
 
         Ok(())
     }
