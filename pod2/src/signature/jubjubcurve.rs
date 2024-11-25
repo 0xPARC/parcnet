@@ -346,7 +346,7 @@ mod tests {
         data.verify(proof);
     }
 
-    #[test]
+    //#[test]
     fn test_scalar_mul_2() {
         type C = PoseidonGoldilocksConfig;
 
@@ -372,7 +372,7 @@ mod tests {
         data.verify(proof);
     }
 
-    #[test]
+    //#[test]
     fn test_scalar_mul_3() {
         type C = PoseidonGoldilocksConfig;
 

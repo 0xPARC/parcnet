@@ -1,5 +1,6 @@
 use anyhow::Error;
 use num::BigUint;
+use paste::paste;
 use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
 use plonky2::iop::generator::{GeneratedValues, SimpleGenerator};
 use plonky2::iop::target::{BoolTarget, Target};
@@ -16,9 +17,46 @@ use crate::signature::biguint::{
 };
 use crate::signature::serialization::{ReadBigUintTarget, WriteBigUintTarget};
 
+
+macro_rules! field_builder {
+    ( $field_name:ident, ($($value:expr),*) ) => {
+        paste! {
+            pub trait [<$field_name P>] {
+                fn [<$field_name:lower _p>]() -> Self;
+            }            
+        }
+    }
+}
+
+
+
+macro_rules! concat_func {
+    ( $first: ident, $second: ident ) => {
+        paste! {
+            pub trait [<$first P>] {
+                fn [<$second _p>]() -> Self;
+            }    
+        }
+    }
+}
+
+field_builder!(
+    Jubjub, (
+        4026531841, 
+        1138881939, 
+        2042196113, 
+        674490440, 
+        2172737629, 
+        3092268470, 
+        3778125865,
+        811880050
+    ) 
+);
+
+/* 
 pub trait JubjubP {
     fn jubjub_p() -> Self;
-}
+} */
 
 // 21888242871839275222246405745257275088548364400416034343698204186575808495617
 impl JubjubP for BigUint {
