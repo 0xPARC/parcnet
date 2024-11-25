@@ -89,6 +89,127 @@ macro_rules! field_builder {
                     b: &[<$field_name:camel FieldTarget>],
                 ) -> [<$field_name:camel FieldTarget>];
             }
+
+            impl [<CircuitBuilder $field_name:camel Field>] for CircuitBuilder<GoldilocksField, 2> {
+                const [<$field_name:upper _P_NUM_LIMBS>]: usize = 8;
+
+                fn [<$field_name:lower _p>](&mut self) -> BigUintTarget {
+                    let limbs: Vec<U32Target> = BigUint::[<$field_name:lower _p>]()
+                        .iter_u32_digits()
+                        .map(|x| self.constant_u32(x))
+                        .collect();
+                    BigUintTarget { limbs }
+                }
+
+                fn [<add_virtual_ $field_name:lower field_target>](&mut self) -> [<$field_name:camel FieldTarget>] {
+                    [<$field_name:camel FieldTarget>](self.add_virtual_biguint_target(Self::[<$field_name:upper _P_NUM_LIMBS>]))
+                }
+
+                fn [<zero_ $field_name:lower field>](&mut self) -> [<$field_name:camel FieldTarget>] {
+                    [<$field_name:camel FieldTarget>](BigUintTarget {
+                        limbs: vec![self.constant_u32(0)],
+                    })
+                }
+
+                fn [<one_ $field_name:lower field>](&mut self) -> [<$field_name:camel FieldTarget>] {
+                    [<$field_name:camel FieldTarget>](BigUintTarget {
+                        limbs: vec![self.constant_u32(1)],
+                    })
+                }
+
+                fn [<from_u32_ $field_name:lower field>](&mut self, a: u32) -> [<$field_name:camel FieldTarget>] {
+                    [<$field_name:camel FieldTarget>](BigUintTarget {
+                        limbs: vec![self.constant_u32(a)],
+                    })
+                }
+
+                // reduces a mod p, then converts to *FieldTarget
+                fn [<from_biguint_ $field_name:lower field>](
+                    &mut self,
+                    a: &BigUintTarget,
+                ) -> [<$field_name:camel FieldTarget>] {
+                    let p = self.[<$field_name:lower _p>]();
+                    [<$field_name:camel FieldTarget>](self.rem_biguint(a, &p))
+                }
+
+                fn [<connect_ $field_name:lower field>](
+                    &mut self,
+                    a: &[<$field_name:camel FieldTarget>],
+                    b: &[<$field_name:camel FieldTarget>],
+                ) {
+                    self.connect_biguint(&a.0, &b.0);
+                }
+
+                fn [<is_equal_ $field_name:lower field>](
+                    &mut self,
+                    a: &[<$field_name:camel FieldTarget>],
+                    b: &[<$field_name:camel FieldTarget>],
+                ) -> BoolTarget {
+                    self.is_equal_biguint(&a.0, &b.0)
+                }
+
+                fn [<add_ $field_name:lower field>](
+                    &mut self,
+                    a: &[<$field_name:camel FieldTarget>],
+                    b: &[<$field_name:camel FieldTarget>],
+                ) -> [<$field_name:camel FieldTarget>] {
+                    let p = self.[<$field_name:lower _p>]();
+                    let sum = self.add_biguint(&a.0, &b.0);
+                    [<$field_name:camel FieldTarget>](self.rem_biguint(&sum, &p))
+                }
+
+                fn [<neg_ $field_name:lower field>](
+                    &mut self,
+                    a: &[<$field_name:camel FieldTarget>],
+                ) -> [<$field_name:camel FieldTarget>] {
+                    let p = self.[<$field_name:lower _p>]();
+                    let diff = self.sub_biguint(&p, &a.0);
+                    [<$field_name:camel FieldTarget>](self.rem_biguint(&diff, &p))
+                }
+
+                fn [<sub_ $field_name:lower field>](
+                    &mut self,
+                    a: &[<$field_name:camel FieldTarget>],
+                    b: &[<$field_name:camel FieldTarget>],
+                ) -> [<$field_name:camel FieldTarget>] {
+                    let neg_b = self.[<neg_ $field_name:lower field>](b);
+                    self.[<add_ $field_name:lower field>](a, &neg_b)
+                }
+
+                fn [<mul_ $field_name:lower field>](
+                    &mut self,
+                    a: &[<$field_name:camel FieldTarget>],
+                    b: &[<$field_name:camel FieldTarget>],
+                ) -> [<$field_name:camel FieldTarget>] {
+                    let p = self.[<$field_name:lower _p>]();
+                    let prod = self.mul_biguint(&a.0, &b.0);
+                    [<$field_name:camel FieldTarget>](self.rem_biguint(&prod, &p))
+                }
+
+                fn [<recip_ $field_name:lower field>](
+                    &mut self,
+                    a: &[<$field_name:camel FieldTarget>],
+                ) -> [<$field_name:camel FieldTarget>] {
+                    let a_inv = self.[<add_virtual_ $field_name:lower field_target>]();
+                    self.add_simple_generator([<$field_name:camel FieldReciprocalGenerator>] {
+                        a: a.clone(),
+                        a_inv: a_inv.clone(),
+                    });
+                    let prod = self.[<mul_ $field_name:lower field>](a, &a_inv);
+                    let one = self.[<one_ $field_name:lower field>]();
+                    self.[<connect_ $field_name:lower field>](&prod, &one);
+                    a_inv
+                }
+
+                fn [<div_ $field_name:lower field>](
+                    &mut self,
+                    a: &[<$field_name:camel FieldTarget>],
+                    b: &[<$field_name:camel FieldTarget>],
+                ) -> [<$field_name:camel FieldTarget>] {
+                    let b_inv = self.[<recip_ $field_name:lower field>](b);
+                    self.[<mul_ $field_name:lower field>](a, &b_inv)
+                }
+            }
         }
     }
 }
@@ -177,7 +298,7 @@ pub trait CircuitBuilderJubjubField {
         a: &JubjubFieldTarget,
         b: &JubjubFieldTarget,
     ) -> JubjubFieldTarget;
-} */
+}
 
 impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
     const JUBJUB_P_NUM_LIMBS: usize = 8;
@@ -285,7 +406,7 @@ impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
         let b_inv = self.recip_jubjubfield(b);
         self.mul_jubjubfield(a, &b_inv)
     }
-}
+}  */
 
 pub trait WitnessJubjubField {
     fn get_jubjubfield_target(&self, target: JubjubFieldTarget) -> BigUint;
