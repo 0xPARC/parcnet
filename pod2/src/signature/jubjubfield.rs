@@ -21,25 +21,79 @@ use crate::signature::serialization::{ReadBigUintTarget, WriteBigUintTarget};
 macro_rules! field_builder {
     ( $field_name:ident, ($($value:expr),*) ) => {
         paste! {
-            pub trait [<$field_name P>] {
+            // pub trait JubjubP
+            pub trait [<$field_name:camel P>] {
+                // fn jubjub_p -> Self
                 fn [<$field_name:lower _p>]() -> Self;
-            }            
+            }
+
+            impl [<$field_name:camel P>] for BigUint {
+                // fn jubjub_p -> BigUint
+                fn [<$field_name:lower _p>]() -> BigUint {
+                    BigUint::new({vec![$($value),*]})
+                }
+            }
+
+            #[derive(Clone, Debug)]
+            pub struct [<$field_name:camel FieldTarget>](pub BigUintTarget);
+
+
+            pub trait [<CircuitBuilder $field_name:camel Field>] {
+                const [<$field_name:upper _P_NUM_LIMBS>]: usize;
+            
+                fn [<$field_name:lower _p>](&mut self) -> BigUintTarget;
+            
+                fn [<add_virtual_ $field_name:lower field_target>](&mut self) -> [<$field_name:camel FieldTarget>];
+            
+                fn [<zero_ $field_name:lower field>](&mut self) -> [<$field_name:camel FieldTarget>];
+            
+                fn [<one_ $field_name:lower field>](&mut self) -> [<$field_name:camel FieldTarget>];
+            
+                fn [<from_u32_ $field_name:lower field>](&mut self, a: u32) -> [<$field_name:camel FieldTarget>];
+            
+                fn [<from_biguint_ $field_name:lower field>](&mut self, a: &BigUintTarget) -> [<$field_name:camel FieldTarget>];
+            
+                fn [<connect_ $field_name:lower field>](&mut self, a: &[<$field_name:camel FieldTarget>], b: &[<$field_name:camel FieldTarget>]);
+            
+                fn [<is_equal_ $field_name:lower field>](
+                    &mut self, 
+                    a: &[<$field_name:camel FieldTarget>], 
+                    b: &[<$field_name:camel FieldTarget>]
+                ) -> BoolTarget;
+            
+                fn [<add_ $field_name:lower field>](
+                    &mut self,
+                    a: &[<$field_name:camel FieldTarget>],
+                    b: &[<$field_name:camel FieldTarget>],
+                ) -> [<$field_name:camel FieldTarget>];
+            
+                fn [<neg_ $field_name:lower field>](&mut self, a: &[<$field_name:camel FieldTarget>]) -> [<$field_name:camel FieldTarget>];
+            
+                fn [<sub_ $field_name:lower field>](
+                    &mut self,
+                    a: &[<$field_name:camel FieldTarget>],
+                    b: &[<$field_name:camel FieldTarget>],
+                ) -> [<$field_name:camel FieldTarget>];
+            
+                fn [<mul_ $field_name:lower field>](
+                    &mut self,
+                    a: &[<$field_name:camel FieldTarget>],
+                    b: &[<$field_name:camel FieldTarget>],
+                ) -> [<$field_name:camel FieldTarget>];
+            
+                fn [<recip_ $field_name:lower field>](&mut self, a: &[<$field_name:camel FieldTarget>]) -> [<$field_name:camel FieldTarget>];
+            
+                fn [<div_ $field_name:lower field>](
+                    &mut self,
+                    a: &[<$field_name:camel FieldTarget>],
+                    b: &[<$field_name:camel FieldTarget>],
+                ) -> [<$field_name:camel FieldTarget>];
+            }
         }
     }
 }
 
-
-
-macro_rules! concat_func {
-    ( $first: ident, $second: ident ) => {
-        paste! {
-            pub trait [<$first P>] {
-                fn [<$second _p>]() -> Self;
-            }    
-        }
-    }
-}
-
+// 21888242871839275222246405745257275088548364400416034343698204186575808495617
 field_builder!(
     Jubjub, (
         4026531841, 
@@ -56,9 +110,8 @@ field_builder!(
 /* 
 pub trait JubjubP {
     fn jubjub_p() -> Self;
-} */
+} 
 
-// 21888242871839275222246405745257275088548364400416034343698204186575808495617
 impl JubjubP for BigUint {
     fn jubjub_p() -> BigUint {
         BigUint::new({
@@ -68,10 +121,11 @@ impl JubjubP for BigUint {
             ]
         })
     }
-}
+} 
 
 #[derive(Clone, Debug)]
 pub struct JubjubFieldTarget(pub BigUintTarget);
+
 
 pub trait CircuitBuilderJubjubField {
     const JUBJUB_P_NUM_LIMBS: usize;
@@ -123,7 +177,7 @@ pub trait CircuitBuilderJubjubField {
         a: &JubjubFieldTarget,
         b: &JubjubFieldTarget,
     ) -> JubjubFieldTarget;
-}
+} */
 
 impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
     const JUBJUB_P_NUM_LIMBS: usize = 8;
