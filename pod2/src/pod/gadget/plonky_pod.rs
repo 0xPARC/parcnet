@@ -16,7 +16,9 @@ use crate::pod::operation::OpList;
 use crate::pod::payload::{PODPayload, StatementList};
 use crate::pod::statement::Statement;
 use crate::pod::{GPGInput, PODProof, POD};
-use crate::recursion::{IntroducerCircuitTrait, RecursionCircuit};
+use crate::recursion::{
+    traits_examples::ExampleIntroducer, IntroducerCircuitTrait, RecursionCircuit,
+};
 use crate::signature::schnorr::SchnorrSecretKey;
 
 use crate::{PlonkyProof, C, D, F};
@@ -147,7 +149,8 @@ where
             NS,
             VL,
         >::dummy_proof(circuit_data);
-        let pod1_dummy_proof = IntroducerCircuit::dummy_proof(pod1_circuit_data)?;
+        // let pod1_dummy_proof = IntroducerCircuit::dummy_proof(pod1_circuit_data)?;
+        let pod1_dummy_proof = ExampleIntroducer::dummy_proof(pod1_circuit_data)?;
 
         Ok(ProverParams {
             circuit,
@@ -443,7 +446,7 @@ mod tests {
             statement::StatementRef,
             POD,
         },
-        recursion::IntroducerCircuitTrait,
+        recursion::{traits_examples::ExampleIntroducer, IntroducerCircuitTrait},
         signature::schnorr::SchnorrSecretKey,
     };
 
@@ -525,7 +528,8 @@ mod tests {
 
         // build the circuit_data, this struct is reused for all the calls of
         // PlonkyButNotPlonkyGadget::execute
-        let pod1_circuit_data = IntroducerCircuit::circuit_data()?;
+        // let pod1_circuit_data = IntroducerCircuit::circuit_data()?; // TODO
+        let pod1_circuit_data = ExampleIntroducer::circuit_data()?;
         let pod1_verifier_data = pod1_circuit_data.verifier_data();
         let circuit_data =
             PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::circuit_data(pod1_verifier_data)?;
@@ -598,7 +602,8 @@ mod tests {
                 .collect(),
         );
 
-        let pod1_circuit_data = IntroducerCircuit::circuit_data()?;
+        // let pod1_circuit_data = IntroducerCircuit::circuit_data()?; // TODO
+        let pod1_circuit_data = ExampleIntroducer::circuit_data()?;
         let pod1_verifier_data = pod1_circuit_data.verifier_data();
         let circuit_data =
             PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::circuit_data(pod1_verifier_data)?;
