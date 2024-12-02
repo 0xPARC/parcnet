@@ -1,6 +1,6 @@
+use ark_bn254::Fr as Fq;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use num_bigint::BigInt;
-use parcnet_pod::pod::pod_impl::{create_pod, PodValue};
+use parcnet_pod::pod::{create_pod, value::PodValue};
 
 fn benchmark_create_pod(c: &mut Criterion) {
     let private_key = vec![0u8; 32];
@@ -68,7 +68,7 @@ fn benchmark_create_pod(c: &mut Criterion) {
                     ("element".to_string(), PodValue::String("holy".to_string())),
                     (
                         "cryptoHash".to_string(),
-                        PodValue::Cryptographic(BigInt::from(1234567890)),
+                        PodValue::Cryptographic(Fq::from(1234567890)),
                     ),
                 ]),
             )
