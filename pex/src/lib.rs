@@ -1,6 +1,6 @@
 mod macros;
 mod pex_constants;
-use constants::{M, N, NS, VL};
+use constants::{L, M, N, NS, VL};
 pub mod repl;
 pub mod store;
 
@@ -26,7 +26,7 @@ use plonky2::{
 use pod2::{
     pod::{
         entry::Entry,
-        gadget::{plonky_pod::ProverParams, GadgetID, PlonkyButNotPlonkyGadget},
+        gadget::{plonky_pod::ProverParams, GadgetID},
         origin::Origin,
         payload::HashablePayload,
         statement::{AnchoredKey, StatementRef},
@@ -214,7 +214,7 @@ pub struct Env {
     bindings: Arc<Mutex<HashMap<String, Value>>>,
     sk: Option<SchnorrSecretKey>,
     script_id: Option<ScriptId>,
-    prover_params: Option<Arc<Mutex<ProverParams<M, N, NS, VL>>>>,
+    prover_params: Option<Arc<Mutex<ProverParams<L, M, N, NS, VL>>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -744,7 +744,7 @@ impl PodBuilder {
                 .collect::<Vec<OpCmd>>()[..];
             if let Some(prover_params) = &env.prover_params {
                 let mut params = prover_params.lock().unwrap();
-                POD::execute_plonky_gadget::<M, N, NS, VL>(&mut params, &gpg_input, pending_ops)
+                POD::execute_plonky_gadget::<L, M, N, NS, VL>(&mut params, &gpg_input, pending_ops)
             } else {
                 POD::execute_oracle_gadget(&gpg_input, pending_ops)
             }
@@ -759,7 +759,7 @@ impl Env {
         pod_store: Arc<Mutex<MyPods>>,
         sk: Option<SchnorrSecretKey>,
         script_id: Option<ScriptId>,
-        prover_params: Option<Arc<Mutex<ProverParams<M, N, NS, VL>>>>,
+        prover_params: Option<Arc<Mutex<ProverParams<L, M, N, NS, VL>>>>,
     ) -> Self {
         Self {
             user,

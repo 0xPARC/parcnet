@@ -18,7 +18,7 @@ use crate::pod::{
     payload::{HashablePayload, PODPayload},
     value::ScalarOrVec,
 };
-use crate::recursion::IntroducerCircuitTrait;
+use crate::recursion::{traits_examples::ExampleIntroducer, IntroducerCircuitTrait};
 use crate::signature::schnorr::{
     SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner,
 };
@@ -122,7 +122,8 @@ impl POD {
                 // get the verifier_data on the fly) takes a considerable amount of time to
                 // compute. Need to think how we modify the interface to pass the verifier_data to
                 // this method.
-                let pod1_circuit_data = IntroducerCircuit::circuit_data()?;
+                // let pod1_circuit_data = IntroducerCircuit::circuit_data()?; // TODO
+                let pod1_circuit_data = ExampleIntroducer::circuit_data()?;
                 let pod1_verifier_data = pod1_circuit_data.verifier_data();
                 let circuit_data =
                     PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::circuit_data(pod1_verifier_data)?;
@@ -464,7 +465,7 @@ impl GPGInput {
 
 #[cfg(test)]
 mod tests {
-    use crate::recursion::IntroducerCircuitTrait;
+    use crate::recursion::{traits_examples::ExampleIntroducer, IntroducerCircuitTrait};
     use operation::Operation as Op;
     use parcnet_pod::{pod::pod_impl::create_pod, pod_entries};
     use statement::StatementRef;
@@ -905,7 +906,8 @@ mod tests {
             ),
         ];
 
-        let pod1_circuit_data = IntroducerCircuit::circuit_data()?;
+        // let pod1_circuit_data = IntroducerCircuit::circuit_data()?; // TODO
+        let pod1_circuit_data = ExampleIntroducer::circuit_data()?;
         let pod1_verifier_data = pod1_circuit_data.verifier_data();
         let circuit_data =
             PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::circuit_data(pod1_verifier_data)?;

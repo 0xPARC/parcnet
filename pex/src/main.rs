@@ -14,6 +14,7 @@ use pex::{
 use pex::{Env, MyPods, Value};
 use pod2::{
     pod::gadget::PlonkyButNotPlonkyGadget,
+    recursion::traits::IntroducerCircuitTrait,
     signature::schnorr::{SchnorrSecretKey, SchnorrSigner},
 };
 use reedline::{
@@ -130,9 +131,17 @@ async fn main() -> Result<()> {
 
     let pod_store = Arc::new(Mutex::new(MyPods::default()));
     let spinner = create_spinner("Generating prover parameters...");
-    let circuit_data = PlonkyButNotPlonkyGadget::<M, N, NS, VL>::circuit_data().unwrap();
-    let prover_params =
-        PlonkyButNotPlonkyGadget::<M, N, NS, VL>::build_prover_params(circuit_data).unwrap();
+
+    let pod1_circuit_data =
+        pod2::recursion::traits_examples::ExampleIntroducer::circuit_data().unwrap();
+    let pod1_verifier_data = pod1_circuit_data.verifier_data();
+    let circuit_data =
+        PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::circuit_data(pod1_verifier_data).unwrap();
+    let prover_params = PlonkyButNotPlonkyGadget::<L, M, N, NS, VL>::build_prover_params(
+        pod1_circuit_data,
+        circuit_data,
+    )
+    .unwrap();
     spinner.finish_and_clear();
     println!("⚙️ Prover parameters generated");
     let env = Env::new(
