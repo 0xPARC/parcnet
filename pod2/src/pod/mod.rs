@@ -1,8 +1,7 @@
 use anyhow::anyhow;
 use anyhow::Result;
 use num::BigInt;
-use parcnet_pod::pod::pod_impl::Pod;
-use parcnet_pod::pod::pod_impl::PodValue;
+use parcnet_pod::pod::{Pod, PodValue};
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::types::Field;
 use serde::Deserialize;
