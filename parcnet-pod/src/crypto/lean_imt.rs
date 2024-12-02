@@ -14,10 +14,10 @@ pub fn lean_poseidon_imt(inputs: &[Fq]) -> Result<Fq, &'static str> {
         let mut new_items = Vec::new();
         for chunk in items.chunks(2) {
             if chunk.len() == 2 {
-                let hash = poseidon.hash(vec![chunk[0].clone(), chunk[1].clone()]).map_err(|_| "Error hashing")?;
+                let hash = poseidon.hash(vec![chunk[0], chunk[1]]).map_err(|_| "Error hashing")?;
                 new_items.push(hash);
             } else {
-                new_items.push(chunk[0].clone());
+                new_items.push(chunk[0]);
             }
         }
         items = new_items;
@@ -36,7 +36,7 @@ mod tests {
     
     #[test]
     fn test_lean_imt() -> Result<(), Error> {
-        let inputs = ["1", "2", "3", "4", "5"].into_iter().map(|s| Fq::from_str(s)).collect::<Result<Vec<_>, ()>>().map_err(|_| "Error converting strings to fields.")?;
+        let inputs = ["1", "2", "3", "4", "5"].into_iter().map(Fq::from_str).collect::<Result<Vec<_>, ()>>().map_err(|_| "Error converting strings to fields.")?;
 
         let result = lean_poseidon_imt(&inputs);
         assert!(result.is_ok());
