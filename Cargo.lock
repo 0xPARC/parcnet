@@ -5444,7 +5444,6 @@ dependencies = [
  "babyjubjub-ark",
  "base64",
  "criterion",
- "ff_ce",
  "hex",
  "indexmap 2.7.0",
  "lazy_static",

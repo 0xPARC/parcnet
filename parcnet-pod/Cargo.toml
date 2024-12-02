@@ -19,7 +19,6 @@ ark-ff = "0.4.0"
 ark-std = "0.4.0"
 babyjubjub-ark = { git = "https://github.com/ax0/babyjubjub-ark" }
 base64 = "0.22.1"
-ff = { package = "ff_ce", version = "0.11", features = ["derive"] }
 hex = "0.4.3"
 indexmap = { version = "2.5.0", features = ["rayon", "serde"] }
 lazy_static = "1.5.0"

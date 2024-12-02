@@ -8,17 +8,17 @@ use std::array;
 use rayon::prelude::*;
 pub use ark_bn254::Fr as Fq;
 
-use babyjubjub_ark::{decompress_point, decompress_signature, verify, Point, PrivateKey, Signature};
-use base64::{engine::general_purpose, Engine as _};
+use babyjubjub_ark::{verify, Point, PrivateKey, Signature};
 use indexmap::IndexMap;
 use thiserror::Error;
 use time::OffsetDateTime;
+use serialisation::{compressed_pt_ser, compressed_pt_de, compressed_sig_ser, compressed_sig_de};
 
 
 use serde::{Deserialize, Serialize};
 
 use uuid::Uuid;
-use value::PodValue;
+pub use value::PodValue;
 
 use crate::crypto::lean_imt::lean_poseidon_imt;
 
@@ -31,14 +31,17 @@ pub type PodEntries = IndexMap<String, PodValue>;
 #[serde(rename_all = "camelCase")]
 pub struct PodClaim {
     entries: PodEntries,
-    signer_public_key: String,
+    #[serde(serialize_with = "compressed_pt_ser", deserialize_with = "compressed_pt_de")]
+    signer_public_key: Point
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PodProof {
-    signature: String
+    #[serde(serialize_with = "compressed_sig_ser", deserialize_with = "compressed_sig_de")]
+    signature: Signature
 }
 
+// TODO: Store content ID and skip it in serialisation.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Pod {
     id: Uuid,
@@ -112,18 +115,18 @@ where
 
     let message = lean_poseidon_imt(&hashes).map_err(|_| PodCreationError::ImtError)?;
     
-    let public_key = private_key.public();
-    let sign =
+    let signer_public_key = private_key.public();
+    let signature =
         private_key.sign(message).map_err(|_| PodCreationError::SignatureError)?;
 
     Ok(Pod {
         id: Uuid::new_v4(),
         claim: PodClaim {
             entries,
-            signer_public_key: general_purpose::STANDARD_NO_PAD.encode(public_key.compress()),
+            signer_public_key,
         },
         proof: PodProof {
-            signature: general_purpose::STANDARD_NO_PAD.encode(sign.compress()),
+            signature
         },
     })
     }
@@ -145,18 +148,12 @@ where
         lean_poseidon_imt(&hashes).map_err(|_| PodCreationError::ImtError)
     }
 
-    pub fn signer_public_key(&self) -> Result<Point, String> {
-        let compressed_key = general_purpose::STANDARD_NO_PAD.decode(&self.claim.signer_public_key).map_err(|e| format!("{:?}", e))?;
-        let compressed_key_arr: [u8; 32] = array::from_fn(|i| compressed_key[i]);
-        decompress_point(compressed_key_arr)
+    pub fn signer_public_key(&self) -> Point {
+        self.claim.signer_public_key.clone()
     }
 
-    pub fn signature(&self) -> Result<Signature, String> {
-        let compressed_signature = general_purpose::STANDARD_NO_PAD.decode(&self.proof.signature).map_err(|e| format!("{:?}", e))?;
-        let compressed_signature_arr: [u8; 64] = array::from_fn(|i| compressed_signature[i]);
-        decompress_signature(
-            &compressed_signature_arr
-                )
+    pub fn signature(&self) -> Signature {
+        self.proof.signature.clone()
     }
     
 pub fn verify(&self) -> Result<bool, Error> {
@@ -164,8 +161,8 @@ pub fn verify(&self) -> Result<bool, Error> {
     let content_id = self.content_id()?;
 
     // Check proof
-    let signer_public_key = self.signer_public_key()?;
-    let signature = self.signature()?;
+    let signer_public_key = self.signer_public_key();
+    let signature = self.signature();
 
     Ok(verify(signer_public_key, signature, content_id))
 }
@@ -200,25 +197,26 @@ where
     let message = lean_poseidon_imt(&hashes).map_err(|_| PodCreationError::ImtError)?;
     
     let private_key = PrivateKey { key: array::from_fn(|i| private_key[i]) };
-    let public_key = private_key.public();
-    let sign =
+    let signer_public_key = private_key.public();
+    let signature =
         private_key.sign(message).map_err(|_| PodCreationError::SignatureError)?;
 
     Ok(Pod {
         id: Uuid::new_v4(),
         claim: PodClaim {
             entries,
-            signer_public_key: general_purpose::STANDARD_NO_PAD.encode(public_key.compress()),
+            signer_public_key,
         },
         proof: PodProof {
-            signature: general_purpose::STANDARD_NO_PAD.encode(sign.compress()),
+            signature
         },
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use base64::engine::general_purpose::STANDARD_NO_PAD as b64;
+    use base64::{engine::general_purpose::STANDARD_NO_PAD as b64, Engine as _};
+    use babyjubjub_ark::decompress_signature;
     use time::macros::datetime;
     use std::str::FromStr;
 
@@ -288,10 +286,10 @@ mod tests {
         let pod = create_test_pod()?;
         dbg!(pod.content_id().expect("can't hash"));
         dbg!(hex::encode(
-            pod.signer_public_key().expect("can't decode signer's public key").compress()
+            pod.signer_public_key().compress()
         ));
         dbg!(hex::encode(
-            pod.signature().expect("can't decode sig").compress()
+            pod.signature().compress()
         ));
 
         Ok(())
@@ -316,14 +314,14 @@ mod tests {
         let pod2 = create_test_pod2()?;
         
         assert!(pod.content_id()? == Fq::from_str("18003549444852780886592139349318927700964545643704389119309344945101355208480").map_err(|e| format!("{:?}", e))?);
-        assert!(pod.signature()? == decompress_signature(&{
+        assert!(pod.signature() == decompress_signature(&{
             let byte_vec = b64.decode("Jp3i2PnnRoLCmVPzgM6Bowchg44jz3fKuMQPzXQqWy4jzPFpZx2KwLuaIYaeYbd7Ah4FusEht2VhsVf3I81AAg")?;
             array::from_fn(|i| byte_vec[i])
         })?);
 
         
         assert!(pod2.content_id()? == Fq::from_str("14490445713061892907571559700953246722753167030842690801373581812224357192993").map_err(|e| format!("{:?}", e))?);
-        assert!(pod2.signature()? == decompress_signature(&{
+        assert!(pod2.signature() == decompress_signature(&{
             let byte_vec = b64.decode("XsPL63NJKkq59CiO8VC3vDFNGPeNfnDsN3ugn68aOQjOvAMLiRqE2ISEBQSJlAxb9eokyyauUuKlGyD98FeSBQ")?;
             array::from_fn(|i| byte_vec[i])
         })?);        
