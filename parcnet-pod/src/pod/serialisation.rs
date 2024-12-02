@@ -2,7 +2,7 @@ use std::array;
 
 use super::Fq;
 use ark_std::str::FromStr;
-use babyjubjub_ark::{decompress_point, Point};
+use babyjubjub_ark::{decompress_point, decompress_signature, Point, Signature};
 use base64::{engine::general_purpose, Engine};
 use num_traits::Num;
 use ark_ff::PrimeField;
@@ -49,6 +49,20 @@ pub fn compressed_pt_de<'de, D>(data: D) -> Result<Point, D::Error> where D: ser
     let s: &str = serde::de::Deserialize::deserialize(data)?;
     let compressed_pt_bytes = general_purpose::STANDARD_NO_PAD.decode(s).map_err(serde::de::Error::custom)?;
     decompress_point(array::from_fn(|i| compressed_pt_bytes[i])).map_err(serde::de::Error::custom)
+}
+
+/// Serialisation procedure for EdDSA Baby Jubjub signatures. Yields an unpadded Base64 string
+/// representing the compressed signature.
+pub fn compressed_sig_ser<S>(sig: &Signature, s: S) -> Result<S::Ok, S::Error> where S: serde::Serializer {
+    let sig_string = general_purpose::STANDARD_NO_PAD.encode(sig.compress());
+    s.serialize_str(&sig_string)
+}
+
+/// Deserialisation procedure for EdDSA Baby Jubjub signatures.
+pub fn compressed_sig_de<'de, D>(data: D) -> Result<Signature, D::Error> where D: serde::de::Deserializer<'de> {
+    let s: &str = serde::de::Deserialize::deserialize(data)?;
+    let compressed_sig_bytes = general_purpose::STANDARD_NO_PAD.decode(s).map_err(serde::de::Error::custom)?;
+    decompress_signature(&array::from_fn(|i| compressed_sig_bytes[i])).map_err(serde::de::Error::custom)
 }
 
 #[cfg(test)]
