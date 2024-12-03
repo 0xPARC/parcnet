@@ -270,6 +270,58 @@ macro_rules! field_builder {
             }
             
 
+
+            #[derive(Debug)]
+            struct [<$field_name:camel FieldReciprocalGenerator>] {
+                a: [<$field_name:camel FieldTarget>],
+                a_inv: [<$field_name:camel FieldTarget>],
+            }
+
+            impl SimpleGenerator<GoldilocksField, 2> for [<$field_name:camel FieldReciprocalGenerator>] {
+                fn id(&self) -> String {
+                    "JubjubFieldReciprocalGenerator".to_string()
+                }
+
+                fn dependencies(&self) -> Vec<Target> {
+                    self.a.0.limbs.iter().map(|&l| l.0).collect()
+                }
+
+                fn run_once(
+                    &self,
+                    witness: &PartitionWitness<GoldilocksField>,
+                    out_buffer: &mut GeneratedValues<GoldilocksField>,
+                ) -> Result<(), Error> {
+                    let a: BigUint = witness.[<get_ $field_name:lower field_target>](self.a.clone());
+                    let p: BigUint = BigUint::[<$field_name:lower _p>]();
+                    let a_inv: BigUint = a.modinv(&p).ok_or(Error::new(DivisionByZeroError {}))?;
+                    out_buffer.[<set_$field_name:lower field_target>](&self.a_inv, &a_inv);
+                    Ok(())
+                }
+
+                fn serialize(
+                    &self,
+                    dst: &mut Vec<u8>,
+                    _common_data: &CommonCircuitData<GoldilocksField, 2>,
+                ) -> IoResult<()> {
+                    dst.write_biguint_target(self.a.0.clone())?;
+                    dst.write_biguint_target(self.a_inv.0.clone())?;
+                    Ok(())
+                }
+
+                fn deserialize(
+                    src: &mut Buffer,
+                    _common_data: &CommonCircuitData<GoldilocksField, 2>,
+                ) -> IoResult<Self>
+                where
+                    Self: Sized,
+                {
+                    let a = [<$field_name:camel FieldTarget>](src.read_biguint_target()?);
+                    let a_inv = [<$field_name:camel FieldTarget>](src.read_biguint_target()?);
+                    Ok(Self { a, a_inv })
+                }
+            }
+
+
         }
     }
 }
@@ -496,18 +548,7 @@ impl GeneratedValuesJubjubField for GeneratedValues<GoldilocksField> {
     fn set_jubjubfield_target(&mut self, target: &JubjubFieldTarget, value: &BigUint) {
         self.set_biguint_target(&target.0, value);
     }
-} */
-
-#[derive(Debug)]
-struct DivisionByZeroError {}
-
-impl Display for DivisionByZeroError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Attempted division by zero in jubjub field.")
-    }
 }
-
-impl std::error::Error for DivisionByZeroError {}
 
 #[derive(Debug)]
 struct JubjubFieldReciprocalGenerator {
@@ -557,7 +598,19 @@ impl SimpleGenerator<GoldilocksField, 2> for JubjubFieldReciprocalGenerator {
         let a_inv = JubjubFieldTarget(src.read_biguint_target()?);
         Ok(Self { a, a_inv })
     }
+} */
+
+
+#[derive(Debug)]
+struct DivisionByZeroError {}
+
+impl Display for DivisionByZeroError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Attempted division by zero in jubjub field.")
+    }
 }
+
+impl std::error::Error for DivisionByZeroError {}
 
 #[cfg(test)]
 mod tests {
