@@ -9,17 +9,17 @@ use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
 use std::str::FromStr;
 
 use crate::signature::biguint::{BigUintTarget, CircuitBuilderBiguint};
-use crate::signature::jubjubfield::{CircuitBuilderJubjubField, JubjubFieldTarget};
+use crate::signature::jubjubfield::{CircuitBuilderJubjubBaseField, JubjubBaseFieldTarget};
 
 #[derive(Clone, Debug)]
 pub struct JubjubCurveTarget {
-    pub x: JubjubFieldTarget,
-    pub y: JubjubFieldTarget,
+    pub x: JubjubBaseFieldTarget,
+    pub y: JubjubBaseFieldTarget,
 }
 
 pub struct JubjubConstantsTarget {
-    pub a: JubjubFieldTarget,
-    pub d: JubjubFieldTarget,
+    pub a: JubjubBaseFieldTarget,
+    pub d: JubjubBaseFieldTarget,
 }
 
 pub trait CircuitBuilderJubjubCurve {
@@ -66,14 +66,14 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
     fn jubjub_constants(&mut self) -> JubjubConstantsTarget {
         let a_val = BigUint::from_str("168700").unwrap();
         let d_val = BigUint::from_str("168696").unwrap();
-        let a = JubjubFieldTarget(self.constant_biguint(&a_val));
-        let d = JubjubFieldTarget(self.constant_biguint(&d_val));
+        let a = JubjubBaseFieldTarget(self.constant_biguint(&a_val));
+        let d = JubjubBaseFieldTarget(self.constant_biguint(&d_val));
         JubjubConstantsTarget { a, d }
     }
 
     fn connect_jubjub_curve(&mut self, a: &JubjubCurveTarget, b: &JubjubCurveTarget) {
-        self.connect_jubjubfield(&a.x, &b.x);
-        self.connect_jubjubfield(&a.y, &b.y);
+        self.connect_jubjub_base_field(&a.x, &b.x);
+        self.connect_jubjub_base_field(&a.y, &b.y);
     }
 
     fn is_equal_jubjub_curve(
@@ -81,15 +81,15 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
         a: &JubjubCurveTarget, 
         b: &JubjubCurveTarget
     ) -> BoolTarget {
-        let x_is_equal = self.is_equal_jubjubfield(&a.x, &b.x).target;
-        let y_is_equal = self.is_equal_jubjubfield(&a.y, &b.y).target;
+        let x_is_equal = self.is_equal_jubjub_base_field(&a.x, &b.x).target;
+        let y_is_equal = self.is_equal_jubjub_base_field(&a.y, &b.y).target;
         let result_is_equal = self.mul(x_is_equal, y_is_equal);
         BoolTarget::new_unsafe(result_is_equal)
     }
 
     fn zero_jubjub_curve(&mut self) -> JubjubCurveTarget {
-        let x = self.zero_jubjubfield();
-        let y = self.one_jubjubfield();
+        let x = self.zero_jubjub_base_field();
+        let y = self.one_jubjub_base_field();
         JubjubCurveTarget { x, y }
     }
 
@@ -102,8 +102,8 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
             "16950150798460657717958625567821834550301663161624707787222815936182638968203",
         )
         .unwrap();
-        let x = JubjubFieldTarget(self.constant_biguint(&x_val));
-        let y = JubjubFieldTarget(self.constant_biguint(&y_val));
+        let x = JubjubBaseFieldTarget(self.constant_biguint(&x_val));
+        let y = JubjubBaseFieldTarget(self.constant_biguint(&y_val));
         JubjubCurveTarget { x, y }
     }
 
@@ -111,17 +111,17 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
         // a x^2 + y^2 = 1 + d x^2 y^2
         let JubjubConstantsTarget { a, d } = self.jubjub_constants();
 
-        let x2 = self.mul_jubjubfield(&p.x, &p.x);
-        let first_term = self.mul_jubjubfield(&a, &x2);
-        let y2 = self.mul_jubjubfield(&p.y, &p.y);
-        let lhs = self.add_jubjubfield(&first_term, &y2);
+        let x2 = self.mul_jubjub_base_field(&p.x, &p.x);
+        let first_term = self.mul_jubjub_base_field(&a, &x2);
+        let y2 = self.mul_jubjub_base_field(&p.y, &p.y);
+        let lhs = self.add_jubjub_base_field(&first_term, &y2);
 
-        let one = self.one_jubjubfield();
-        let x2y2 = self.mul_jubjubfield(&x2, &y2);
-        let last_term = self.mul_jubjubfield(&d, &x2y2);
-        let rhs = self.add_jubjubfield(&one, &last_term);
+        let one = self.one_jubjub_base_field();
+        let x2y2 = self.mul_jubjub_base_field(&x2, &y2);
+        let last_term = self.mul_jubjub_base_field(&d, &x2y2);
+        let rhs = self.add_jubjub_base_field(&one, &last_term);
 
-        self.connect_jubjubfield(&lhs, &rhs);
+        self.connect_jubjub_base_field(&lhs, &rhs);
     }
 
     fn add_jubjub_curve(
@@ -134,22 +134,22 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
         // res.y = (p.y * q.y - a * p.x * q.x) / (1 - lamb)
         let JubjubConstantsTarget { a, d } = self.jubjub_constants();
 
-        let pxqy = self.mul_jubjubfield(&p.x, &q.y);
-        let pyqx = self.mul_jubjubfield(&p.y, &q.x);
-        let prod4 = self.mul_jubjubfield(&pxqy, &pyqx);
-        let lambda = self.mul_jubjubfield(&d, &prod4);
+        let pxqy = self.mul_jubjub_base_field(&p.x, &q.y);
+        let pyqx = self.mul_jubjub_base_field(&p.y, &q.x);
+        let prod4 = self.mul_jubjub_base_field(&pxqy, &pyqx);
+        let lambda = self.mul_jubjub_base_field(&d, &prod4);
 
-        let one = self.one_jubjubfield();
-        let x_num = self.add_jubjubfield(&pxqy, &pyqx);
-        let x_den = self.add_jubjubfield(&one, &lambda);
-        let res_x = self.div_jubjubfield(&x_num, &x_den);
+        let one = self.one_jubjub_base_field();
+        let x_num = self.add_jubjub_base_field(&pxqy, &pyqx);
+        let x_den = self.add_jubjub_base_field(&one, &lambda);
+        let res_x = self.div_jubjub_base_field(&x_num, &x_den);
 
-        let pyqy = self.mul_jubjubfield(&p.y, &q.y);
-        let pxqx = self.mul_jubjubfield(&p.x, &q.x);
-        let apxqx = self.mul_jubjubfield(&a, &pxqx);
-        let y_num = self.sub_jubjubfield(&pyqy, &apxqx);
-        let y_den = self.sub_jubjubfield(&one, &lambda);
-        let res_y = self.div_jubjubfield(&y_num, &y_den);
+        let pyqy = self.mul_jubjub_base_field(&p.y, &q.y);
+        let pxqx = self.mul_jubjub_base_field(&p.x, &q.x);
+        let apxqx = self.mul_jubjub_base_field(&a, &pxqx);
+        let y_num = self.sub_jubjub_base_field(&pyqy, &apxqx);
+        let y_den = self.sub_jubjub_base_field(&one, &lambda);
+        let res_y = self.div_jubjub_base_field(&y_num, &y_den);
 
         JubjubCurveTarget { x: res_x, y: res_y }
     }
@@ -175,8 +175,8 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
         let x = self.multiplex_biguint(&a0.x.0, &a1.x.0, sel);
         let y = self.multiplex_biguint(&a0.y.0, &a1.y.0, sel);
         JubjubCurveTarget {
-            x: JubjubFieldTarget(x),
-            y: JubjubFieldTarget(y),
+            x: JubjubBaseFieldTarget(x),
+            y: JubjubBaseFieldTarget(y),
         }
     }
 
@@ -229,7 +229,7 @@ mod tests {
 
     use crate::signature::biguint::{BigUintTarget, CircuitBuilderBiguint};
     use crate::signature::jubjubcurve::{CircuitBuilderJubjubCurve, JubjubCurveTarget};
-    use crate::signature::jubjubfield::{CircuitBuilderJubjubField, JubjubFieldTarget};
+    use crate::signature::jubjubfield::{CircuitBuilderJubjubBaseField, JubjubBaseFieldTarget};
 
     #[test]
     fn test_verify_jubjub_point() {
@@ -247,8 +247,8 @@ mod tests {
             "16950150798460657717958625567821834550301663161624707787222815936182638968203",
         )
         .unwrap();
-        let x = JubjubFieldTarget(builder.constant_biguint(&x_val));
-        let y = JubjubFieldTarget(builder.constant_biguint(&y_val));
+        let x = JubjubBaseFieldTarget(builder.constant_biguint(&x_val));
+        let y = JubjubBaseFieldTarget(builder.constant_biguint(&y_val));
         let p = JubjubCurveTarget { x, y };
 
         builder.verify_jubjub_point(&p);
@@ -291,19 +291,19 @@ mod tests {
         )
         .unwrap();
 
-        let px = JubjubFieldTarget(builder.constant_biguint(&px_val));
-        let py = JubjubFieldTarget(builder.constant_biguint(&py_val));
-        let qx = JubjubFieldTarget(builder.constant_biguint(&qx_val));
-        let qy = JubjubFieldTarget(builder.constant_biguint(&qy_val));
-        let res_x = JubjubFieldTarget(builder.constant_biguint(&res_x_val));
-        let res_y = JubjubFieldTarget(builder.constant_biguint(&res_y_val));
+        let px = JubjubBaseFieldTarget(builder.constant_biguint(&px_val));
+        let py = JubjubBaseFieldTarget(builder.constant_biguint(&py_val));
+        let qx = JubjubBaseFieldTarget(builder.constant_biguint(&qx_val));
+        let qy = JubjubBaseFieldTarget(builder.constant_biguint(&qy_val));
+        let res_x = JubjubBaseFieldTarget(builder.constant_biguint(&res_x_val));
+        let res_y = JubjubBaseFieldTarget(builder.constant_biguint(&res_y_val));
 
         let p = JubjubCurveTarget { x: px, y: py };
         let q = JubjubCurveTarget { x: qx, y: qy };
         let res = builder.add_jubjub_curve(&p, &q);
 
-        builder.connect_jubjubfield(&res.x, &res_x);
-        builder.connect_jubjubfield(&res.y, &res_y);
+        builder.connect_jubjub_base_field(&res.x, &res_x);
+        builder.connect_jubjub_base_field(&res.y, &res_y);
 
         let data = builder.build::<C>();
         let proof = data.prove(pw).unwrap();
@@ -327,8 +327,8 @@ mod tests {
             "2626589144620713026669568689430873010625803728049924121243784502389097019475",
         )
         .unwrap();
-        let px = JubjubFieldTarget(builder.constant_biguint(&px_val));
-        let py = JubjubFieldTarget(builder.constant_biguint(&py_val));
+        let px = JubjubBaseFieldTarget(builder.constant_biguint(&px_val));
+        let py = JubjubBaseFieldTarget(builder.constant_biguint(&py_val));
         let p = JubjubCurveTarget { x: px, y: py };
 
         let ten = builder.constant_biguint(&BigUint::new(vec![10]));

@@ -43,47 +43,47 @@ macro_rules! field_builder {
             
                 fn [<$field_name:snake _p>](&mut self) -> BigUintTarget;
             
-                fn [<add_virtual_ $field_name:snake field_target>](&mut self) -> [<$field_name:camel FieldTarget>];
+                fn [<add_virtual_ $field_name:snake _field_target>](&mut self) -> [<$field_name:camel FieldTarget>];
             
-                fn [<zero_ $field_name:snake field>](&mut self) -> [<$field_name:camel FieldTarget>];
+                fn [<zero_ $field_name:snake _field>](&mut self) -> [<$field_name:camel FieldTarget>];
             
-                fn [<one_ $field_name:snake field>](&mut self) -> [<$field_name:camel FieldTarget>];
+                fn [<one_ $field_name:snake _field>](&mut self) -> [<$field_name:camel FieldTarget>];
             
-                fn [<from_u32_ $field_name:snake field>](&mut self, a: u32) -> [<$field_name:camel FieldTarget>];
+                fn [<from_u32_ $field_name:snake _field>](&mut self, a: u32) -> [<$field_name:camel FieldTarget>];
             
-                fn [<from_biguint_ $field_name:snake field>](&mut self, a: &BigUintTarget) -> [<$field_name:camel FieldTarget>];
+                fn [<from_biguint_ $field_name:snake _field>](&mut self, a: &BigUintTarget) -> [<$field_name:camel FieldTarget>];
             
-                fn [<connect_ $field_name:snake field>](&mut self, a: &[<$field_name:camel FieldTarget>], b: &[<$field_name:camel FieldTarget>]);
+                fn [<connect_ $field_name:snake _field>](&mut self, a: &[<$field_name:camel FieldTarget>], b: &[<$field_name:camel FieldTarget>]);
             
-                fn [<is_equal_ $field_name:snake field>](
+                fn [<is_equal_ $field_name:snake _field>](
                     &mut self, 
                     a: &[<$field_name:camel FieldTarget>], 
                     b: &[<$field_name:camel FieldTarget>]
                 ) -> BoolTarget;
             
-                fn [<add_ $field_name:snake field>](
+                fn [<add_ $field_name:snake _field>](
                     &mut self,
                     a: &[<$field_name:camel FieldTarget>],
                     b: &[<$field_name:camel FieldTarget>],
                 ) -> [<$field_name:camel FieldTarget>];
             
-                fn [<neg_ $field_name:snake field>](&mut self, a: &[<$field_name:camel FieldTarget>]) -> [<$field_name:camel FieldTarget>];
+                fn [<neg_ $field_name:snake _field>](&mut self, a: &[<$field_name:camel FieldTarget>]) -> [<$field_name:camel FieldTarget>];
             
-                fn [<sub_ $field_name:snake field>](
+                fn [<sub_ $field_name:snake _field>](
                     &mut self,
                     a: &[<$field_name:camel FieldTarget>],
                     b: &[<$field_name:camel FieldTarget>],
                 ) -> [<$field_name:camel FieldTarget>];
             
-                fn [<mul_ $field_name:snake field>](
+                fn [<mul_ $field_name:snake _field>](
                     &mut self,
                     a: &[<$field_name:camel FieldTarget>],
                     b: &[<$field_name:camel FieldTarget>],
                 ) -> [<$field_name:camel FieldTarget>];
             
-                fn [<recip_ $field_name:snake field>](&mut self, a: &[<$field_name:camel FieldTarget>]) -> [<$field_name:camel FieldTarget>];
+                fn [<recip_ $field_name:snake _field>](&mut self, a: &[<$field_name:camel FieldTarget>]) -> [<$field_name:camel FieldTarget>];
             
-                fn [<div_ $field_name:snake field>](
+                fn [<div_ $field_name:snake _field>](
                     &mut self,
                     a: &[<$field_name:camel FieldTarget>],
                     b: &[<$field_name:camel FieldTarget>],
@@ -101,30 +101,30 @@ macro_rules! field_builder {
                     BigUintTarget { limbs }
                 }
 
-                fn [<add_virtual_ $field_name:snake field_target>](&mut self) -> [<$field_name:camel FieldTarget>] {
+                fn [<add_virtual_ $field_name:snake _field_target>](&mut self) -> [<$field_name:camel FieldTarget>] {
                     [<$field_name:camel FieldTarget>](self.add_virtual_biguint_target(Self::[<$field_name:upper _P_NUM_LIMBS>]))
                 }
 
-                fn [<zero_ $field_name:snake field>](&mut self) -> [<$field_name:camel FieldTarget>] {
+                fn [<zero_ $field_name:snake _field>](&mut self) -> [<$field_name:camel FieldTarget>] {
                     [<$field_name:camel FieldTarget>](BigUintTarget {
                         limbs: vec![self.constant_u32(0)],
                     })
                 }
 
-                fn [<one_ $field_name:snake field>](&mut self) -> [<$field_name:camel FieldTarget>] {
+                fn [<one_ $field_name:snake _field>](&mut self) -> [<$field_name:camel FieldTarget>] {
                     [<$field_name:camel FieldTarget>](BigUintTarget {
                         limbs: vec![self.constant_u32(1)],
                     })
                 }
 
-                fn [<from_u32_ $field_name:snake field>](&mut self, a: u32) -> [<$field_name:camel FieldTarget>] {
+                fn [<from_u32_ $field_name:snake _field>](&mut self, a: u32) -> [<$field_name:camel FieldTarget>] {
                     [<$field_name:camel FieldTarget>](BigUintTarget {
                         limbs: vec![self.constant_u32(a)],
                     })
                 }
 
                 // reduces a mod p, then converts to *FieldTarget
-                fn [<from_biguint_ $field_name:snake field>](
+                fn [<from_biguint_ $field_name:snake _field>](
                     &mut self,
                     a: &BigUintTarget,
                 ) -> [<$field_name:camel FieldTarget>] {
@@ -132,7 +132,7 @@ macro_rules! field_builder {
                     [<$field_name:camel FieldTarget>](self.rem_biguint(a, &p))
                 }
 
-                fn [<connect_ $field_name:snake field>](
+                fn [<connect_ $field_name:snake _field>](
                     &mut self,
                     a: &[<$field_name:camel FieldTarget>],
                     b: &[<$field_name:camel FieldTarget>],
@@ -140,7 +140,7 @@ macro_rules! field_builder {
                     self.connect_biguint(&a.0, &b.0);
                 }
 
-                fn [<is_equal_ $field_name:snake field>](
+                fn [<is_equal_ $field_name:snake _field>](
                     &mut self,
                     a: &[<$field_name:camel FieldTarget>],
                     b: &[<$field_name:camel FieldTarget>],
@@ -148,7 +148,7 @@ macro_rules! field_builder {
                     self.is_equal_biguint(&a.0, &b.0)
                 }
 
-                fn [<add_ $field_name:snake field>](
+                fn [<add_ $field_name:snake _field>](
                     &mut self,
                     a: &[<$field_name:camel FieldTarget>],
                     b: &[<$field_name:camel FieldTarget>],
@@ -158,7 +158,7 @@ macro_rules! field_builder {
                     [<$field_name:camel FieldTarget>](self.rem_biguint(&sum, &p))
                 }
 
-                fn [<neg_ $field_name:snake field>](
+                fn [<neg_ $field_name:snake _field>](
                     &mut self,
                     a: &[<$field_name:camel FieldTarget>],
                 ) -> [<$field_name:camel FieldTarget>] {
@@ -167,16 +167,16 @@ macro_rules! field_builder {
                     [<$field_name:camel FieldTarget>](self.rem_biguint(&diff, &p))
                 }
 
-                fn [<sub_ $field_name:snake field>](
+                fn [<sub_ $field_name:snake _field>](
                     &mut self,
                     a: &[<$field_name:camel FieldTarget>],
                     b: &[<$field_name:camel FieldTarget>],
                 ) -> [<$field_name:camel FieldTarget>] {
-                    let neg_b = self.[<neg_ $field_name:snake field>](b);
-                    self.[<add_ $field_name:snake field>](a, &neg_b)
+                    let neg_b = self.[<neg_ $field_name:snake _field>](b);
+                    self.[<add_ $field_name:snake _field>](a, &neg_b)
                 }
 
-                fn [<mul_ $field_name:snake field>](
+                fn [<mul_ $field_name:snake _field>](
                     &mut self,
                     a: &[<$field_name:camel FieldTarget>],
                     b: &[<$field_name:camel FieldTarget>],
@@ -186,41 +186,41 @@ macro_rules! field_builder {
                     [<$field_name:camel FieldTarget>](self.rem_biguint(&prod, &p))
                 }
 
-                fn [<recip_ $field_name:snake field>](
+                fn [<recip_ $field_name:snake _field>](
                     &mut self,
                     a: &[<$field_name:camel FieldTarget>],
                 ) -> [<$field_name:camel FieldTarget>] {
-                    let a_inv = self.[<add_virtual_ $field_name:snake field_target>]();
+                    let a_inv = self.[<add_virtual_ $field_name:snake _field_target>]();
                     self.add_simple_generator([<$field_name:camel FieldReciprocalGenerator>] {
                         a: a.clone(),
                         a_inv: a_inv.clone(),
                     });
-                    let prod = self.[<mul_ $field_name:snake field>](a, &a_inv);
-                    let one = self.[<one_ $field_name:snake field>]();
-                    self.[<connect_ $field_name:snake field>](&prod, &one);
+                    let prod = self.[<mul_ $field_name:snake _field>](a, &a_inv);
+                    let one = self.[<one_ $field_name:snake _field>]();
+                    self.[<connect_ $field_name:snake _field>](&prod, &one);
                     a_inv
                 }
 
-                fn [<div_ $field_name:snake field>](
+                fn [<div_ $field_name:snake _field>](
                     &mut self,
                     a: &[<$field_name:camel FieldTarget>],
                     b: &[<$field_name:camel FieldTarget>],
                 ) -> [<$field_name:camel FieldTarget>] {
-                    let b_inv = self.[<recip_ $field_name:snake field>](b);
-                    self.[<mul_ $field_name:snake field>](a, &b_inv)
+                    let b_inv = self.[<recip_ $field_name:snake _field>](b);
+                    self.[<mul_ $field_name:snake _field>](a, &b_inv)
                 }
             }
 
             pub trait [<Witness $field_name:camel Field>] {
-                fn [<get_ $field_name:snake field_target>](
+                fn [<get_ $field_name:snake _field_target>](
                     &self, 
                     target: [<$field_name:camel FieldTarget>]
                 ) -> BigUint;
-                fn [<get_ $field_name:snake field_target_borrow>](
+                fn [<get_ $field_name:snake _field_target_borrow>](
                     &self, 
                     target: &[<$field_name:camel FieldTarget>]
                 ) -> BigUint;
-                fn [<set_ $field_name:snake field_target>](
+                fn [<set_ $field_name:snake _field_target>](
                     &mut self, 
                     target: &[<$field_name:camel FieldTarget>], 
                     value: &BigUint
@@ -228,21 +228,21 @@ macro_rules! field_builder {
             }
             
             impl<T: Witness<GoldilocksField>> [<Witness $field_name:camel Field>] for T {
-                fn [<get_ $field_name:snake field_target>](
+                fn [<get_ $field_name:snake _field_target>](
                     &self, 
                     target: [<$field_name:camel FieldTarget>]
                 ) -> BigUint {
                     self.get_biguint_target(target.0)
                 }
             
-                fn [<get_ $field_name:snake field_target_borrow>](
+                fn [<get_ $field_name:snake _field_target_borrow>](
                     &self, 
                     target: &[<$field_name:camel FieldTarget>]
                 ) -> BigUint {
                     self.get_biguint_target(target.0.clone())
                 }
             
-                fn [<set_ $field_name:snake field_target>](
+                fn [<set_ $field_name:snake _field_target>](
                     &mut self, 
                     target: &[<$field_name:camel FieldTarget>], 
                     value: &BigUint
@@ -252,7 +252,7 @@ macro_rules! field_builder {
             }
 
             pub trait [<GeneratedValues $field_name:camel Field>] {
-                fn [<set_ $field_name:snake field_target>](
+                fn [<set_ $field_name:snake _field_target>](
                     &mut self, 
                     target: &[<$field_name:camel FieldTarget>], 
                     value: &BigUint
@@ -260,7 +260,7 @@ macro_rules! field_builder {
             }
             
             impl [<GeneratedValues $field_name:camel Field>] for GeneratedValues<GoldilocksField> {
-                fn [<set_ $field_name:snake field_target>](
+                fn [<set_ $field_name:snake _field_target>](
                     &mut self, 
                     target: &[<$field_name:camel FieldTarget>], 
                     value: &BigUint
@@ -291,10 +291,10 @@ macro_rules! field_builder {
                     witness: &PartitionWitness<GoldilocksField>,
                     out_buffer: &mut GeneratedValues<GoldilocksField>,
                 ) -> Result<(), Error> {
-                    let a: BigUint = witness.[<get_ $field_name:snake field_target>](self.a.clone());
+                    let a: BigUint = witness.[<get_ $field_name:snake _field_target>](self.a.clone());
                     let p: BigUint = BigUint::[<$field_name:snake _p>]();
                     let a_inv: BigUint = a.modinv(&p).ok_or(Error::new(DivisionByZeroError {}))?;
-                    out_buffer.[<set_$field_name:snake field_target>](&self.a_inv, &a_inv);
+                    out_buffer.[<set_$field_name:snake _field_target>](&self.a_inv, &a_inv);
                     Ok(())
                 }
 
@@ -328,7 +328,7 @@ macro_rules! field_builder {
 
 // 21888242871839275222246405745257275088548364400416034343698204186575808495617
 field_builder!(
-    Jubjub, (
+    JubjubBase, (
         4026531841, 
         1138881939, 
         2042196113, 
@@ -380,14 +380,14 @@ mod tests {
     };
 
     use crate::signature::jubjubfield::{
-        CircuitBuilderJubjubField,
+        CircuitBuilderJubjubBaseField,
         CircuitBuilderJubjubScalarField,
-        WitnessJubjubField,
+        WitnessJubjubBaseField,
         WitnessJubjubScalarField,
     };
 
     #[test]
-    fn test_jubjubfield_arith() -> Result<()> {
+    fn test_jubjub_base_fieldarith() -> Result<()> {
         // compute and verify (1 + 1/3 + 4/3) * 3 = 8
         // 1 is one
         // x = 3, y = 4
@@ -398,26 +398,26 @@ mod tests {
         let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
         let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
 
-        let x = builder.add_virtual_jubjubfield_target();
-        let y = builder.add_virtual_jubjubfield_target();
-        let expected_result = builder.add_virtual_jubjubfield_target();
+        let x = builder.add_virtual_jubjub_base_field_target();
+        let y = builder.add_virtual_jubjub_base_field_target();
+        let expected_result = builder.add_virtual_jubjub_base_field_target();
 
-        let one = builder.one_jubjubfield();
-        let one_over_x = builder.recip_jubjubfield(&x);
-        let y_over_x = builder.div_jubjubfield(&y, &x);
-        let sum_a = builder.add_jubjubfield(&one, &one_over_x);
-        let sum = builder.add_jubjubfield(&sum_a, &y_over_x);
-        let result = builder.mul_jubjubfield(&sum, &x);
+        let one = builder.one_jubjub_base_field();
+        let one_over_x = builder.recip_jubjub_base_field(&x);
+        let y_over_x = builder.div_jubjub_base_field(&y, &x);
+        let sum_a = builder.add_jubjub_base_field(&one, &one_over_x);
+        let sum = builder.add_jubjub_base_field(&sum_a, &y_over_x);
+        let result = builder.mul_jubjub_base_field(&sum, &x);
 
-        builder.connect_jubjubfield(&result, &expected_result);
+        builder.connect_jubjub_base_field(&result, &expected_result);
 
         let x_value = BigUint::from_u32(3).unwrap();
         let y_value = BigUint::from_u32(4).unwrap();
         let expected_result_value = BigUint::from_u32(8).unwrap();
 
-        pw.set_jubjubfield_target(&x, &x_value);
-        pw.set_jubjubfield_target(&y, &y_value);
-        pw.set_jubjubfield_target(&expected_result, &expected_result_value);
+        pw.set_jubjub_base_field_target(&x, &x_value);
+        pw.set_jubjub_base_field_target(&y, &y_value);
+        pw.set_jubjub_base_field_target(&expected_result, &expected_result_value);
 
         let data = builder.build::<C>();
         let proof = data.prove(pw).unwrap();
@@ -427,7 +427,7 @@ mod tests {
     }
 
     #[test]
-    fn test_jubjubfield_add() -> Result<()> {
+    fn test_jubjub_base_fieldadd() -> Result<()> {
         // compute and verify 3 + 4 = 8
         // this one is supposed to fail
 
@@ -437,21 +437,21 @@ mod tests {
         let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
         let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
 
-        let x = builder.add_virtual_jubjubfield_target();
-        let y = builder.add_virtual_jubjubfield_target();
-        let expected_result = builder.add_virtual_jubjubfield_target();
+        let x = builder.add_virtual_jubjub_base_field_target();
+        let y = builder.add_virtual_jubjub_base_field_target();
+        let expected_result = builder.add_virtual_jubjub_base_field_target();
 
-        let result = builder.add_jubjubfield(&x, &y);
+        let result = builder.add_jubjub_base_field(&x, &y);
 
-        builder.connect_jubjubfield(&result, &expected_result);
+        builder.connect_jubjub_base_field(&result, &expected_result);
 
         let x_value = BigUint::from_u32(3).unwrap();
         let y_value = BigUint::from_u32(4).unwrap();
         let expected_result_value = BigUint::from_u32(8).unwrap();
 
-        pw.set_jubjubfield_target(&x, &x_value);
-        pw.set_jubjubfield_target(&y, &y_value);
-        pw.set_jubjubfield_target(&expected_result, &expected_result_value);
+        pw.set_jubjub_base_field_target(&x, &x_value);
+        pw.set_jubjub_base_field_target(&y, &y_value);
+        pw.set_jubjub_base_field_target(&expected_result, &expected_result_value);
 
         let data = builder.build::<C>();
         let proof = data.prove(pw);
@@ -461,29 +461,29 @@ mod tests {
     }
 
     #[test]
-    fn test_jubjubfield_divmul() -> Result<()> {
+    fn test_jubjub_base_fielddivmul() -> Result<()> {
         type C = PoseidonGoldilocksConfig;
 
         let config = CircuitConfig::standard_recursion_config();
         let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
         let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
 
-        let x = builder.add_virtual_jubjubfield_target();
-        let y = builder.add_virtual_jubjubfield_target();
-        let expected_result = builder.add_virtual_jubjubfield_target();
+        let x = builder.add_virtual_jubjub_base_field_target();
+        let y = builder.add_virtual_jubjub_base_field_target();
+        let expected_result = builder.add_virtual_jubjub_base_field_target();
 
-        let y_over_x = builder.div_jubjubfield(&y, &x);
-        let result = builder.mul_jubjubfield(&y_over_x, &x);
+        let y_over_x = builder.div_jubjub_base_field(&y, &x);
+        let result = builder.mul_jubjub_base_field(&y_over_x, &x);
 
-        builder.connect_jubjubfield(&result, &expected_result);
+        builder.connect_jubjub_base_field(&result, &expected_result);
 
         let x_value = BigUint::from_u32(1).unwrap();
         let y_value = BigUint::from_u32(5).unwrap();
         let expected_result_value = BigUint::from_u32(5).unwrap();
 
-        pw.set_jubjubfield_target(&x, &x_value);
-        pw.set_jubjubfield_target(&y, &y_value);
-        pw.set_jubjubfield_target(&expected_result, &expected_result_value);
+        pw.set_jubjub_base_field_target(&x, &x_value);
+        pw.set_jubjub_base_field_target(&y, &y_value);
+        pw.set_jubjub_base_field_target(&expected_result, &expected_result_value);
 
         let data = builder.build::<C>();
         let try_proof = data.prove(pw);
@@ -494,7 +494,7 @@ mod tests {
     }
 
     #[test]
-    fn test_jubjubfield_muladd() -> Result<()> {
+    fn test_jubjub_base_fieldmuladd() -> Result<()> {
         // compute and verify (1 + 1/3 + 4/3) * 3 = 8
         // 1 is one
         // x = 3, y = 4
@@ -505,22 +505,22 @@ mod tests {
         let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
         let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
 
-        let x = builder.add_virtual_jubjubfield_target();
-        let y = builder.add_virtual_jubjubfield_target();
-        let expected_result = builder.add_virtual_jubjubfield_target();
+        let x = builder.add_virtual_jubjub_base_field_target();
+        let y = builder.add_virtual_jubjub_base_field_target();
+        let expected_result = builder.add_virtual_jubjub_base_field_target();
 
-        let sum = builder.mul_jubjubfield(&x, &y);
-        let result = builder.add_jubjubfield(&sum, &x);
+        let sum = builder.mul_jubjub_base_field(&x, &y);
+        let result = builder.add_jubjub_base_field(&sum, &x);
 
-        builder.connect_jubjubfield(&result, &expected_result);
+        builder.connect_jubjub_base_field(&result, &expected_result);
 
         let x_value = BigUint::from_u32(3).unwrap();
         let y_value = BigUint::from_u32(4).unwrap();
         let expected_result_value = BigUint::from_u32(15).unwrap();
 
-        pw.set_jubjubfield_target(&x, &x_value);
-        pw.set_jubjubfield_target(&y, &y_value);
-        pw.set_jubjubfield_target(&expected_result, &expected_result_value);
+        pw.set_jubjub_base_field_target(&x, &x_value);
+        pw.set_jubjub_base_field_target(&y, &y_value);
+        pw.set_jubjub_base_field_target(&expected_result, &expected_result_value);
 
         let data = builder.build::<C>();
         let proof = data.prove(pw).unwrap();
@@ -540,22 +540,22 @@ mod tests {
         let mut pw: PartialWitness<GoldilocksField> = PartialWitness::new();
         let mut builder = CircuitBuilder::<GoldilocksField, 2>::new(config);
 
-        let x = builder.add_virtual_jubjub_scalarfield_target();
-        let y = builder.add_virtual_jubjub_scalarfield_target();
-        let expected_result = builder.add_virtual_jubjub_scalarfield_target();
+        let x = builder.add_virtual_jubjub_scalar_field_target();
+        let y = builder.add_virtual_jubjub_scalar_field_target();
+        let expected_result = builder.add_virtual_jubjub_scalar_field_target();
 
-        let sum = builder.mul_jubjub_scalarfield(&x, &y);
-        let result = builder.add_jubjub_scalarfield(&sum, &x);
+        let sum = builder.mul_jubjub_scalar_field(&x, &y);
+        let result = builder.add_jubjub_scalar_field(&sum, &x);
 
-        builder.connect_jubjub_scalarfield(&result, &expected_result);
+        builder.connect_jubjub_scalar_field(&result, &expected_result);
 
         let x_value = BigUint::from_u32(3).unwrap();
         let y_value = BigUint::from_u32(4).unwrap();
         let expected_result_value = BigUint::from_u32(15).unwrap();
 
-        pw.set_jubjub_scalarfield_target(&x, &x_value);
-        pw.set_jubjub_scalarfield_target(&y, &y_value);
-        pw.set_jubjub_scalarfield_target(&expected_result, &expected_result_value);
+        pw.set_jubjub_scalar_field_target(&x, &x_value);
+        pw.set_jubjub_scalar_field_target(&y, &y_value);
+        pw.set_jubjub_scalar_field_target(&expected_result, &expected_result_value);
 
         let data = builder.build::<C>();
         let proof = data.prove(pw).unwrap();

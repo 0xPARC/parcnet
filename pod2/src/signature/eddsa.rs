@@ -111,7 +111,7 @@ mod tests {
         PoseidonOutputTarget,
     };
     use crate::signature::jubjubcurve::{CircuitBuilderJubjubCurve, JubjubCurveTarget};
-    use crate::signature::jubjubfield::{CircuitBuilderJubjubField, JubjubFieldTarget};
+    use crate::signature::jubjubfield::{CircuitBuilderJubjubBaseField, JubjubBaseFieldTarget};
 
     fn u64_to_u32(a: Vec<u64>) -> Vec<u32> {
         a.into_iter().flat_map(|x| vec![x as u32, (x >> 32) as u32]).collect()
@@ -168,13 +168,13 @@ mod tests {
             552733937179642407,
         ]));
 
-        let px = JubjubFieldTarget(builder.constant_biguint(&px_val));
-        let py = JubjubFieldTarget(builder.constant_biguint(&py_val));
-        let msg = JubjubFieldTarget(builder.constant_biguint(&msg_val));
-        let sig_r_x = JubjubFieldTarget(builder.constant_biguint(&sig_r_x_val));
-        let sig_r_y = JubjubFieldTarget(builder.constant_biguint(&sig_r_y_val));
-        let sig_s = JubjubFieldTarget(builder.constant_biguint(&sig_s_val));
-        let hash = JubjubFieldTarget(builder.constant_biguint(&hash_val));
+        let px = JubjubBaseFieldTarget(builder.constant_biguint(&px_val));
+        let py = JubjubBaseFieldTarget(builder.constant_biguint(&py_val));
+        let msg = JubjubBaseFieldTarget(builder.constant_biguint(&msg_val));
+        let sig_r_x = JubjubBaseFieldTarget(builder.constant_biguint(&sig_r_x_val));
+        let sig_r_y = JubjubBaseFieldTarget(builder.constant_biguint(&sig_r_y_val));
+        let sig_s = JubjubBaseFieldTarget(builder.constant_biguint(&sig_s_val));
+        let hash = JubjubBaseFieldTarget(builder.constant_biguint(&hash_val));
 
         let pk = JubjubCurveTarget{ x: px, y: py };
         let sig_r = JubjubCurveTarget{ x: sig_r_x, y: sig_r_y };
@@ -243,13 +243,13 @@ mod tests {
             552733937179642407,
         ]));
 
-        let px = JubjubFieldTarget(builder.constant_biguint(&px_val));
-        let py = JubjubFieldTarget(builder.constant_biguint(&py_val));
-        let msg = JubjubFieldTarget(builder.constant_biguint(&msg_val));
-        let sig_r_x = JubjubFieldTarget(builder.constant_biguint(&sig_r_x_val));
-        let sig_r_y = JubjubFieldTarget(builder.constant_biguint(&sig_r_y_val));
-        let sig_s = JubjubFieldTarget(builder.constant_biguint(&sig_s_val));
-        let hash = JubjubFieldTarget(builder.constant_biguint(&hash_val));
+        let px = JubjubBaseFieldTarget(builder.constant_biguint(&px_val));
+        let py = JubjubBaseFieldTarget(builder.constant_biguint(&py_val));
+        let msg = JubjubBaseFieldTarget(builder.constant_biguint(&msg_val));
+        let sig_r_x = JubjubBaseFieldTarget(builder.constant_biguint(&sig_r_x_val));
+        let sig_r_y = JubjubBaseFieldTarget(builder.constant_biguint(&sig_r_y_val));
+        let sig_s = JubjubBaseFieldTarget(builder.constant_biguint(&sig_s_val));
+        let hash = JubjubBaseFieldTarget(builder.constant_biguint(&hash_val));
 
         let pk = JubjubCurveTarget{ x: px, y: py };
         let sig_r = JubjubCurveTarget{ x: sig_r_x, y: sig_r_y };
