@@ -210,6 +210,66 @@ macro_rules! field_builder {
                     self.[<mul_ $field_name:lower field>](a, &b_inv)
                 }
             }
+
+            pub trait [<Witness $field_name:camel Field>] {
+                fn [<get_ $field_name:lower field_target>](
+                    &self, 
+                    target: [<$field_name:camel FieldTarget>]
+                ) -> BigUint;
+                fn [<get_ $field_name:lower field_target_borrow>](
+                    &self, 
+                    target: &[<$field_name:camel FieldTarget>]
+                ) -> BigUint;
+                fn [<set_ $field_name:lower field_target>](
+                    &mut self, 
+                    target: &[<$field_name:camel FieldTarget>], 
+                    value: &BigUint
+                );
+            }
+            
+            impl<T: Witness<GoldilocksField>> [<Witness $field_name:camel Field>] for T {
+                fn [<get_ $field_name:lower field_target>](
+                    &self, 
+                    target: [<$field_name:camel FieldTarget>]
+                ) -> BigUint {
+                    self.get_biguint_target(target.0)
+                }
+            
+                fn [<get_ $field_name:lower field_target_borrow>](
+                    &self, 
+                    target: &[<$field_name:camel FieldTarget>]
+                ) -> BigUint {
+                    self.get_biguint_target(target.0.clone())
+                }
+            
+                fn [<set_ $field_name:lower field_target>](
+                    &mut self, 
+                    target: &[<$field_name:camel FieldTarget>], 
+                    value: &BigUint
+                ) {
+                    self.set_biguint_target(&target.0, value);
+                }
+            }
+
+            pub trait [<GeneratedValues $field_name:camel Field>] {
+                fn [<set_ $field_name:lower field_target>](
+                    &mut self, 
+                    target: &[<$field_name:camel FieldTarget>], 
+                    value: &BigUint
+                );
+            }
+            
+            impl [<GeneratedValues $field_name:camel Field>] for GeneratedValues<GoldilocksField> {
+                fn [<set_ $field_name:lower field_target>](
+                    &mut self, 
+                    target: &[<$field_name:camel FieldTarget>], 
+                    value: &BigUint
+                ) {
+                    self.set_biguint_target(&target.0, value);
+                }
+            }
+            
+
         }
     }
 }
@@ -406,7 +466,7 @@ impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
         let b_inv = self.recip_jubjubfield(b);
         self.mul_jubjubfield(a, &b_inv)
     }
-}  */
+} 
 
 pub trait WitnessJubjubField {
     fn get_jubjubfield_target(&self, target: JubjubFieldTarget) -> BigUint;
@@ -436,7 +496,7 @@ impl GeneratedValuesJubjubField for GeneratedValues<GoldilocksField> {
     fn set_jubjubfield_target(&mut self, target: &JubjubFieldTarget, value: &BigUint) {
         self.set_biguint_target(&target.0, value);
     }
-}
+} */
 
 #[derive(Debug)]
 struct DivisionByZeroError {}
