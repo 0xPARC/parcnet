@@ -1,3 +1,4 @@
+use parcnet_pod::pod::Fq;
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::hash::poseidon::PoseidonHash;
 use plonky2::plonk::config::GenericHashOut;
@@ -36,4 +37,8 @@ fn str_to_fields(s: &str) -> Vec<GoldilocksField> {
         .map(|chunk| chunk.iter().fold(0, |acc, b| 256 * acc + *b as u32))
         .map(|n| GoldilocksField(n as u64))
         .collect()
+}
+
+pub fn bn254_fq_to_goldilocks_fq(s: Fq) -> Vec<GoldilocksField> {
+    todo!()
 }

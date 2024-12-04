@@ -3,7 +3,7 @@ use poseidon_ark::Poseidon;
 
 pub fn lean_poseidon_imt(inputs: &[Fq]) -> Result<Fq, &'static str> {
     let poseidon = Poseidon::new();
-    
+
     if inputs.is_empty() {
         return Err("At least one input is required");
     }
@@ -14,7 +14,9 @@ pub fn lean_poseidon_imt(inputs: &[Fq]) -> Result<Fq, &'static str> {
         let mut new_items = Vec::new();
         for chunk in items.chunks(2) {
             if chunk.len() == 2 {
-                let hash = poseidon.hash(vec![chunk[0], chunk[1]]).map_err(|_| "Error hashing")?;
+                let hash = poseidon
+                    .hash(vec![chunk[0], chunk[1]])
+                    .map_err(|_| "Error hashing")?;
                 new_items.push(hash);
             } else {
                 new_items.push(chunk[0]);
@@ -29,14 +31,18 @@ pub fn lean_poseidon_imt(inputs: &[Fq]) -> Result<Fq, &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
     use babyjubjub_ark::Fq;
+    use std::str::FromStr;
 
     type Error = Box<dyn std::error::Error>;
-    
+
     #[test]
     fn test_lean_imt() -> Result<(), Error> {
-        let inputs = ["1", "2", "3", "4", "5"].into_iter().map(Fq::from_str).collect::<Result<Vec<_>, ()>>().map_err(|_| "Error converting strings to fields.")?;
+        let inputs = ["1", "2", "3", "4", "5"]
+            .into_iter()
+            .map(Fq::from_str)
+            .collect::<Result<Vec<_>, ()>>()
+            .map_err(|_| "Error converting strings to fields.")?;
 
         let result = lean_poseidon_imt(&inputs);
         assert!(result.is_ok());
