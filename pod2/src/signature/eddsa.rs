@@ -1,19 +1,3 @@
-use anyhow::Result;
-
-use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
-use plonky2::hash::poseidon::PoseidonHash;
-use plonky2::iop::{
-    target::{BoolTarget, Target},
-    witness::{PartialWitness, WitnessWrite},
-};
-use plonky2::plonk::{circuit_builder::CircuitBuilder, config::GenericConfig};
-
-use crate::signature::jubjubcurve::JubjubCurveTarget;
-use crate::signature::{
-    mod65537::Mod65537Builder,
-    schnorr::{SchnorrPublicKey, SchnorrSignature},
-};
-
 /*
 type GoldF = GoldilocksField;
 
