@@ -1,6 +1,6 @@
 use anyhow::Error;
 use num::BigUint;
-use plonky2::field::{goldilocks_field::GoldilocksField, types::Field};
+use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::iop::generator::{GeneratedValues, SimpleGenerator};
 use plonky2::iop::target::Target;
 use plonky2::iop::witness::{PartitionWitness, Witness};
@@ -281,8 +281,7 @@ mod tests {
     use plonky2::plonk::circuit_builder::CircuitBuilder;
     use plonky2::plonk::circuit_data::CircuitConfig;
     use plonky2::{
-        field::goldilocks_field::GoldilocksField,
-        plonk::config::{GenericConfig, PoseidonGoldilocksConfig},
+        field::goldilocks_field::GoldilocksField, plonk::config::PoseidonGoldilocksConfig,
     };
 
     use crate::signature::jubjubfield::CircuitBuilderJubjubField;

@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use parcnet_pod::pod::pod_impl::PodValue;
+use parcnet_pod::pod::PodValue;
 use plonky2::field::goldilocks_field::GoldilocksField;
 
 use super::value::ScalarOrVec;
@@ -30,7 +30,7 @@ impl Entry {
     pub fn new_from_pod_value(key: &str, pod_value: &PodValue) -> Self {
         Self {
             key: key.to_string(),
-            value: pod_value.into(),
+            value: pod_value.clone().into(),
         }
     }
 
