@@ -12,7 +12,6 @@ use plonky2::iop::target::{BoolTarget, Target};
 use plonky2::iop::witness::{PartitionWitness, Witness};
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::circuit_data::CommonCircuitData;
-use plonky2::util::serialization::Write;
 use plonky2::util::serialization::{Buffer, IoResult};
 // use std::error::Error;
 

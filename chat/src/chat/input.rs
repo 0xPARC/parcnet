@@ -256,6 +256,7 @@ impl ViewInputHandler for TextInput {
     fn text_for_range(
         &mut self,
         range_utf16: Range<usize>,
+        _adjusted_range: &mut Option<Range<usize>>,
         _cx: &mut ViewContext<Self>,
     ) -> Option<String> {
         let range = self.range_from_utf16(&range_utf16);

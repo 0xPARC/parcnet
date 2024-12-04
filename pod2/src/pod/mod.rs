@@ -1,8 +1,6 @@
 use anyhow::anyhow;
 use anyhow::Result;
-use num::BigInt;
-use parcnet_pod::pod::pod_impl::Pod;
-use parcnet_pod::pod::pod_impl::PodValue;
+use parcnet_pod::pod::{Pod, PodValue};
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::types::Field;
 use serde::Deserialize;
@@ -22,7 +20,6 @@ use crate::signature::schnorr::{
     SchnorrPublicKey, SchnorrSecretKey, SchnorrSignature, SchnorrSigner,
 };
 use crate::PlonkyProof;
-use crate::{C, D, F};
 
 pub use operation::Operation as Op;
 pub use operation::OperationCmd as OpCmd;
@@ -169,22 +166,26 @@ impl POD {
     }
 
     pub fn introduce_pod1<const NS: usize, const VL: usize>(pod: Pod) -> Result<Self> {
-        // TODO: Check input POD
-        // TODO: Fix
-        let signer_key: ScalarOrVec = Into::<ScalarOrVec>::into(&Into::<PodValue>::into(
-            BigInt::from_signed_bytes_be(&pod.signature()?.public_key),
-        ));
+        // Check input POD.
+        let pod_is_valid = pod
+            .verify()
+            .map_err(|e| anyhow!("Could not verify POD: {:?}", e))?;
+
+        if !pod_is_valid {
+            return Err(anyhow!("POD verification failed."));
+        }
+
+        // Form POD entries.
+        let signer_key: ScalarOrVec =
+            Into::<ScalarOrVec>::into(PodValue::EdDSAPublicKey(pod.signer_public_key()));
         let entries = pod
             .entries()
             .iter()
             .map(|(s, pod_value)| Entry::new_from_pod_value(s, pod_value))
-            .chain(
-                [Entry {
-                    key: "_pod1_signer".to_string(),
-                    value: signer_key,
-                }]
-                .into_iter(),
-            )
+            .chain([Entry {
+                key: "_pod1_signer".to_string(),
+                value: signer_key,
+            }])
             .collect::<Vec<_>>();
 
         Self::execute_schnorr_gadget::<NS, VL>(&entries, &SchnorrSecretKey { sk: 0 })
@@ -446,7 +447,7 @@ impl GPGInput {
 #[cfg(test)]
 mod tests {
     use operation::Operation as Op;
-    use parcnet_pod::{pod::pod_impl::create_pod, pod_entries};
+    use parcnet_pod::{pod::create_pod, pod_entries};
     use statement::StatementRef;
 
     use super::*;
@@ -844,12 +845,12 @@ mod tests {
 
         // two schnorr pods
         let schnorr_pod1 = POD::execute_schnorr_gadget::<NS, VL>(
-            &vec![entry1.clone(), entry2.clone()],
+            &[entry1.clone(), entry2.clone()],
             &SchnorrSecretKey { sk: 25 },
         )?;
 
         let schnorr_pod2 = POD::execute_schnorr_gadget::<NS, VL>(
-            &vec![entry3.clone(), entry4.clone()],
+            &[entry3.clone(), entry4.clone()],
             &SchnorrSecretKey { sk: 42 },
         )?;
         // make a PlonkyPOD using from_pods called on the two schnorr PODs
@@ -889,7 +890,7 @@ mod tests {
             PlonkyButNotPlonkyGadget::<M, N, NS, VL>::build_prover_params(circuit_data)?;
         let plonky_pod =
             POD::execute_plonky_gadget::<M, N, NS, VL>(&mut prover_params, &gpg_input, &ops)?;
-        assert!(plonky_pod.verify::<M, N, NS, VL>()? == true);
+        assert!(plonky_pod.verify::<M, N, NS, VL>()?);
 
         // make another oracle POD which takes that oracle POD and a schnorr POD
 
@@ -932,7 +933,7 @@ mod tests {
         for statement in plonky_pod2.payload.statements_list.iter() {
             println!("{:?}", statement);
         }
-        assert!(plonky_pod2.verify::<M, N, NS, VL>()? == true);
+        assert!(plonky_pod2.verify::<M, N, NS, VL>()?);
 
         Ok(())
     }
@@ -1614,7 +1615,16 @@ mod tests {
                 .get("VALUEOF:speed")
                 .ok_or(anyhow!(""))?
                 .value()?
-                == ScalarOrVec::Scalar(GoldilocksField(5))
+                == ScalarOrVec::Vector(vec![
+                    GoldilocksField(5),
+                    GoldilocksField(0),
+                    GoldilocksField(5),
+                    GoldilocksField(5),
+                    GoldilocksField(5),
+                    GoldilocksField(5),
+                    GoldilocksField(5),
+                    GoldilocksField(5)
+                ])
         );
         assert!(
             introduced_pod
@@ -1623,7 +1633,16 @@ mod tests {
                 .get("VALUEOF:jump")
                 .ok_or(anyhow!(""))?
                 .value()?
-                == ScalarOrVec::Scalar(GoldilocksField(10))
+                == ScalarOrVec::Vector(vec![
+                    GoldilocksField(10),
+                    GoldilocksField(0),
+                    GoldilocksField(10),
+                    GoldilocksField(10),
+                    GoldilocksField(10),
+                    GoldilocksField(10),
+                    GoldilocksField(10),
+                    GoldilocksField(10)
+                ])
         );
 
         Ok(())

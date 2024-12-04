@@ -15,14 +15,8 @@ use super::{
     POD,
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, Default)]
 pub struct AnchoredKey(pub Origin, pub String);
-
-impl Default for AnchoredKey {
-    fn default() -> Self {
-        AnchoredKey(Origin::default(), String::new())
-    }
-}
 
 impl PartialEq for AnchoredKey {
     fn eq(&self, ak: &AnchoredKey) -> bool {
@@ -193,13 +187,13 @@ impl Statement {
                     vec![GoldilocksField::ZERO; 4],
                 ]
                 .concat(),
-                Self::Lt(anchkey1, anchkey2) => vec![
+                Self::Lt(anchkey1, anchkey2) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
                     vec![GoldilocksField::ZERO; 4],
                 ]
                 .concat(),
-                Self::Contains(anchkey1, anchkey2) => vec![
+                Self::Contains(anchkey1, anchkey2) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
                     vec![GoldilocksField::ZERO; 4],
