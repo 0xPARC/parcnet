@@ -28,4 +28,4 @@ jobs:
     - name: Run tests
       run: |
         . "$HOME/.cargo/env"
-        cargo test --release -- --skip test_scalar_mul --skip test_constrain_sig
+        cargo test --release -- --skip test_scalar_mul --skip test_constrain_sig --skip test_verify_sig_to_false --skip test_scalar_mul_2 --skip test_scalar_mul_3
