@@ -24,6 +24,7 @@ pub(crate) type Error = Box<dyn std::error::Error>;
 pub type PodEntries = IndexMap<String, PodValue>;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct Pod {
     entries: PodEntries,
     #[serde(
@@ -123,18 +124,11 @@ pub enum PodCreationError {
     HashError(String),
 }
 
-pub fn create_pod<K>(private_key: &[u8], data: Vec<(K, PodValue)>) -> Result<Pod, PodCreationError>
-where
-    K: Into<String> + Clone,
-{
-    let mut entry_alist = data;
-    entry_alist.sort_by(|(k1, _), (k2, _)| {
-        Into::<String>::into(k1.clone()).cmp(&Into::<String>::into(k2.clone()))
-    });
-    let entries: IndexMap<String, PodValue> = entry_alist
-        .into_iter()
-        .map(|(k, v)| (k.into(), v))
-        .collect();
+pub fn create_pod_from_map(private_key: &[u8], data: IndexMap<String, PodValue>) -> Result<Pod, PodCreationError> {
+    // Sort the entries by keys
+    let mut sorted_entries: Vec<(String, PodValue)> = data.into_iter().collect();
+    sorted_entries.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
+    let entries: IndexMap<String, PodValue> = sorted_entries.into_iter().collect();
 
     let hashes: Result<Vec<_>, PodCreationError> = entries
         .iter()
@@ -157,6 +151,18 @@ where
         signer_public_key,
         signature,
     })
+}
+
+pub fn create_pod<K>(private_key: &[u8], data: Vec<(K, PodValue)>) -> Result<Pod, PodCreationError>
+where
+    K: Into<String> + Clone,
+{
+    let entries: IndexMap<String, PodValue> = data
+        .into_iter()
+        .map(|(k, v)| (k.into(), v))
+        .collect();
+
+    create_pod_from_map(private_key, entries)
 }
 
 #[cfg(test)]
