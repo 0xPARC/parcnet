@@ -8,3 +8,4 @@ history.txt
 */_debug
 Cargo.lock
 .cargo/config.toml
+.env

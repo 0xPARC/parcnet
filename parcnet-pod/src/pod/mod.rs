@@ -15,7 +15,6 @@ use thiserror::Error;
 
 use serde::{Deserialize, Serialize};
 
-use uuid::Uuid;
 pub use value::PodValue;
 
 use crate::crypto::lean_imt::lean_poseidon_imt;
@@ -26,30 +25,19 @@ pub type PodEntries = IndexMap<String, PodValue>;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct PodClaim {
+pub struct Pod {
     entries: PodEntries,
     #[serde(
         serialize_with = "compressed_pt_ser",
         deserialize_with = "compressed_pt_de"
     )]
     signer_public_key: Point,
-}
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PodProof {
     #[serde(
         serialize_with = "compressed_sig_ser",
         deserialize_with = "compressed_sig_de"
     )]
     signature: Signature,
-}
-
-// TODO: Store content ID and skip it in serialisation.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Pod {
-    id: Uuid,
-    claim: PodClaim,
-    proof: PodProof,
 }
 
 impl Pod {
@@ -83,26 +71,22 @@ impl Pod {
             .map_err(|_| PodCreationError::SignatureError)?;
 
         Ok(Pod {
-            id: Uuid::new_v4(),
-            claim: PodClaim {
-                entries,
-                signer_public_key,
-            },
-            proof: PodProof { signature },
+            entries,
+            signer_public_key,
+            signature,
         })
     }
 
     pub fn entries(&self) -> PodEntries {
-        self.claim.entries.clone()
+        self.entries.clone()
     }
 
     pub fn get(&self, key: &str) -> Option<&PodValue> {
-        self.claim.entries.get(key)
+        self.entries.get(key)
     }
 
     pub fn content_id(&self) -> Result<Fq, PodCreationError> {
         let hashes = self
-            .claim
             .entries
             .par_iter()
             .flat_map(|(k, v)| [PodValue::String(k.to_string()).hash(), v.hash()])
@@ -111,11 +95,11 @@ impl Pod {
     }
 
     pub fn signer_public_key(&self) -> Point {
-        self.claim.signer_public_key.clone()
+        self.signer_public_key.clone()
     }
 
     pub fn signature(&self) -> Signature {
-        self.proof.signature.clone()
+        self.signature.clone()
     }
 
     pub fn verify(&self) -> Result<bool, Error> {
@@ -140,18 +124,11 @@ pub enum PodCreationError {
     HashError(String),
 }
 
-pub fn create_pod<K>(private_key: &[u8], data: Vec<(K, PodValue)>) -> Result<Pod, PodCreationError>
-where
-    K: Into<String> + Clone,
-{
-    let mut entry_alist = data;
-    entry_alist.sort_by(|(k1, _), (k2, _)| {
-        Into::<String>::into(k1.clone()).cmp(&Into::<String>::into(k2.clone()))
-    });
-    let entries: IndexMap<String, PodValue> = entry_alist
-        .into_iter()
-        .map(|(k, v)| (k.into(), v))
-        .collect();
+pub fn create_pod_from_map(private_key: &[u8], data: IndexMap<String, PodValue>) -> Result<Pod, PodCreationError> {
+    // Sort the entries by keys
+    let mut sorted_entries: Vec<(String, PodValue)> = data.into_iter().collect();
+    sorted_entries.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
+    let entries: IndexMap<String, PodValue> = sorted_entries.into_iter().collect();
 
     let hashes: Result<Vec<_>, PodCreationError> = entries
         .iter()
@@ -170,13 +147,22 @@ where
         .map_err(|_| PodCreationError::SignatureError)?;
 
     Ok(Pod {
-        id: Uuid::new_v4(),
-        claim: PodClaim {
-            entries,
-            signer_public_key,
-        },
-        proof: PodProof { signature },
+        entries,
+        signer_public_key,
+        signature,
     })
+}
+
+pub fn create_pod<K>(private_key: &[u8], data: Vec<(K, PodValue)>) -> Result<Pod, PodCreationError>
+where
+    K: Into<String> + Clone,
+{
+    let entries: IndexMap<String, PodValue> = data
+        .into_iter()
+        .map(|(k, v)| (k.into(), v))
+        .collect();
+
+    create_pod_from_map(private_key, entries)
 }
 
 #[cfg(test)]
@@ -266,7 +252,7 @@ mod tests {
     #[test]
     fn test_pod_creation() -> Result<(), PodCreationError> {
         let pod = create_test_pod()?;
-        assert_eq!(pod.claim.entries.len(), 12);
+        assert_eq!(pod.entries.len(), 12);
         assert_eq!(pod.get("G"), Some(&PodValue::Int(7)));
         assert_eq!(pod.get("F"), Some(&PodValue::Cryptographic(Fq::from(-1))));
 
