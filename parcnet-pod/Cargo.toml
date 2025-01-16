@@ -12,6 +12,7 @@ edition = "2021"
 [lib]
 name = "parcnet_pod"
 path = "src/lib.rs"
+crate-type = ["staticlib"]
 
 [dependencies]
 ark-bn254 = "0.4.0"
@@ -22,6 +23,7 @@ base64 = "0.22.1"
 hex = "0.4.3"
 indexmap = { version = "2.5.0", features = ["rayon", "serde"] }
 lazy_static = "1.5.0"
+libc = "0.2.169"
 num-bigint = { version = "0.4.6", features = ["serde"] }
 num-traits = "0.2.19"
 poseidon-ark = { git = "https://github.com/arnaucube/poseidon-ark", version = "0.0.1" }
