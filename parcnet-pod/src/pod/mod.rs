@@ -12,7 +12,6 @@ use babyjubjub_ark::{verify, Point, PrivateKey, Signature};
 use indexmap::IndexMap;
 use serialisation::{compressed_pt_de, compressed_pt_ser, compressed_sig_de, compressed_sig_ser};
 use thiserror::Error;
-use time::OffsetDateTime;
 
 use serde::{Deserialize, Serialize};
 
