@@ -34,6 +34,7 @@ var noPadB64 = base64.NewEncoding("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrs
 type PodValue struct {
 	String  *string `json:"string,omitempty"`
 	Int     *int64  `json:"int,omitempty"`
+	Cryptographic *bool   `json:"cryptographic,omitempty"`
 }
 
 // KVPair
@@ -41,7 +42,6 @@ type KVPair struct {
 	Key   string
 	Value PodValue
 }
-
 // ========== FFI Wrapper ==========
 
 func CreatePod(privateKey []byte, data []KVPair) (string, error) {
@@ -134,12 +134,12 @@ func transformEntries(raw map[string]interface{}) error {
 func convertVariant(obj map[string]interface{}) map[string]interface{} {
 	for k, v := range obj {
 		switch k {
-		case "String":
+		case "string":
 			return map[string]interface{}{"type": "string", "value": v}
-		case "Int":
+		case "int":
 			return map[string]interface{}{"type": "int", "value": v}
-		case "Boolean":
-			return map[string]interface{}{"type": "boolean", "value": v}
+		case "cryptographic":
+			return map[string]interface{}{"type": "cryptographic", "value": v}
 		default:
 			// fallback if we don't recognize the key
 			return map[string]interface{}{"type": k, "value": v}
