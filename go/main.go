@@ -43,7 +43,6 @@ func toJSONPOD(p *Pod) JSONPOD {
 	}
 }
 
-// Utility: Convert base64 fields to hex
 func hexEncodeField(raw map[string]interface{}, parentKey, fieldKey string, expectedLen int) error {
 	parent, ok := raw[parentKey].(map[string]interface{})
 	if !ok {
@@ -65,9 +64,6 @@ func hexEncodeField(raw map[string]interface{}, parentKey, fieldKey string, expe
 	return nil
 }
 
-// -------------------------
-// Utility: Validate that privateKey is 64 hex chars => 32 bytes
-// -------------------------
 func validatePrivateKeyHex(pk string) error {
 	if len(pk) != 64 {
 		return fmt.Errorf("private key must be 64 hex characters (32 bytes), got length %d", len(pk))
@@ -82,10 +78,6 @@ func validatePrivateKeyHex(pk string) error {
 	return nil
 }
 
-// -------------------------
-// CreatePod: calls the Rust process with cmd="create"
-// This reproduces the old flow you had, just with subcommand usage
-// -------------------------
 func CreatePod(privateKey string, entries map[string]interface{}) (*Pod, string, error) {
 	if err := validatePrivateKeyHex(privateKey); err != nil {
 		return nil, "", fmt.Errorf("invalid private key: %w", err)
@@ -99,10 +91,6 @@ func CreatePod(privateKey string, entries map[string]interface{}) (*Pod, string,
 	return dispatchRustCommand(req)
 }
 
-// -------------------------
-// SignPod: calls the Rust process with cmd="sign"
-// This uses Pod::sign(...) in Rust to create a new Pod
-// -------------------------
 func SignPod(privateKey string, entries map[string]interface{}) (*Pod, string, error) {
 	if err := validatePrivateKeyHex(privateKey); err != nil {
 		return nil, "", fmt.Errorf("invalid private key: %w", err)
@@ -116,10 +104,6 @@ func SignPod(privateKey string, entries map[string]interface{}) (*Pod, string, e
 	return dispatchRustCommand(req)
 }
 
-// -------------------------
-// dispatchRustCommand: common helper that spawns ./pod_cli
-// and does the base64->hex fixup
-// -------------------------
 func dispatchRustCommand(req podCommandRequest) (*Pod, string, error) {
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
@@ -200,8 +184,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("Pod:", podObj)
-	fmt.Println("JSONPOD:", jsonPodString)
+	fmt.Println("Pod:")
+	fmt.Println(podObj)
+	fmt.Println()
+	fmt.Println("JSONPOD:")
+	fmt.Println(jsonPodString)
 
 	fmt.Println("\n=== SIGN POD  ===")
 	podObj2, jsonPodString2, err := SignPod(
@@ -216,6 +203,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("Signed Pod:", podObj2)
-	fmt.Println("JSONPOD:", jsonPodString2)
+	fmt.Println("Signed Pod:")
+	fmt.Println(podObj2)
+	fmt.Println()
+	fmt.Println("JSONPOD:")
+	fmt.Println(jsonPodString2)
 }
