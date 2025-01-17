@@ -209,6 +209,8 @@ func main() {
 		map[string]interface{}{
 			"some_data": "some_value",
 			"count":     42,
+			"ffi":       false,
+			"ipc":       true,
 		},
 	)
 	if err != nil {
