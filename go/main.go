@@ -29,10 +29,10 @@ type JSONPOD struct {
 	SignerPublicKey string                 `json:"signerPublicKey"`
 }
 
-// Request sent to Rust binary
-type createPodRequest struct {
-	PrivateKey string                 `json:"private_key"`
-	Entries    map[string]interface{} `json:"entries"`
+type podCommandRequest struct {
+	Cmd        string                 `json:"cmd"`         // "create" or "sign"
+	PrivateKey string                 `json:"private_key"` // 64 hex chars
+	Entries    map[string]interface{} `json:"entries"`     // for create/sign
 }
 
 func toJSONPOD(p *Pod) JSONPOD {
@@ -43,7 +43,8 @@ func toJSONPOD(p *Pod) JSONPOD {
 	}
 }
 
-func hexEncodeField(raw map[string]interface{}, parentKey string, fieldKey string, expectedLen int) error {
+// Utility: Convert base64 fields to hex
+func hexEncodeField(raw map[string]interface{}, parentKey, fieldKey string, expectedLen int) error {
 	parent, ok := raw[parentKey].(map[string]interface{})
 	if !ok {
 		return nil
@@ -64,38 +65,69 @@ func hexEncodeField(raw map[string]interface{}, parentKey string, fieldKey strin
 	return nil
 }
 
+// -------------------------
+// Utility: Validate that privateKey is 64 hex chars => 32 bytes
+// -------------------------
 func validatePrivateKeyHex(pk string) error {
-    if len(pk) != 64 {
-        return fmt.Errorf("private key must be 64 hex characters (32 bytes), got length %d", len(pk))
-    }
-    decoded, err := hex.DecodeString(pk)
-    if err != nil {
-        return fmt.Errorf("private key '%s' isn't valid hex: %v", pk, err)
-    }
-    if len(decoded) != 32 {
-        return fmt.Errorf("decoded private key is %d bytes, expected 32", len(decoded))
-    }
-    return nil
+	if len(pk) != 64 {
+		return fmt.Errorf("private key must be 64 hex characters (32 bytes), got length %d", len(pk))
+	}
+	decoded, err := hex.DecodeString(pk)
+	if err != nil {
+		return fmt.Errorf("private key '%s' isn't valid hex: %v", pk, err)
+	}
+	if len(decoded) != 32 {
+		return fmt.Errorf("decoded private key is %d bytes, expected 32", len(decoded))
+	}
+	return nil
 }
 
-// privateKey is the 32-byte hex-encoded private key that will sign the POD
-// entries is the map of key-value pairs to be included in the POD
-func NewPod(privateKey string, entries map[string]interface{}) (*Pod, string, error) {
+// -------------------------
+// CreatePod: calls the Rust process with cmd="create"
+// This reproduces the old flow you had, just with subcommand usage
+// -------------------------
+func CreatePod(privateKey string, entries map[string]interface{}) (*Pod, string, error) {
 	if err := validatePrivateKeyHex(privateKey); err != nil {
 		return nil, "", fmt.Errorf("invalid private key: %w", err)
 	}
 
-	req := createPodRequest{
+	req := podCommandRequest{
+		Cmd:        "create",
 		PrivateKey: privateKey,
 		Entries:    entries,
 	}
+	return dispatchRustCommand(req)
+}
+
+// -------------------------
+// SignPod: calls the Rust process with cmd="sign"
+// This uses Pod::sign(...) in Rust to create a new Pod
+// -------------------------
+func SignPod(privateKey string, entries map[string]interface{}) (*Pod, string, error) {
+	if err := validatePrivateKeyHex(privateKey); err != nil {
+		return nil, "", fmt.Errorf("invalid private key: %w", err)
+	}
+
+	req := podCommandRequest{
+		Cmd:        "sign",
+		PrivateKey: privateKey,
+		Entries:    entries,
+	}
+	return dispatchRustCommand(req)
+}
+
+// -------------------------
+// dispatchRustCommand: common helper that spawns ./pod_cli
+// and does the base64->hex fixup
+// -------------------------
+func dispatchRustCommand(req podCommandRequest) (*Pod, string, error) {
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Spawn Rust binary
-	cmd := exec.Command("./pod_creator")
+	// Spawn Rust CLI
+	cmd := exec.Command("./pod_cli")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get stdin: %w", err)
@@ -108,28 +140,28 @@ func NewPod(privateKey string, entries map[string]interface{}) (*Pod, string, er
 		return nil, "", fmt.Errorf("failed to start process: %w", err)
 	}
 
-	// Write JSON to Rust
+	// Write JSON request
 	if _, err := stdin.Write(reqBytes); err != nil {
 		return nil, "", fmt.Errorf("failed writing to stdin: %w", err)
 	}
 	stdin.Close()
 
-	// Read JSON from Rust
+	// Read JSON response
 	outBytes, err := io.ReadAll(stdout)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed reading stdout: %w", err)
-	}
 	if err := cmd.Wait(); err != nil {
 		return nil, "", fmt.Errorf("process error: %w", err)
 	}
+	if err != nil {
+		return nil, "", fmt.Errorf("failed reading stdout: %w", err)
+	}
 
-	// We first unmarshal into a generic map to do the hex conversions
+	// Unmarshal into generic map => fix up fields => re-unmarshal
 	var raw map[string]interface{}
 	if err := json.Unmarshal(outBytes, &raw); err != nil {
 		return nil, "", fmt.Errorf("failed to unmarshal raw Pod: %w", err)
 	}
 
-	// Convert base64 -> hex for publicKey and signature
+	// Convert base64 => hex for publicKey, signature
 	if err := hexEncodeField(raw, "claim", "signerPublicKey", 32); err != nil {
 		return nil, "", err
 	}
@@ -137,7 +169,6 @@ func NewPod(privateKey string, entries map[string]interface{}) (*Pod, string, er
 		return nil, "", err
 	}
 
-	// Now re-marshal the map and unmarshal into our Pod struct
 	remarshaled, err := json.Marshal(raw)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to re-marshal after hex conversion: %w", err)
@@ -147,16 +178,19 @@ func NewPod(privateKey string, entries map[string]interface{}) (*Pod, string, er
 		return nil, "", fmt.Errorf("failed to unmarshal Pod: %w", err)
 	}
 
-	jsonPod := toJSONPOD(&pod)
-	jsonPodBytes, err := json.Marshal(jsonPod)
+	// Produce final JSONPOD string
+	jsonPodStruct := toJSONPOD(&pod)
+	jsonPodBytes, err := json.Marshal(jsonPodStruct)
 	if err != nil {
 		return &pod, "", fmt.Errorf("failed to marshal JSONPOD: %w", err)
 	}
+
 	return &pod, string(jsonPodBytes), nil
 }
 
 func main() {
-	podObj, jsonPodString, err := NewPod(
+	fmt.Println("=== CREATE POD  ===")
+	podObj, jsonPodString, err := CreatePod(
 		"0001020304050607080900010203040506070809000102030405060708090001",
 		map[string]interface{}{
 			"created_by": "Golang",
@@ -166,10 +200,20 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("Pod:", podObj)
+	fmt.Println("JSONPOD:", jsonPodString)
 
-	fmt.Println("=== Pod Struct ===")
-	fmt.Printf("%+v\n", podObj)
-
-	fmt.Println("\n=== JSONPOD Output ===")
-	fmt.Println(jsonPodString)
+	fmt.Println("\n=== SIGN POD  ===")
+	podObj2, jsonPodString2, err := SignPod(
+		"0001020304050607080900010203040506070809000102030405060708090001",
+		map[string]interface{}{
+			"some_data": "some_value",
+			"count":     42,
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Signed Pod:", podObj2)
+	fmt.Println("JSONPOD:", jsonPodString2)
 }

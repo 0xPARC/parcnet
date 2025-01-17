@@ -15,8 +15,8 @@ path = "src/lib.rs"
 crate-type = ["staticlib"]
 
 [[bin]]
-name = "pod_creator"
-path = "src/bin/pod_creator.rs"
+name = "pod_cli"
+path = "src/bin/pod_cli.rs"
 
 
 [dependencies]
