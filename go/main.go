@@ -43,49 +43,47 @@ func toJSONPOD(p *Pod) JSONPOD {
 	}
 }
 
-func hexEncodeSignerPublicKey(raw map[string]interface{}) error {
-	claim, ok := raw["claim"].(map[string]interface{})
+func hexEncodeField(raw map[string]interface{}, parentKey string, fieldKey string, expectedLen int) error {
+	parent, ok := raw[parentKey].(map[string]interface{})
 	if !ok {
 		return nil
 	}
-	spkVal, ok := claim["signerPublicKey"].(string)
+	fieldVal, ok := parent[fieldKey].(string)
 	if !ok {
 		return nil
 	}
-	decoded, err := noPadB64.DecodeString(spkVal)
+	decoded, err := noPadB64.DecodeString(fieldVal)
 	if err != nil {
-		return fmt.Errorf("publicKey not valid no-pad base64: %v", err)
+		return fmt.Errorf("%s not valid no-pad base64: %v", fieldKey, err)
 	}
-	if len(decoded) != 32 {
-		return fmt.Errorf("publicKey is %d bytes, expected 32", len(decoded))
+	if len(decoded) != expectedLen {
+		return fmt.Errorf("%s is %d bytes, expected %d", fieldKey, len(decoded), expectedLen)
 	}
 	hexVal := hex.EncodeToString(decoded)
-	claim["signerPublicKey"] = hexVal
+	parent[fieldKey] = hexVal
 	return nil
 }
 
-func hexEncodeSignature(raw map[string]interface{}) error {
-	proof, ok := raw["proof"].(map[string]interface{})
-	if !ok {
-		return nil
-	}
-	sigVal, ok := proof["signature"].(string)
-	if !ok {
-		return nil
-	}
-	decoded, err := noPadB64.DecodeString(sigVal)
-	if err != nil {
-		return fmt.Errorf("signature not valid no-pad base64: %v", err)
-	}
-	if len(decoded) != 64 {
-		return fmt.Errorf("signature is %d bytes, expected 64", len(decoded))
-	}
-	hexVal := hex.EncodeToString(decoded)
-	proof["signature"] = hexVal
-	return nil
+func validatePrivateKeyHex(pk string) error {
+    if len(pk) != 64 {
+        return fmt.Errorf("private key must be 64 hex characters (32 bytes), got length %d", len(pk))
+    }
+    decoded, err := hex.DecodeString(pk)
+    if err != nil {
+        return fmt.Errorf("private key '%s' isn't valid hex: %v", pk, err)
+    }
+    if len(decoded) != 32 {
+        return fmt.Errorf("decoded private key is %d bytes, expected 32", len(decoded))
+    }
+    return nil
 }
 
+// privateKey is the 32-byte hex-encoded private key that will sign the POD
+// entries is the map of key-value pairs to be included in the POD
 func NewPod(privateKey string, entries map[string]interface{}) (*Pod, string, error) {
+	if err := validatePrivateKeyHex(privateKey); err != nil {
+		return nil, "", fmt.Errorf("invalid private key: %w", err)
+	}
 
 	req := createPodRequest{
 		PrivateKey: privateKey,
@@ -132,14 +130,14 @@ func NewPod(privateKey string, entries map[string]interface{}) (*Pod, string, er
 	}
 
 	// Convert base64 -> hex for publicKey and signature
-	if err := hexEncodeSignerPublicKey(raw); err != nil {
+	if err := hexEncodeField(raw, "claim", "signerPublicKey", 32); err != nil {
 		return nil, "", err
 	}
-	if err := hexEncodeSignature(raw); err != nil {
+	if err := hexEncodeField(raw, "proof", "signature", 64); err != nil {
 		return nil, "", err
 	}
 
-	// 6) Now re-marshal the map and unmarshal into our Pod struct
+	// Now re-marshal the map and unmarshal into our Pod struct
 	remarshaled, err := json.Marshal(raw)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to re-marshal after hex conversion: %w", err)
