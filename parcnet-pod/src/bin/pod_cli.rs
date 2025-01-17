@@ -1,70 +1,104 @@
 use std::io::{self, Read};
-use babyjubjub_ark::PrivateKey;
-use parcnet_pod::pod::{create_pod, Pod, PodCreationError};
-use parcnet_pod::pod::PodValue;
-use serde::Deserialize;
+use std::collections::HashMap;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Read all JSON from stdin
+use babyjubjub_ark::PrivateKey;
+use parcnet_pod::pod::{create_pod, Pod, PodCreationError, PodValue};
+use serde::{Deserialize, Serialize};
+
+pub(crate) type Error = Box<dyn std::error::Error>;
+
+#[derive(Deserialize)]
+#[serde(tag = "cmd")]
+struct PodCommand {
+    cmd: String,
+
+    #[serde(default)]
+    private_key: String,
+
+    #[serde(default)]
+    entries: HashMap<String, serde_json::Value>,
+
+    #[serde(default)]
+    pod_json: String,
+}
+
+fn main() -> Result<(), Error> {
     let mut buffer = String::new();
     io::stdin().read_to_string(&mut buffer)?;
+
     let command: PodCommand = serde_json::from_str(&buffer)?;
 
-    // Dispatch based on cmd
-    let pod_result = match command.cmd.as_str() {
+    let result = match command.cmd.as_str() {
         "create" => handle_create(&command),
-        "sign" => handle_sign(&command),
-        other => Err(PodCreationError::HashError(format!("unknown cmd: {}", other))),
+        "sign"   => handle_sign(&command),
+        "verify" => handle_verify(&command),
+        other => Err(format!("unknown cmd: {}", other).into())
     };
 
-    // Print the resulting Pod or an error
-    match pod_result {
-        Ok(pod) => {
-            let out = serde_json::to_string(&pod)?;
-            println!("{}", out);
+    match result {
+        Ok(json_output) => {
+            println!("{}", json_output);
         }
         Err(e) => {
-            // You could print a structured error if you like
             eprintln!("Pod creation failed: {:?}", e);
-            // Or output JSON error structure
-            // For simplicity, we'll just exit with error code
             std::process::exit(1);
         }
     }
-
     Ok(())
 }
 
-#[derive(Deserialize)]
-struct PodCommand {
-    // e.g. "create" or "sign"
-    cmd: String,
-
-    // Common fields for both commands
-    private_key: String,
-    entries: std::collections::HashMap<String, serde_json::Value>,
-}
-
-fn handle_create(command: &PodCommand) -> Result<Pod, PodCreationError> {
+fn handle_create(command: &PodCommand) -> Result<String, Error> {
     let pk_bytes = parse_private_key(&command.private_key)?;
     let data_pairs = convert_entries(&command.entries)?;
-    create_pod(&pk_bytes, data_pairs)
+    let pod = create_pod(&pk_bytes, data_pairs)?;
+
+    // Return the entire Pod as JSON
+    let out = serde_json::to_string(&pod)?;
+    Ok(out)
 }
 
-fn handle_sign(command: &PodCommand) -> Result<Pod, PodCreationError> {
+fn handle_sign(command: &PodCommand) -> Result<String, Error> {
     let pk_bytes = parse_private_key(&command.private_key)?;
     let data_pairs = convert_entries(&command.entries)?;
 
-    // Construct the PrivateKey
     let private_key = PrivateKey { key: pk_bytes };
-
-    // Convert Vec<(String, PodValue)> for the Pod::sign call
     let pod = Pod::sign(data_pairs, private_key)?;
-    Ok(pod)
+    let out = serde_json::to_string(&pod)?;
+    Ok(out)
+}
+
+#[derive(Serialize)]
+struct VerifyResponse {
+    verified: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+fn handle_verify(command: &PodCommand) -> Result<String, Error> {
+    let pod: Pod = serde_json::from_str(&command.pod_json)
+        .map_err(|e| PodCreationError::HashError(format!("verify parse error: {}", e)))?;
+
+    match pod.verify() {
+        Ok(is_verified) => {
+            let resp = VerifyResponse {
+                verified: is_verified,
+                error: None,
+            };
+            Ok(serde_json::to_string(&resp)?)
+        }
+        Err(e) => {
+            let resp = VerifyResponse {
+                verified: false,
+                error: Some(format!("verify error: {}", e)),
+            };
+            Ok(serde_json::to_string(&resp)?)
+        }
+    }
 }
 
 fn parse_private_key(pk_hex: &str) -> Result<[u8; 32], PodCreationError> {
-    let decoded = hex::decode(pk_hex).map_err(|_| PodCreationError::SignatureError)?;
+    let decoded = hex::decode(pk_hex)
+        .map_err(|_| PodCreationError::SignatureError)?;
     if decoded.len() != 32 {
         return Err(PodCreationError::SignatureError);
     }
@@ -74,13 +108,13 @@ fn parse_private_key(pk_hex: &str) -> Result<[u8; 32], PodCreationError> {
 }
 
 fn convert_entries(
-    entries: &std::collections::HashMap<String, serde_json::Value>,
+    map: &HashMap<String, serde_json::Value>
 ) -> Result<Vec<(String, PodValue)>, PodCreationError> {
-    let mut converted = Vec::new();
-    for (k, v) in entries.iter() {
-        converted.push((k.clone(), json_to_pod_value(v)?));
+    let mut out = Vec::new();
+    for (k, v) in map {
+        out.push((k.clone(), json_to_pod_value(v)?));
     }
-    Ok(converted)
+    Ok(out)
 }
 
 fn json_to_pod_value(val: &serde_json::Value) -> Result<PodValue, PodCreationError> {
@@ -93,6 +127,6 @@ fn json_to_pod_value(val: &serde_json::Value) -> Result<PodValue, PodCreationErr
     } else if val.is_null() {
         Ok(PodValue::Null)
     } else {
-        Err(PodCreationError::HashError("Unhandled type".to_string()))
+        Err(PodCreationError::HashError("unhandled type".to_string()))
     }
 }

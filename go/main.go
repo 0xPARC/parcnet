@@ -104,6 +104,73 @@ func SignPod(privateKey string, entries map[string]interface{}) (*Pod, string, e
 	return dispatchRustCommand(req)
 }
 
+type verifyResponse struct {
+	Verified bool   `json:"verified"`
+	Error    string `json:"error,omitempty"`
+}
+
+func (p *Pod) Verify() (bool, error) {
+	podCopy := *p
+
+	if len(podCopy.Claim.SignerPublicKey) == 64 {
+		rawSPK, err := hex.DecodeString(podCopy.Claim.SignerPublicKey)
+		if err != nil {
+            return false, fmt.Errorf("failed to decode signerPublicKey hex: %w", err)
+        }
+        podCopy.Claim.SignerPublicKey = noPadB64.EncodeToString(rawSPK)
+    }
+    if len(podCopy.Proof.Signature) == 128 {
+        rawSig, err := hex.DecodeString(podCopy.Proof.Signature)
+        if err != nil {
+            return false, fmt.Errorf("failed to decode signature hex: %w", err)
+        }
+        podCopy.Proof.Signature = noPadB64.EncodeToString(rawSig)
+    }
+
+    podBytes, err := json.Marshal(podCopy)
+    if err != nil {
+        return false, fmt.Errorf("failed to marshal Pod for verify: %w", err)
+    }
+    reqMap := map[string]interface{}{
+        "cmd":      "verify",
+        "pod_json": string(podBytes),
+    }
+    reqBytes, err := json.Marshal(reqMap)
+    if err != nil {
+        return false, fmt.Errorf("failed to marshal verify request: %w", err)
+    }
+
+    cmd := exec.Command("./pod_cli")
+    stdin, _ := cmd.StdinPipe()
+    stdout, _ := cmd.StdoutPipe()
+
+    if err := cmd.Start(); err != nil {
+        return false, fmt.Errorf("failed to start Rust process: %w", err)
+    }
+    if _, err := stdin.Write(reqBytes); err != nil {
+        return false, fmt.Errorf("failed writing verify request: %w", err)
+    }
+    stdin.Close()
+
+    outBytes, err := io.ReadAll(stdout)
+    if waitErr := cmd.Wait(); waitErr != nil {
+        return false, nil
+    }
+    if err != nil {
+        return false, fmt.Errorf("failed reading verify stdout: %w", err)
+    }
+
+    var resp verifyResponse
+    if err := json.Unmarshal(outBytes, &resp); err != nil {
+        return false, fmt.Errorf("failed to unmarshal verify response: %w\nOutput: %s", err, string(outBytes))
+    }
+    if resp.Error != "" {
+        return false, nil
+    }
+
+    return resp.Verified, nil
+}
+
 func dispatchRustCommand(req podCommandRequest) (*Pod, string, error) {
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
@@ -208,4 +275,25 @@ func main() {
 	fmt.Println()
 	fmt.Println("JSONPOD:")
 	fmt.Println(jsonPodString2)
+
+	fmt.Println("\n=== VERIFY POD  ===")
+	verified1, err := podObj.Verify()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Verified first POD:", verified1)
+
+	verified2, err := podObj2.Verify()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Verified second POD:", verified2)
+
+	// Tamper with the signature -- need to fix the panic
+	podObj2.Proof.Signature = "0001020304050607080900010203040506070809000102030405060708090001"
+	verified3, err := podObj2.Verify()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Verified tampered POD:", verified3)
 }
