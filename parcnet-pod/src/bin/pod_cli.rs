@@ -7,17 +7,16 @@ pub(crate) type Error = Box<dyn std::error::Error>;
 
 #[derive(Deserialize)]
 #[serde(tag = "cmd")]
-struct PodCommand {
-    cmd: String,
-
-    #[serde(default)]
-    private_key: String,
-
-    #[serde(default)]
-    entries: PodEntries,
-
-    #[serde(default)]
-    pod_json: String,
+enum PodCommand {
+    #[serde(rename = "create")]
+    Create {
+        private_key: String,
+        entries: PodEntries,
+    },
+    #[serde(rename = "verify")]
+    Verify {
+        pod_json: String,
+    },
 }
 
 fn main() -> Result<(), Error> {
@@ -26,10 +25,9 @@ fn main() -> Result<(), Error> {
 
     let command: PodCommand = serde_json::from_str(&buffer)?;
 
-    let result = match command.cmd.as_str() {
-        "create" => handle_create(&command),
-        "verify" => handle_verify(&command),
-        other => Err(format!("unknown cmd: {}", other).into()),
+    let result = match command {
+        PodCommand::Create { private_key, entries } => handle_create(&private_key, &entries),
+        PodCommand::Verify { pod_json } => handle_verify(&pod_json),
     };
 
     match result {
@@ -44,9 +42,9 @@ fn main() -> Result<(), Error> {
     Ok(())
 }
 
-fn handle_create(command: &PodCommand) -> Result<String, Error> {
-    let pk_bytes = parse_private_key(&command.private_key)?;
-    let pod = create_pod_from_map(&pk_bytes, command.entries.clone())?;
+fn handle_create(private_key: &str, entries: &PodEntries) -> Result<String, Error> {
+    let pk_bytes = parse_private_key(&private_key)?;
+    let pod = create_pod_from_map(&pk_bytes, entries.clone())?;
     let out = serde_json::to_string(&pod)?;
     Ok(out)
 }
@@ -58,8 +56,8 @@ struct VerifyResponse {
     error: Option<String>,
 }
 
-fn handle_verify(command: &PodCommand) -> Result<String, Error> {
-    let pod: Pod = serde_json::from_str(&command.pod_json)
+fn handle_verify(pod_json: &str) -> Result<String, Error> {
+    let pod: Pod = serde_json::from_str(&pod_json)
         .map_err(|e| PodCreationError::HashError(format!("verify parse error: {}", e)))?;
 
     match pod.verify() {
