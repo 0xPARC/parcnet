@@ -1,6 +1,7 @@
 package pod
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -8,22 +9,25 @@ import (
 	"os/exec"
 )
 
+// noPadB64 matches Rust's base64::STANDARD_NO_PAD
+var noPadB64 = base64.NewEncoding("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/").WithPadding(base64.NoPadding)
+
 func (p *Pod) Verify() (bool, error) {
 	podCopy := *p
 
-	if len(podCopy.Claim.SignerPublicKey) == 64 {
-		rawSPK, err := hex.DecodeString(podCopy.Claim.SignerPublicKey)
+	if len(podCopy.SignerPublicKey) == 64 {
+		rawSPK, err := hex.DecodeString(podCopy.SignerPublicKey)
 		if err != nil {
 			return false, fmt.Errorf("failed decode signerPublicKey: %w", err)
 		}
-		podCopy.Claim.SignerPublicKey = noPadB64.EncodeToString(rawSPK)
+		podCopy.SignerPublicKey = noPadB64.EncodeToString(rawSPK)
 	}
-	if len(podCopy.Proof.Signature) == 128 {
-		rawSig, err := hex.DecodeString(podCopy.Proof.Signature)
+	if len(podCopy.Signature) == 128 {
+		rawSig, err := hex.DecodeString(podCopy.Signature)
 		if err != nil {
 			return false, fmt.Errorf("failed decode signature hex: %w", err)
 		}
-		podCopy.Proof.Signature = noPadB64.EncodeToString(rawSig)
+		podCopy.Signature = noPadB64.EncodeToString(rawSig)
 	}
 
 	podBytes, err := json.Marshal(podCopy)
