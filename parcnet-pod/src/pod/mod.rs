@@ -227,10 +227,8 @@ mod tests {
     fn test_serde_json() -> Result<(), Error> {
         let pod = create_test_pod()?;
         let serialised_pod = serde_json::to_string(&pod)?;
-        dbg!("{:?}", serialised_pod.clone());
-        // let deserialised_pod: Pod = serde_json::from_str(& "{\"entries\":{\"created_by\":{\"string\":\"Golang\"},\"year\":{\"int\":2025}},\"signature\":\"dgQKavmYO+7ihgsq3i6+7s7nVqR5CuI2iymkCVf3dZX/7vvCaH1Zq8hGGA9sqtAV4aa7FssvwspmH+Jd80KCBA\",\"signerPublicKey\":\"xDP3ppa3qjpSJO+zmTuvDM2eku7O4MKaP2yCCKnoHZ4\"}")?;
-        let deserialized_entries: PodEntries =serde_json::from_str("{\"created_by\":\"Golang\",\"year\":2025}")?;
-        dbg!("DE {:?}", deserialized_entries);
+        let deserialised_pod: Pod = serde_json::from_str(&serialised_pod)?;
+        assert!(deserialised_pod == pod);
         Ok(())
     }
 
