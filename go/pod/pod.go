@@ -40,7 +40,7 @@ func dispatchRustCommand(req podCommandRequest) (*Pod, string, error) {
 		return nil, "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	cmd := exec.Command("./pod_cli")
+	cmd := exec.Command("./pod_worker")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get stdin: %w", err)

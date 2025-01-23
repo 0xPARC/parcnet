@@ -14,8 +14,8 @@ name = "parcnet_pod"
 path = "src/lib.rs"
 
 [[bin]]
-name = "pod_cli"
-path = "src/bin/pod_cli.rs"
+name = "pod_worker"
+path = "src/bin/pod_worker.rs"
 
 
 [dependencies]

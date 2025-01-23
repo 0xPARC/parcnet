@@ -44,7 +44,7 @@ func (p *Pod) Verify() (bool, error) {
 		return false, fmt.Errorf("marshal verify request: %w", err)
 	}
 
-	c := exec.Command("./pod_cli")
+	c := exec.Command("./pod_worker")
 	stdin, _ := c.StdinPipe()
 	stdout, _ := c.StdoutPipe()
 
