@@ -190,6 +190,27 @@ func handleZupassSignAndAdd(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func initRedis() {
+    redisURL := os.Getenv("REDIS_URL")
+
+    if redisURL == "" {
+        redisURL = "redis://127.0.0.1:6379"
+    }
+
+    opts, err := redis.ParseURL(redisURL)
+    if err != nil {
+        log.Fatalf("Failed to parse REDIS_URL: %v", err)
+    }
+
+    rdb = redis.NewClient(opts)
+
+    if err := rdb.Ping(ctx).Err(); err != nil {
+        log.Fatalf("Could not connect to Redis: %v", err)
+    }
+
+    log.Printf("Connected to Redis at %s", redisURL)
+}
+
 func main() {
 	_ = godotenv.Load()
 
@@ -202,10 +223,7 @@ func main() {
 		log.Fatal("Failed to initialize pod: ", err)
 	}
 
-	// Initialize Redis client
-	rdb = redis.NewClient(&redis.Options{
-		Addr: "127.0.0.1:6379", // adjust as needed
-	})
+	initRedis();
 
 	// Test connection quickly (optional, but good practice)
 	if _, err := rdb.Ping(ctx).Result(); err != nil {
