@@ -131,7 +131,12 @@ func main() {
 		log.Fatal("Missing PRIVATE_KEY environment variable.")
 	}
 
+	if err := pod.Init(); err != nil {
+		log.Fatal("Failed to initialize pod: ", err)
+	}
+
 	log.Println("Loaded PRIVATE_KEY...")
+	log.Println("Initialized pod service...")
 	log.Println("Starting server on port 8080")
 
 	http.HandleFunc("/", handleRoot)
