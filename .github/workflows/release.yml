@@ -2,8 +2,10 @@ name: Build and Release pod_worker
 
 on:
   push:
+    tags:
+      - v*
     branches:
-      - rrrliu/go-lib # FIXME: change to main
+      - rrrliu/go-lib # FIXME: change to main eventually
 env:
   CRATE_NAME: pod_worker
   GITHUB_TOKEN: ${{ github.token }}
