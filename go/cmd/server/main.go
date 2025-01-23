@@ -1,24 +1,30 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"sync/atomic"
 	"time"
 
 	"github.com/0xPARC/parcnet/go/pod"
 	"github.com/google/uuid"
+	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 )
 
+// Global variables
 var (
-	// TODO: Eventually move to DB / Redis
-	hitCount   int64
 	privateKey = os.Getenv("PRIVATE_KEY")
+
+	// Redis client and context
+	rdb *redis.Client
+	ctx = context.Background()
 )
 
+// handleRoot increments the Redis-based counter and responds with a POD containing the visitor count.
 func handleRoot(w http.ResponseWriter, r *http.Request) {
 	// To prevent fallback to the root from requests like /favicon.ico
 	if r.URL.Path != "/" {
@@ -31,7 +37,14 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newCount := atomic.AddInt64(&hitCount, 1)
+	// INCR the counter in Redis
+	newCount, err := rdb.Incr(ctx, "visitorCount").Result()
+	if err != nil {
+		log.Printf("Error incrementing visitorCount in Redis: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
 	entries := map[string]interface{}{
 		"message": map[string]interface{}{
 			"string": fmt.Sprintf("Welcome to PARCNET, visitor #%d", newCount),
@@ -54,13 +67,15 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(jsonPod))
+	_, _ = w.Write([]byte(jsonPod))
 }
 
+// signRequest struct for /sign endpoint
 type signRequest struct {
 	Entries map[string]interface{} `json:"entries"`
 }
 
+// handleSign creates a POD from user-supplied entries and returns it.
 func handleSign(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, r.Method+" not allowed", http.StatusMethodNotAllowed)
@@ -77,6 +92,7 @@ func handleSign(w http.ResponseWriter, r *http.Request) {
 	_, jsonPod, err := pod.CreatePod(privateKey, req.Entries)
 	elapsed := time.Since(startTime)
 	log.Printf("[%s /sign] pod.CreatePod: %s", r.Method, elapsed)
+
 	if err != nil {
 		http.Error(w, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -84,7 +100,7 @@ func handleSign(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(jsonPod))
+	_, _ = w.Write([]byte(jsonPod))
 }
 
 type verifyResponse struct {
@@ -92,6 +108,7 @@ type verifyResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// handleVerify checks a POD’s validity.
 func handleVerify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, r.Method+" not allowed", http.StatusMethodNotAllowed)
@@ -106,7 +123,7 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 		return
 	}
 
@@ -125,7 +142,7 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func handleZupassSignAndAdd(w http.ResponseWriter, r *http.Request) {
@@ -174,16 +191,30 @@ func handleZupassSignAndAdd(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	_ = godotenv.Load()
+
 	if privateKey == "" {
 		log.Fatal("Missing PRIVATE_KEY environment variable.")
 	}
 
+	// Initialize PARCNET pod
 	if err := pod.Init(); err != nil {
 		log.Fatal("Failed to initialize pod: ", err)
 	}
 
+	// Initialize Redis client
+	rdb = redis.NewClient(&redis.Options{
+		Addr: "127.0.0.1:6379", // adjust as needed
+	})
+
+	// Test connection quickly (optional, but good practice)
+	if _, err := rdb.Ping(ctx).Result(); err != nil {
+		log.Fatalf("Could not connect to Redis: %v", err)
+	}
+
 	log.Println("Loaded PRIVATE_KEY...")
 	log.Println("Initialized pod service...")
+	log.Println("Connected to Redis...")
 	log.Println("Starting server on port 8080")
 
 	http.HandleFunc("/", handleRoot)
