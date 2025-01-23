@@ -24,8 +24,8 @@ type SerializedPCD struct {
 
 func SerializePODPCD(id string, p pod.Pod) (*SerializedPCD, error) {
 	payload := struct {
-		ID      string   `json:"id"`
-		JSONPOD pod.Pod  `json:"jsonPOD"`
+		ID      string  `json:"id"`
+		JSONPOD pod.Pod `json:"jsonPOD"`
 	}{
 		ID:      id,
 		JSONPOD: p,
