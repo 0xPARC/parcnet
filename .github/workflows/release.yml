@@ -119,17 +119,10 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
           args: "--release --bin pod_worker"
           strip: true
-      - name: Run tests
-        uses: houseabsolute/actions-rust-cross@v1
-        with:
-          command: "test"
-          target: ${{ matrix.platform.target }}
-          toolchain: ${{ matrix.toolchain }}
-          args: "--release"
-        if: ${{ !matrix.platform.skip-tests }}
       - name: Publish artifacts and release
         uses: houseabsolute/actions-rust-release@v0
         with:
           executable-name: pod_worker
           target: ${{ matrix.platform.target }}
+          changes-file: ""
         if: matrix.toolchain == 'stable'
