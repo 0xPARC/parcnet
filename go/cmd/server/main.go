@@ -46,6 +46,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[%s /] pod.CreatePod: %s", r.Method, elapsed)
 
 	if err != nil {
+		log.Printf("[%s /] pod.CreatePod: %s", r.Method, err)
 		http.Error(w, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

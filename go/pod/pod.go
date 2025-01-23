@@ -109,7 +109,6 @@ func dispatchRustCommand(req podCommandRequest) (*Pod, string, error) {
 
 func getOrDownloadPodWorker() (string, error) {
 	downloadOnce.Do(func() {
-		// 1. Figure out the correct artifact name based on runtime.GOOS/GOARCH
 		osName, err := resolveArtifactName(runtime.GOOS, runtime.GOARCH)
 		if err != nil {
 			downloadErr = err
@@ -121,6 +120,7 @@ func getOrDownloadPodWorker() (string, error) {
 			STABLE_TAG,
 			osName,
 		)
+		fmt.Println("Downloading pod_worker from", tarURL)
 
 		tmpDir, err := os.MkdirTemp("", "pod_worker_bin")
 		if err != nil {
