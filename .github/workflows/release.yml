@@ -108,16 +108,6 @@ jobs:
             toolchain: nightly
     steps:
       - uses: actions/checkout@v4
-      - name: Set "--features" flag value
-        id: set-features-flag-value
-        shell: bash
-        run: |
-          if [ -n "${{ matrix.platform.features }}" ]; then
-              echo "features=${{ matrix.platform.features }}" >> "$GITHUB_OUTPUT"
-          else 
-              echo "features=default" >> "$GITHUB_OUTPUT"
-          fi
-          cat "$GITHUB_OUTPUT"
       - name: Maybe install SSL packages
         run: sudo apt-get update --yes && sudo apt-get install --yes pkg-config openssl libssl-dev
         if: matrix.platform.features == 'native-tls'
@@ -127,7 +117,7 @@ jobs:
           command: "build"
           target: ${{ matrix.platform.target }}
           toolchain: ${{ matrix.toolchain }}
-          args: "--locked --release --features ${{ steps.set-features-flag-value.outputs.features }}"
+          args: "--locked --release"
           strip: true
       - name: Run tests
         uses: houseabsolute/actions-rust-cross@v1
@@ -135,7 +125,7 @@ jobs:
           command: "test"
           target: ${{ matrix.platform.target }}
           toolchain: ${{ matrix.toolchain }}
-          args: "--locked --release  --features ${{ steps.set-features-flag-value.outputs.features }}"
+          args: "--locked --release"
         if: ${{ !matrix.platform.skip-tests }}
       - name: Publish artifacts and release
         uses: houseabsolute/actions-rust-release@v0
