@@ -28,19 +28,6 @@ jobs:
           - os-name: Linux-x86_64
             runs-on: ubuntu-22.04
             target: x86_64-unknown-linux-musl
-          - os-name: Linux-x86_64 (rustls-native-roots)
-            runs-on: ubuntu-22.04
-            target: x86_64-unknown-linux-musl
-            features: rustls-tls-native-roots
-          - os-name: Linux-x86_64 (native-tls)
-            runs-on: ubuntu-22.04
-            # We need to use gnu or we cannot link against openssl.
-            target: x86_64-unknown-linux-gnu
-            features: native-tls
-          - os-name: Linux-x86_64 (native-tls-vendored)
-            runs-on: ubuntu-22.04
-            target: x86_64-unknown-linux-musl
-            features: native-tls-vendored
           - os-name: Linux-aarch64
             runs-on: ubuntu-22.04
             target: aarch64-unknown-linux-musl
@@ -69,10 +56,6 @@ jobs:
           - os-name: Linux-s390x
             runs-on: ubuntu-22.04
             target: s390x-unknown-linux-gnu
-            skip-tests: true
-          - os-name: NetBSD-x86_64
-            runs-on: ubuntu-22.04
-            target: x86_64-unknown-netbsd
             skip-tests: true
           - os-name: Windows-aarch64
             runs-on: windows-latest
@@ -108,9 +91,9 @@ jobs:
             toolchain: nightly
     steps:
       - uses: actions/checkout@v4
-      - name: Maybe install SSL packages
-        run: sudo apt-get update --yes && sudo apt-get install --yes pkg-config openssl libssl-dev
-        if: matrix.platform.features == 'native-tls'
+      # - name: Maybe install SSL packages
+      #   run: sudo apt-get update --yes && sudo apt-get install --yes pkg-config openssl libssl-dev
+      #   if: matrix.platform.features == 'native-tls'
       - name: Build binary
         uses: houseabsolute/actions-rust-cross@v1
         with:
