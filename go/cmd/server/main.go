@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/0xPARC/parcnet/go/pod"
+	"github.com/google/uuid"
 )
 
 var (
@@ -127,6 +128,51 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func handleZupassSignAndAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, r.Method+" not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req signRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	startTime := time.Now()
+	pod, jsonPod, err := pod.CreatePod(privateKey, req.Entries)
+	if err != nil {
+		http.Error(w, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	elapsed := time.Since(startTime)
+	log.Printf("[%s /zupass/add] pod.CreatePod: %s", r.Method, elapsed)
+
+	fmt.Println("jsonPod: ", jsonPod)
+
+	serialized, err := SerializePODPCD(uuid.New().String(), *pod)
+	if err != nil {
+		http.Error(w, "Error serializing PODPCD: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	folder := "Go PODs"
+	zupassUrl, err := createZupassAddRequestUrl("https://zupass.org", "https://zupass.org/#/popup", *serialized, &folder, false, nil)
+	if err != nil {
+		http.Error(w, "Error creating Zupass URL: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]string{
+		"zupassUrl": zupassUrl,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
 func main() {
 	if privateKey == "" {
 		log.Fatal("Missing PRIVATE_KEY environment variable.")
@@ -143,6 +189,7 @@ func main() {
 	http.HandleFunc("/", handleRoot)
 	http.HandleFunc("/sign", handleSign)
 	http.HandleFunc("/verify", handleVerify)
+	http.HandleFunc("/zupass", handleZupassSignAndAdd)
 
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatal("ListenAndServe Error: ", err)
