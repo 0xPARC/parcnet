@@ -109,5 +109,5 @@ jobs:
         with:
           executable-name: pod_worker
           target: ${{ matrix.platform.target }}
-          changes-file: ""
+          changes-file: "parcnet-pod/Changes.md"
         if: matrix.toolchain == 'stable'
