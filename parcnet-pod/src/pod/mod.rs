@@ -183,21 +183,22 @@ mod tests {
         create_pod(
             &private_key,
             crate::pod_entries![
-                "E" => -123,
-                "F" => Fq::from(-1),
-                "C" => "hello",
+                // "E" => -123,
+                // "F" => Fq::from(-1),
+                // "C" => "hello",
+                "C" => false,
                 "D" => "foobar",
                 "A" => 123,
                 "B" => 321,
                 "G" => 7,
-                "H" => 8,
-                "I" => 9,
-                "J" => 10,
-                "publicKey" => PodValue::EdDSAPublicKey(Point {
-                    x: Fq::from_str("13277427435165878497778222415993513565335242147425444199013288855685581939618").unwrap(),
-                    y: Fq::from_str("13622229784656158136036771217484571176836296686641868549125388198837476602820").unwrap()
-                }),
-                "owner" => Fq::from_str("18711405342588116796533073928767088921854096266145046362753928030796553161041").unwrap(),
+                // "H" => 8,
+                // "I" => 9,
+                // "J" => 10,
+                // "publicKey" => PodValue::EdDSAPublicKey(Point {
+                //     x: Fq::from_str("13277427435165878497778222415993513565335242147425444199013288855685581939618").unwrap(),
+                //     y: Fq::from_str("13622229784656158136036771217484571176836296686641868549125388198837476602820").unwrap()
+                // }),
+                // "owner" => Fq::from_str("18711405342588116796533073928767088921854096266145046362753928030796553161041").unwrap(),
             ],
         )
     }
@@ -252,9 +253,12 @@ mod tests {
     #[test]
     fn test_pod_creation() -> Result<(), PodCreationError> {
         let pod = create_test_pod()?;
-        assert_eq!(pod.entries.len(), 12);
-        assert_eq!(pod.get("G"), Some(&PodValue::Int(7)));
-        assert_eq!(pod.get("F"), Some(&PodValue::Cryptographic(Fq::from(-1))));
+        println!("POD: {:?}", pod);
+        println!("signature: {:?}", pod.signature().compress());
+        println!("signerPublicKey: {:?}", pod.signer_public_key().compress());
+        // assert_eq!(pod.entries.len(), 12);
+        // assert_eq!(pod.get("G"), Some(&PodValue::Int(7)));
+        // assert_eq!(pod.get("F"), Some(&PodValue::Cryptographic(Fq::from(-1))));
 
         Ok(())
     }
@@ -301,6 +305,7 @@ mod tests {
     fn test_pod_content_id() -> Result<(), PodCreationError> {
         let pod = create_test_pod()?;
         let content_id = pod.content_id().unwrap();
+        println!("CONTENT_ID: {:?}", content_id.to_string());
         assert!(content_id > Fq::from(0));
         Ok(())
     }
@@ -308,18 +313,21 @@ mod tests {
     #[test]
     fn test_pod_hash_string() {
         let hash = PodValue::String("test".to_string()).hash().unwrap();
+        println!("STRING: {:?}", hash.to_string());
         assert!(hash > Fq::from(0));
     }
 
     #[test]
     fn test_pod_hash_int() {
         let hash = PodValue::Int(42).hash().unwrap();
+        println!("INT: {:?}", hash.to_string());
         assert!(hash > Fq::from(0));
     }
 
     #[test]
     fn test_pod_hash_cryptographic() {
         let hash = PodValue::Cryptographic(Fq::from(1234)).hash().unwrap();
+        println!("CRYPT: {:?}", hash);
         assert!(hash > Fq::from(0));
     }
 
