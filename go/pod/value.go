@@ -70,4 +70,3 @@ func (p PodValue) Hash() (*big.Int, error) {
 	}
 	return nil, fmt.Errorf("unknown PodValue kind %q", p.kind)
 }
-
