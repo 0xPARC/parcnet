@@ -15,10 +15,12 @@ import (
 	"sync"
 )
 
+type PodEntries map[string]PodValue
+
 type Pod struct {
-	Entries         map[string]interface{} `json:"entries"`
-	Signature       string                 `json:"signature"`
-	SignerPublicKey string                 `json:"signerPublicKey"`
+	Entries         PodEntries `json:"entries"`
+	Signature       string     `json:"signature"`
+	SignerPublicKey string     `json:"signerPublicKey"`
 }
 
 type podCommandRequest struct {
