@@ -56,8 +56,6 @@ func hashPodValue(v interface{}) (*big.Int, error) {
 			return poseidon.Hash([]*big.Int{big.NewInt(1)})
 		}
 		return poseidon.Hash([]*big.Int{big.NewInt(0)})
-	case []byte:
-		return poseidon.Hash([]*big.Int{new(big.Int).SetBytes(vv)})
 	// case map[string]interface{}:
 		// Do the version based on the key of the JSON object
 	default:
@@ -66,7 +64,7 @@ func hashPodValue(v interface{}) (*big.Int, error) {
 	}
 }
 
-func computeContentID(data map[string]interface{}) (*big.Int, error) {
+func computeContentID(data PodEntries) (*big.Int, error) {
 	keys := make([]string, 0, len(data))
 	for k := range data {
 		keys = append(keys, k)
@@ -78,7 +76,7 @@ func computeContentID(data map[string]interface{}) (*big.Int, error) {
 		kh := hashString(k)
 		allHashes = append(allHashes, kh)
 
-		vh, err := hashPodValue(data[k])
+		vh, err := data[k].Hash()
 		if err != nil {
 			return nil, err
 		}
