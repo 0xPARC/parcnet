@@ -7,12 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/iden3/go-iden3-crypto/v2/babyjub"
 	"github.com/iden3/go-iden3-crypto/v2/poseidon"
 )
-
-type Fq = fr.Element
 
 // func TestCreatePod(t *testing.T) {
 // 	p, j, err := CreatePod(
@@ -109,7 +106,7 @@ func TestUtils(t *testing.T) {
 }
 
 func TestContentID(t *testing.T) {
-	contentID, err := computeContentID(map[string]interface{}{"A": 123, "B": 321, "G": 7, "D": "foobar", "C": false})
+	contentID, err := computeContentID(map[string]interface{}{"A": 123, "B": 321, "G": -7, "D": "foobar", "C": false})
 	if err != nil {
 		t.Fatalf("computeContentID failed: %v", err)
 	}
@@ -138,7 +135,7 @@ func TestCreateGoPod(t *testing.T) {
 	}
 
 	startTime = time.Now()
-	pod, err := CreateGoPod(privKey, map[string]interface{}{"A": 123, "B": 321, "G": 7, "D": "foobar", "C": false})
+	pod, err := CreateGoPod(privKey, map[string]interface{}{"A": 123, "B": 321, "G": -7, "D": "foobar", "C": false})
 	elapsed = time.Since(startTime)
 	fmt.Println("NATIVE GO CREATE TIME", elapsed)
 	if err != nil {
