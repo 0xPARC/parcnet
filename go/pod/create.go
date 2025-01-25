@@ -7,26 +7,13 @@ import (
 	"github.com/iden3/go-iden3-crypto/v2/babyjub"
 )
 
-// CreatePod calls "create" subcommand in Rust
-func CreatePod(privateKey string, entries map[string]interface{}) (*Pod, string, error) {
-	if err := validatePrivateKeyHex(privateKey); err != nil {
-		return nil, "", fmt.Errorf("invalid private key: %w", err)
-	}
-	req := podCommandRequest{
-		Cmd:        "create",
-		PrivateKey: privateKey,
-		Entries:    entries,
-	}
-	return dispatchRustCommand(req)
-}
-
-func CreateGoPodHex(privateKeyHex string, entries PodEntries) (*Pod, error) {
+func CreatePod(privateKeyHex string, entries PodEntries) (*Pod, error) {
 	var privateKey babyjub.PrivateKey
 	hex.Decode(privateKey[:], []byte(privateKeyHex))	
-	return CreateGoPod(privateKey, entries)
+	return signPod(privateKey, entries)
 }
 
-func CreateGoPod(privateKey babyjub.PrivateKey, entries PodEntries) (*Pod, error) {
+func signPod(privateKey babyjub.PrivateKey, entries PodEntries) (*Pod, error) {
 	contentID, err := computeContentID(entries)
 	if err != nil {
 		return nil, fmt.Errorf("failed computing content ID: %w", err)
