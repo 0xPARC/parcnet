@@ -19,7 +19,7 @@ func CreatePod(privateKey string, entries map[string]interface{}) (*Pod, string,
 	return dispatchRustCommand(req)
 }
 
-func CreateGoPod(privateKey babyjub.PrivateKey, entries map[string]interface{}) (*Pod, error) {
+func CreateGoPod(privateKey babyjub.PrivateKey, entries PodEntries) (*Pod, error) {
 	contentID, err := computeContentID(entries)
 	if err != nil {
 		return nil, fmt.Errorf("failed computing content ID: %w", err)

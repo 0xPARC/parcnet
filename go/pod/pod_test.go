@@ -106,7 +106,13 @@ func TestUtils(t *testing.T) {
 }
 
 func TestContentID(t *testing.T) {
-	contentID, err := computeContentID(map[string]interface{}{"A": 123, "B": 321, "G": -7, "D": "foobar", "C": false})
+	contentID, err := computeContentID(PodEntries{
+		"A": PodValue{kind: "int", intVal: 123},
+		"B": PodValue{kind: "int", intVal: 321},
+		"G": PodValue{kind: "int", intVal: -7},
+		"D": PodValue{kind: "string", strVal: "foobar"},
+		"C": PodValue{kind: "boolean", boolVal: false},
+	})
 	if err != nil {
 		t.Fatalf("computeContentID failed: %v", err)
 	}
@@ -135,7 +141,13 @@ func TestCreateGoPod(t *testing.T) {
 	}
 
 	startTime = time.Now()
-	pod, err := CreateGoPod(privKey, map[string]interface{}{"A": 123, "B": 321, "G": -7, "D": "foobar", "C": false})
+	pod, err := CreateGoPod(privKey, PodEntries{
+		"A": PodValue{kind: "int", intVal: 123},
+		"B": PodValue{kind: "int", intVal: 321},
+		"G": PodValue{kind: "int", intVal: -7},
+		"D": PodValue{kind: "string", strVal: "foobar"},
+		"C": PodValue{kind: "boolean", boolVal: false},
+	})
 	elapsed = time.Since(startTime)
 	fmt.Println("NATIVE GO CREATE TIME", elapsed)
 	if err != nil {
