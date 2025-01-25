@@ -116,3 +116,33 @@ func TestCreateGoPod(t *testing.T) {
 	}
 	fmt.Println("POD JSON:", string(jsonPod))
 }
+
+func TestVerifyGoPod(t *testing.T) {
+	privKey := babyjub.PrivateKey{
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8,
+		9, 0, 1,
+	}
+	pod, err := signPod(privKey, PodEntries{
+		"A": PodValue{kind: "int", intVal: 123},
+		"B": PodValue{kind: "int", intVal: 321},
+		"G": PodValue{kind: "int", intVal: -7},
+		"D": PodValue{kind: "string", strVal: "foobar"},
+		"C": PodValue{kind: "boolean", boolVal: false},
+	})
+	if err != nil {
+		t.Fatalf("CreateGoPod failed: %v", err)
+	}
+	ok, err := pod.Verify()
+	if err != nil {
+		t.Fatalf("Verify failed: %v", err)
+	}
+	if !ok {
+		t.Fatalf("Verify for valid pod returned false")
+	}
+	// Tamper the signature with another 64-byte hex string
+	pod.Signature = "703a5776185903375e19021c45cc34ca1f4c8b5baa049d8c65bf65768db0fb12a1cabe35695310a0299c22947ceb08db1307fa929e9627b4ddbcf90b61c01302"
+	ok, err = pod.Verify()
+	if ok {
+		t.Fatalf("Verify for invalid pod returned true")
+	}
+}
