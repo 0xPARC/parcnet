@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"sort"
 
+	"github.com/iden3/go-iden3-crypto/v2/constants"
 	"github.com/iden3/go-iden3-crypto/v2/poseidon"
 )
 
@@ -32,15 +33,24 @@ func hashBytes(data []byte) *big.Int {
     return x
 }
 
+func fieldSafeInt64(val int64) *big.Int {
+    // Convert the int64 into a big.Int, then reduce modulo BN254
+    // so that negative numbers, or numbers larger than the prime,
+    // become a valid field element.
+    x := big.NewInt(val)
+    x.Mod(x, constants.Q)
+    return x
+}
+
 // FIXME: terrible right now, doing type inferencing
 func hashPodValue(v interface{}) (*big.Int, error) {
 	switch vv := v.(type) {
 	case string:
 		return hashString(vv), nil
 	case int:
-		return poseidon.Hash([]*big.Int{big.NewInt(int64(vv))})
+		return poseidon.Hash([]*big.Int{fieldSafeInt64(int64(vv))})
 	case int64:
-		return poseidon.Hash([]*big.Int{big.NewInt(vv)})
+		return poseidon.Hash([]*big.Int{fieldSafeInt64(vv)})
 	case bool:
 		if vv {
 			return poseidon.Hash([]*big.Int{big.NewInt(1)})
