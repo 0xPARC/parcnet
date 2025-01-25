@@ -18,28 +18,28 @@ func hashString(s string) *big.Int {
 // hashBytes hashes the byte slice with SHA-256, then interprets
 // the first 31 bytes of that digest as a big-endian integer.
 func hashBytes(data []byte) *big.Int {
-    hash := sha256.Sum256(data)
-    
-    // Take only the first 31 bytes. This discards the last byte,
-    // effectively a right-shift by 8 bits compared to the full 32-byte digest.
-    first31 := hash[:31]
+	hash := sha256.Sum256(data)
 
-    // Convert big-endian bytes to a *big.Int
-    x := new(big.Int).SetBytes(first31)
+	// Take only the first 31 bytes. This discards the last byte,
+	// effectively a right-shift by 8 bits compared to the full 32-byte digest.
+	first31 := hash[:31]
 
-    // If you need to reduce this mod a particular prime:
-    // x.Mod(x, <your-prime>)
+	// Convert big-endian bytes to a *big.Int
+	x := new(big.Int).SetBytes(first31)
 
-    return x
+	// If you need to reduce this mod a particular prime:
+	// x.Mod(x, <your-prime>)
+
+	return x
 }
 
 func fieldSafeInt64(val int64) *big.Int {
-    // Convert the int64 into a big.Int, then reduce modulo BN254
-    // so that negative numbers, or numbers larger than the prime,
-    // become a valid field element.
-    x := big.NewInt(val)
-    x.Mod(x, constants.Q)
-    return x
+	// Convert the int64 into a big.Int, then reduce modulo BN254
+	// so that negative numbers, or numbers larger than the prime,
+	// become a valid field element.
+	x := big.NewInt(val)
+	x.Mod(x, constants.Q)
+	return x
 }
 
 // FIXME: terrible right now, doing type inferencing
@@ -57,7 +57,7 @@ func hashPodValue(v interface{}) (*big.Int, error) {
 		}
 		return poseidon.Hash([]*big.Int{big.NewInt(0)})
 	// case map[string]interface{}:
-		// Do the version based on the key of the JSON object
+	// Do the version based on the key of the JSON object
 	default:
 		// Fall back to some simple encoding
 		return hashString(fmt.Sprintf("%v", vv)), nil
