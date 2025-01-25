@@ -1,6 +1,7 @@
 package pod
 
 import (
+	"encoding/hex"
 	"fmt"
 
 	"github.com/iden3/go-iden3-crypto/v2/babyjub"
@@ -17,6 +18,12 @@ func CreatePod(privateKey string, entries map[string]interface{}) (*Pod, string,
 		Entries:    entries,
 	}
 	return dispatchRustCommand(req)
+}
+
+func CreateGoPodHex(privateKeyHex string, entries PodEntries) (*Pod, error) {
+	var privateKey babyjub.PrivateKey
+	hex.Decode(privateKey[:], []byte(privateKeyHex))	
+	return CreateGoPod(privateKey, entries)
 }
 
 func CreateGoPod(privateKey babyjub.PrivateKey, entries PodEntries) (*Pod, error) {
