@@ -2,6 +2,7 @@ package pod
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"testing"
@@ -156,4 +157,9 @@ func TestCreateGoPod(t *testing.T) {
 	fmt.Println("POD", pod)
 	fmt.Println("POD.SIGNATURE", pod.Signature)
 	fmt.Println("POD.SIGNERPUBLICKEY", pod.SignerPublicKey)
+	jsonPod, err := json.Marshal(pod)
+	if err != nil {
+		t.Fatalf("Failed to marshal pod to JSON: %v", err)
+	}
+	fmt.Println("POD JSON:", string(jsonPod))
 }
