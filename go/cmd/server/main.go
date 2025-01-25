@@ -1,4 +1,3 @@
-// Start of Selection
 package main
 
 import (
@@ -34,31 +33,9 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newCount, err := rdb.Incr(ctx, "visitorCount").Result()
+	podInstance, err := createVisitorPOD(r.Method, "/")
 	if err != nil {
-		log.Printf("Error incrementing visitorCount in Redis: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-	jsonData := fmt.Sprintf(`{
-					"message": {"string": "Welcome to PARCNET, visitor #%d"},
-					"visitorCount": {"int": %d}
-				}`, newCount, newCount)
-
-	var entries pod.PodEntries
-	if err := json.Unmarshal([]byte(jsonData), &entries); err != nil {
-		http.Error(w, "Error parsing POD entries: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	startTime := time.Now()
-	podInstance, err := pod.CreateGoPodHex(privateKey, entries)
-	elapsed := time.Since(startTime)
-	log.Printf("[%s /] pod.CreatePod: %s", r.Method, elapsed)
-
-	if err != nil {
-		log.Printf("[%s /] pod.CreatePod: %s", r.Method, err)
-		http.Error(w, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
+		// Error already handled inside createVisitorPOD
 		return
 	}
 
@@ -73,7 +50,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 type signRequest struct {
-	Entries map[string]interface{} `json:"entries"`
+	Entries pod.PodEntries `json:"entries"`
 }
 
 func handleSign(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +66,7 @@ func handleSign(w http.ResponseWriter, r *http.Request) {
 	}
 
 	startTime := time.Now()
-	_, jsonPod, err := pod.CreatePod(privateKey, req.Entries)
+	podInstance, err := pod.CreatePod(privateKey, req.Entries)
 	elapsed := time.Since(startTime)
 	log.Printf("[%s /sign] pod.CreatePod: %s", r.Method, elapsed)
 
@@ -100,7 +77,12 @@ func handleSign(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(jsonPod))
+	jsonPod, err := json.Marshal(podInstance)
+	if err != nil {
+		http.Error(w, "Error marshalling POD: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_, _ = w.Write(jsonPod)
 }
 
 type verifyResponse struct {
@@ -154,7 +136,7 @@ func handleZupass(w http.ResponseWriter, r *http.Request) {
 		}
 
 		startTime := time.Now()
-		podInstance, _, err := pod.CreatePod(privateKey, req.Entries)
+		podInstance, err := pod.CreatePod(privateKey, req.Entries)
 		elapsed := time.Since(startTime)
 		log.Printf("[%s /zupass/add] pod.CreatePod: %s", r.Method, elapsed)
 
@@ -185,32 +167,9 @@ func handleZupass(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 
 	case http.MethodGet:
-		newCount, err := rdb.Incr(ctx, "visitorCount").Result()
+		podInstance, err := createVisitorPOD(r.Method, "/zupass")
 		if err != nil {
-			log.Printf("Error incrementing visitorCount in Redis: %v", err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-
-		jsonData := fmt.Sprintf(`{
-					"message": {"string": "Welcome to PARCNET, visitor #%d"},
-					"visitorCount": {"int": %d}
-				}`, newCount, newCount)
-
-		var entries pod.PodEntries
-		if err := json.Unmarshal([]byte(jsonData), &entries); err != nil {
-			http.Error(w, "Error parsing POD entries: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		startTime := time.Now()
-		podInstance, err := pod.CreateGoPodHex(privateKey, entries)
-		elapsed := time.Since(startTime)
-		log.Printf("[%s /zupass] pod.CreatePod: %s", r.Method, elapsed)
-
-		if err != nil {
-			log.Printf("[%s /zupass] pod.CreatePod: %s", r.Method, err)
-			http.Error(w, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
+			// Error already handled inside createVisitorPOD
 			return
 		}
 
@@ -233,6 +192,39 @@ func handleZupass(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, r.Method+" not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+}
+
+func createVisitorPOD(method, endpoint string) (*pod.Pod, error) {
+	newCount, err := rdb.Incr(ctx, "visitorCount").Result()
+	if err != nil {
+		log.Printf("Error incrementing visitorCount in Redis: %v", err)
+		http.Error(nil, "Internal Server Error", http.StatusInternalServerError)
+		return nil, err
+	}
+
+	jsonData := fmt.Sprintf(`{
+		"message": {"string": "Welcome to PARCNET, visitor #%d"},
+		"visitorCount": {"int": %d}
+	}`, newCount, newCount)
+
+	var entries pod.PodEntries
+	if err := json.Unmarshal([]byte(jsonData), &entries); err != nil {
+		http.Error(nil, "Error parsing POD entries: "+err.Error(), http.StatusInternalServerError)
+		return nil, err
+	}
+
+	startTime := time.Now()
+	podInstance, err := pod.CreatePod(privateKey, entries)
+	elapsed := time.Since(startTime)
+	log.Printf("[%s %s] pod.CreatePod: %s", method, endpoint, elapsed)
+
+	if err != nil {
+		log.Printf("[%s %s] pod.CreatePod: %s", method, endpoint, err)
+		http.Error(nil, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
+		return nil, err
+	}
+
+	return podInstance, nil
 }
 
 func initRedis() {
@@ -262,27 +254,16 @@ func main() {
 	if privateKey == "" {
 		log.Fatal("Missing PRIVATE_KEY environment variable.")
 	}
-
-	if err := pod.Init(); err != nil {
-		log.Fatal("Failed to initialize pod: ", err)
-	}
+	log.Println("Loaded PRIVATE_KEY...")
 
 	initRedis()
-
-	// Test connection quickly (optional, but good practice)
-	if _, err := rdb.Ping(ctx).Result(); err != nil {
-		log.Fatalf("Could not connect to Redis: %v", err)
-	}
-
-	log.Println("Loaded PRIVATE_KEY...")
-	log.Println("Initialized pod service...")
-	log.Println("Connected to Redis...")
-	log.Println("Starting server on port 8080")
 
 	http.HandleFunc("/", handleRoot)
 	http.HandleFunc("/sign", handleSign)
 	http.HandleFunc("/verify", handleVerify)
 	http.HandleFunc("/zupass", handleZupass)
+
+	log.Println("Starting server on port 8080")
 
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatal("ListenAndServe Error: ", err)
