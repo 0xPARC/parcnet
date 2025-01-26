@@ -8,7 +8,7 @@ import (
 	"github.com/iden3/go-iden3-crypto/v2/poseidon"
 )
 
-// PodValue can represent one of { "string": "..." }, { "boolean": ... }, or { "int": ... }.
+// Currently, only supports string, boolean, and int.
 type PodValue struct {
 	kind    string
 	strVal  string
@@ -16,7 +16,6 @@ type PodValue struct {
 	intVal  int64
 }
 
-// UnmarshalJSON supports exactly one top-level key ("string","boolean","int").
 func (p *PodValue) UnmarshalJSON(data []byte) error {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -43,7 +42,6 @@ func (p *PodValue) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// MarshalJSON writes PodValue as { "string": ... }, { "boolean": ... }, or { "int": ... }.
 func (p PodValue) MarshalJSON() ([]byte, error) {
 	switch p.kind {
 	case "string":
