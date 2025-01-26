@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/0xPARC/parcnet/go/pod"
 	"github.com/google/uuid"
@@ -33,9 +32,9 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	podInstance, err := createVisitorPOD(r.Method, "/")
+	podInstance, err := createVisitorPOD()
 	if err != nil {
-		// Error already handled inside createVisitorPOD
+		http.Error(w, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -65,11 +64,7 @@ func handleSign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	startTime := time.Now()
 	podInstance, err := pod.CreatePod(privateKey, req.Entries)
-	elapsed := time.Since(startTime)
-	log.Printf("[%s /sign] pod.CreatePod: %s", r.Method, elapsed)
-
 	if err != nil {
 		http.Error(w, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -108,10 +103,7 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	startTime := time.Now()
 	ok, verr := p.Verify()
-	elapsed := time.Since(startTime)
-	log.Printf("[%s /verify] pod.Verify: %s", r.Method, elapsed)
 
 	response := verifyResponse{
 		IsValid: ok && verr == nil,
@@ -135,10 +127,7 @@ func handleZupass(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		startTime := time.Now()
 		podInstance, err := pod.CreatePod(privateKey, req.Entries)
-		elapsed := time.Since(startTime)
-		log.Printf("[%s /zupass/add] pod.CreatePod: %s", r.Method, elapsed)
 
 		if err != nil {
 			http.Error(w, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
@@ -167,9 +156,9 @@ func handleZupass(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 
 	case http.MethodGet:
-		podInstance, err := createVisitorPOD(r.Method, "/zupass")
+		podInstance, err := createVisitorPOD()
 		if err != nil {
-			// Error already handled inside createVisitorPOD
+			http.Error(w, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
@@ -194,11 +183,10 @@ func handleZupass(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func createVisitorPOD(method, endpoint string) (*pod.Pod, error) {
+func createVisitorPOD() (*pod.Pod, error) {
 	newCount, err := rdb.Incr(ctx, "visitorCount").Result()
 	if err != nil {
 		log.Printf("Error incrementing visitorCount in Redis: %v", err)
-		http.Error(nil, "Internal Server Error", http.StatusInternalServerError)
 		return nil, err
 	}
 
@@ -209,18 +197,14 @@ func createVisitorPOD(method, endpoint string) (*pod.Pod, error) {
 
 	var entries pod.PodEntries
 	if err := json.Unmarshal([]byte(jsonData), &entries); err != nil {
-		http.Error(nil, "Error parsing POD entries: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("Error unmarshalling POD entries: %v", err)
 		return nil, err
 	}
 
-	startTime := time.Now()
 	podInstance, err := pod.CreatePod(privateKey, entries)
-	elapsed := time.Since(startTime)
-	log.Printf("[%s %s] pod.CreatePod: %s", method, endpoint, elapsed)
 
 	if err != nil {
-		log.Printf("[%s %s] pod.CreatePod: %s", method, endpoint, err)
-		http.Error(nil, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("Error creating POD: %v", err)
 		return nil, err
 	}
 
