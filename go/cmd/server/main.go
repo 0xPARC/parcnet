@@ -118,7 +118,12 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(response)
 }
 
+// If GET, we sign a visitor POD and redirect to add the POD via Zupass
+// If POST, we sign the given entries and return the given Zupass URL
 func handleZupass(w http.ResponseWriter, r *http.Request) {
+	var podInstance *pod.Pod
+	var err error
+
 	switch r.Method {
 	case http.MethodPost:
 		var req signRequest
@@ -127,26 +132,38 @@ func handleZupass(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		podInstance, err := pod.CreatePod(privateKey, req.Entries)
-
+		podInstance, err = pod.CreatePod(privateKey, req.Entries)
 		if err != nil {
 			http.Error(w, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		serialized, err := SerializePODPCD(uuid.New().String(), *podInstance)
+	case http.MethodGet:
+		podInstance, err = createVisitorPOD()
 		if err != nil {
-			http.Error(w, "Error serializing PODPCD: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		folder := "Go PODs"
-		zupassUrl, err := createZupassAddRequestUrl("https://zupass.org", "https://zupass.org/#/popup", *serialized, &folder, false, nil)
-		if err != nil {
-			http.Error(w, "Error creating Zupass URL: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
+	default:
+		http.Error(w, r.Method+" not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
+	serialized, err := SerializePODPCD(uuid.New().String(), *podInstance)
+	if err != nil {
+		http.Error(w, "Error serializing PODPCD: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	folder := "Go PODs"
+	zupassUrl, err := createZupassAddRequestUrl("https://zupass.org", "https://zupass.org/#/popup", *serialized, &folder, false, nil)
+	if err != nil {
+		http.Error(w, "Error creating Zupass URL: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if r.Method == http.MethodPost {
 		response := map[string]string{
 			"zupassUrl": zupassUrl,
 		}
@@ -154,32 +171,8 @@ func handleZupass(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(response)
-
-	case http.MethodGet:
-		podInstance, err := createVisitorPOD()
-		if err != nil {
-			http.Error(w, "Error creating POD: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		serialized, err := SerializePODPCD(uuid.New().String(), *podInstance)
-		if err != nil {
-			http.Error(w, "Error serializing PODPCD: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		folder := "Go PODs"
-		zupassUrl, err := createZupassAddRequestUrl("https://zupass.org", "https://zupass.org/#/popup", *serialized, &folder, false, nil)
-		if err != nil {
-			http.Error(w, "Error creating Zupass URL: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
+	} else if r.Method == http.MethodGet {
 		http.Redirect(w, r, zupassUrl, http.StatusSeeOther)
-
-	default:
-		http.Error(w, r.Method+" not allowed", http.StatusMethodNotAllowed)
-		return
 	}
 }
 
