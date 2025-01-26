@@ -13,10 +13,6 @@ edition = "2021"
 name = "parcnet_pod"
 path = "src/lib.rs"
 
-[[bin]]
-name = "pod_worker"
-path = "src/bin/pod_worker.rs"
-
 [dependencies]
 ark-bn254 = "0.4.0"
 ark-ff = "0.4.0"
