@@ -1,104 +1,124 @@
-name: Build and Release pod_worker
+name: Build & release chat
 
 on:
   push:
-    tags:
-      - v*
-    branches:
-      - rrrliu/go-lib # FIXME: change to main eventually
-env:
-  CRATE_NAME: pod_worker
-  GITHUB_TOKEN: ${{ github.token }}
-  RUST_BACKTRACE: 1
-jobs:
-  test-matrix:
-    name: ${{ matrix.platform.os-name }} with rust ${{ matrix.toolchain }}
-    runs-on: ${{ matrix.platform.runs-on }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          # Platforms that don't work:
-          #
-          # - sparc64-unknown-linux-gnu - cannot compile openssl-sys
-          # - x86_64-unknown-illumos - weird error compiling openssl - "bin/sh: 1: granlib: not found"
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "create a new release"
+        required: true
+        default: false
+        type: boolean
 
-          - os-name: FreeBSD-x86_64
-            runs-on: ubuntu-22.04
-            target: x86_64-unknown-freebsd
-            skip-tests: true
-          - os-name: Linux-x86_64
-            runs-on: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-          - os-name: Linux-powerpc
-            runs-on: ubuntu-22.04
-            target: powerpc-unknown-linux-gnu
-            skip-tests: true
-          - os-name: Linux-powerpc64
-            runs-on: ubuntu-22.04
-            target: powerpc64-unknown-linux-gnu
-            skip-tests: true
-          - os-name: Linux-powerpc64le
-            runs-on: ubuntu-22.04
-            target: powerpc64le-unknown-linux-gnu
-            skip-tests: true
-          - os-name: Linux-riscv64
-            runs-on: ubuntu-22.04
-            target: riscv64gc-unknown-linux-gnu
-          - os-name: Linux-s390x
-            runs-on: ubuntu-22.04
-            target: s390x-unknown-linux-gnu
-            skip-tests: true
-          - os-name: Windows-aarch64
-            runs-on: windows-latest
-            target: aarch64-pc-windows-msvc
-            skip-tests: true
-          - os-name: Windows-i686
-            runs-on: windows-latest
-            target: i686-pc-windows-msvc
-            skip-tests: true
-          - os-name: Windows-x86_64
-            runs-on: windows-latest
-            target: x86_64-pc-windows-msvc
-          - os-name: macOS-x86_64
-            runs-on: macOS-latest
-            target: x86_64-apple-darwin
-          - os-name: macOS-aarch64
-            runs-on: macOS-latest
-            target: aarch64-apple-darwin
-        toolchain:
-          - stable
-        include:
-          - platform:
-              os-name: Linux-x86_64
-              runs-on: ubuntu-22.04
-              target: x86_64-unknown-linux-gnu
-              bin: pod_worker
-            toolchain: beta
-          - platform:
-              os-name: Linux-x86_64
-              runs-on: ubuntu-22.04
-              target: x86_64-unknown-linux-gnu
-              bin: pod_worker
-            toolchain: nightly
+jobs:
+  build:
+    runs-on: macos-latest
+    environment: release-chat
     steps:
       - uses: actions/checkout@v4
-      # - name: Maybe install SSL packages
-      #   run: sudo apt-get update --yes && sudo apt-get install --yes pkg-config openssl libssl-dev
-      #   if: matrix.platform.features == 'native-tls'
-      - name: Build binary
-        uses: houseabsolute/actions-rust-cross@v1
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version =' chat/Cargo.toml | sed 's/.*= "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Setup rust
+        uses: dtolnay/rust-toolchain@master
         with:
-          command: "build"
-          target: ${{ matrix.platform.target }}
-          toolchain: ${{ matrix.toolchain }}
-          args: "--release --bin pod_worker"
-          strip: true
-      - name: Publish artifacts and release
-        uses: houseabsolute/actions-rust-release@v0
+          toolchain: nightly-2024-09-28
+
+      - name: Install deps
+        run: |
+          brew install create-dmg
+          cargo install cargo-bundle
+
+      - name: Bundle app
+        run: cargo bundle --release
+
+      - name: Install the Apple certificate
+        env:
+          APPLE_DID_CERTIFICATE_BASE64: ${{ secrets.APPLE_DID_CERTIFICATE_BASE64 }}
+          APPLE_DID_CERTIFICATE_PWD: ${{ secrets.APPLE_DID_CERTIFICATE_PWD }}
+        run: |
+          echo "Decoding certificate..."
+          echo $APPLE_DID_CERTIFICATE_BASE64 | base64 --decode > certificate.p12
+          echo "Creating keychain..."
+          security create-keychain -p "pwd" parcnet-chat-codesign.keychain
+          echo "Setting default keychain..."
+          security default-keychain -s parcnet-chat-codesign.keychain
+          echo "Unlocking keychain..."
+          security unlock-keychain -p "pwd" parcnet-chat-codesign.keychain
+          echo "Importing certificate..."
+          security import certificate.p12 -k parcnet-chat-codesign.keychain -P $APPLE_DID_CERTIFICATE_PWD -T /usr/bin/codesign
+          echo "Setting key partition list..."
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "pwd" parcnet-chat-codesign.keychain
+          echo "Certificate installation complete."
+
+      - name: Codesign app
+        run: |
+          codesign --sign "Developer ID Application: Small Brain Engineering, Inc (D7642W43D2)" --keychain parcnet-chat-codesign.keychain --force --options runtime --timestamp target/release/bundle/osx/chat.app
+
+      - name: Create dmg
+        run: |
+          create-dmg \
+            --volname "chat" \
+            "chat.dmg" \
+            "target/release/bundle/osx/chat.app"
+
+      - name: Codesign dmg
+        run: |
+          codesign --sign "Developer ID Application: Small Brain Engineering, Inc (D7642W43D2)" --keychain parcnet-chat-codesign.keychain --force --options runtime --timestamp chat.dmg
+
+      - name: Upload dmg
+        uses: actions/upload-artifact@v4
         with:
+          name: chat-dmg
+          path: chat.dmg
+
+  release:
+    needs: build
+    environment: release-chat
+    if: github.event.inputs.release == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version =' chat/Cargo.toml | sed 's/.*= "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download dmg
+        uses: actions/download-artifact@v4
+        with:
+          name: chat-dmg
+
+      - name: Notarize
+        env:
+          APPLECONNECT_KEY: ${{ secrets.APPLECONNECT_KEY }}
+        run: |
+          cargo install apple-codesign
+          echo "$APPLECONNECT_KEY" > key.json
+          rcodesign notary-submit --wait --max-wait-seconds 86400 --staple --api-key-path key.json chat.dmg
+          rm key.json
+
+      - name: Generate release notes
+        run: |
+          echo "Release notes for version ${{ steps.get_version.outputs.VERSION }}" > RELEASE_NOTES.md
+          echo "Changelog:" >> RELEASE_NOTES.md
+          git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"%s" >> RELEASE_NOTES.md
+
+      - name: Create gh release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          body_path: RELEASE_NOTES.md
           draft: false
-          executable-name: pod_worker
-          target: ${{ matrix.platform.target }}
-          changes-file: "parcnet-pod/Changes.md"
-        if: matrix.toolchain == 'stable'
+          prerelease: false
+          files: chat.dmg
