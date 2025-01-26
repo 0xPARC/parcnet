@@ -40,15 +40,9 @@ impl PodValue {
                 PodCreationError::HashError(format!("{} hash failed: {}", input_type, e))
             })
         };
-        println!("self: {:?}", self);
         match self {
             PodValue::String(s) => Ok(string_hash(s)),
-            PodValue::Int(i) => {
-                let fq = Fq::from(*i);
-                let h = hasher("Integer", vec![fq]);
-                println!("INT: {:?}, HASHED: {:?}", i, h);
-                h
-            }
+            PodValue::Int(i) => hasher("Integer", vec![Fq::from(*i)]),
             PodValue::Cryptographic(c) => hasher("Cryptographic", vec![*c]),
             PodValue::EdDSAPublicKey(pt) => hasher("EdDSA public key", vec![pt.x, pt.y]),
             PodValue::Boolean(b) => hasher("Boolean", vec![Fq::from(*b)]),
