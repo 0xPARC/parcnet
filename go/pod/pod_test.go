@@ -1,96 +1,11 @@
 package pod
 
 import (
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"math/big"
 	"testing"
-	"time"
 
 	"github.com/iden3/go-iden3-crypto/v2/babyjub"
-	"github.com/iden3/go-iden3-crypto/v2/poseidon"
 )
-
-// func TestVerify(t *testing.T) {
-// 	p, _, err := CreatePod(
-// 		"0001020304050607080900010203040506070809000102030405060708090001",
-// 		map[string]interface{}{"hello": map[string]interface{}{"string": "world"}},
-// 	)
-// 	if err != nil {
-// 		t.Fatalf("CreatePod failed: %v", err)
-// 	}
-
-// 	ok, err := p.Verify()
-// 	if err != nil {
-// 		t.Fatalf("Verify failed: %v", err)
-// 	}
-// 	if !ok {
-// 		t.Fatalf("Verify for valid pod returned false")
-// 	}
-
-// 	p.Signature = "0001020304050607080900010203040506070809000102030405060708090001"
-// 	ok, err = p.Verify()
-// 	if err != nil {
-// 		t.Fatalf("Verify failed: %v", err)
-// 	}
-// 	if ok {
-// 		t.Fatalf("Verify for invalid pod returned true")
-// 	}
-// }
-
-func TestCryptography(t *testing.T) {
-	startTime := time.Now()
-	poseidon, err := poseidon.Hash([]*big.Int{big.NewInt(1), big.NewInt(2)})
-	elapsed := time.Since(startTime)
-	if err != nil {
-		t.Fatalf("Hash failed: %v", err)
-	}
-	fmt.Println("TIME", elapsed)
-	fmt.Println("POSEIDON", poseidon)
-
-	var privKey babyjub.PrivateKey
-
-	privKHex := "21a5e7321d0e2f3ca1cc6504396e6594a2211544b08c206847cdee96f832421a"
-
-	hex.Decode(privKey[:], []byte(privKHex))
-
-	pubKey := privKey.Public()
-	fmt.Println("PUBKEY", pubKey)
-
-	startTime = time.Now()
-	signature, err := privKey.SignPoseidon(big.NewInt(1))
-	elapsed = time.Since(startTime)
-	fmt.Println("TIME", elapsed)
-	if err != nil {
-		t.Fatalf("Sign failed: %v", err)
-	}
-	fmt.Println("SIGNATURE", signature)
-}
-
-func TestUtils(t *testing.T) {
-	str := hashString("test")
-	value, err := hashPodValue(42)
-	if err != nil {
-		t.Fatalf("hashValue failed: %v", err)
-	}
-	fmt.Println("STRING", str)
-	fmt.Println("VALUE", value)
-}
-
-func TestContentID(t *testing.T) {
-	contentID, err := computeContentID(PodEntries{
-		"A": PodValue{kind: "int", intVal: 123},
-		"B": PodValue{kind: "int", intVal: 321},
-		"G": PodValue{kind: "int", intVal: -7},
-		"D": PodValue{kind: "string", strVal: "foobar"},
-		"C": PodValue{kind: "boolean", boolVal: false},
-	})
-	if err != nil {
-		t.Fatalf("computeContentID failed: %v", err)
-	}
-	fmt.Println("CONTENTID", contentID)
-}
 
 func TestCreateGoPod(t *testing.T) {
 	privKey := babyjub.PrivateKey{
@@ -107,14 +22,14 @@ func TestCreateGoPod(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateGoPod failed: %v", err)
 	}
-	fmt.Println("POD", pod)
-	fmt.Println("POD.SIGNATURE", pod.Signature)
-	fmt.Println("POD.SIGNERPUBLICKEY", pod.SignerPublicKey)
 	jsonPod, err := json.Marshal(pod)
 	if err != nil {
 		t.Fatalf("Failed to marshal pod to JSON: %v", err)
 	}
-	fmt.Println("POD JSON:", string(jsonPod))
+	expectedPod := `{"entries":{"A":{"int":123},"B":{"int":321},"C":{"boolean":false},"D":{"string":"foobar"},"G":{"int":-7}},"signature":"fd75dc76f55eeb27e518ed5ebaca78a2b269e27d70cc0106b9f1e823380995ad8a2216351493ba3f50704ef3daae86b5163d6055d0c6644c4a1e64f03adc2704","signerPublicKey":"c433f7a696b7aa3a5224efb3993baf0ccd9e92eecee0c29a3f6c8208a9e81d9e"}`
+	if string(jsonPod) != expectedPod {
+		t.Fatalf("CreateGoPod returned invalid pod: %v", string(jsonPod))
+	}
 }
 
 func TestVerifyGoPod(t *testing.T) {

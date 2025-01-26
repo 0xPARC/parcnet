@@ -19,49 +19,15 @@ func hashString(s string) *big.Int {
 // the first 31 bytes of that digest as a big-endian integer.
 func hashBytes(data []byte) *big.Int {
 	hash := sha256.Sum256(data)
-
-	// Take only the first 31 bytes. This discards the last byte,
-	// effectively a right-shift by 8 bits compared to the full 32-byte digest.
 	first31 := hash[:31]
-
-	// Convert big-endian bytes to a *big.Int
 	x := new(big.Int).SetBytes(first31)
-
-	// If you need to reduce this mod a particular prime:
-	// x.Mod(x, <your-prime>)
-
 	return x
 }
 
 func fieldSafeInt64(val int64) *big.Int {
-	// Convert the int64 into a big.Int, then reduce modulo BN254
-	// so that negative numbers, or numbers larger than the prime,
-	// become a valid field element.
 	x := big.NewInt(val)
 	x.Mod(x, constants.Q)
 	return x
-}
-
-// FIXME: terrible right now, doing type inferencing
-func hashPodValue(v interface{}) (*big.Int, error) {
-	switch vv := v.(type) {
-	case string:
-		return hashString(vv), nil
-	case int:
-		return poseidon.Hash([]*big.Int{fieldSafeInt64(int64(vv))})
-	case int64:
-		return poseidon.Hash([]*big.Int{fieldSafeInt64(vv)})
-	case bool:
-		if vv {
-			return poseidon.Hash([]*big.Int{big.NewInt(1)})
-		}
-		return poseidon.Hash([]*big.Int{big.NewInt(0)})
-	// case map[string]interface{}:
-	// Do the version based on the key of the JSON object
-	default:
-		// Fall back to some simple encoding
-		return hashString(fmt.Sprintf("%v", vv)), nil
-	}
 }
 
 func computeContentID(data PodEntries) (*big.Int, error) {
@@ -78,14 +44,14 @@ func computeContentID(data PodEntries) (*big.Int, error) {
 
 		vh, err := data[k].Hash()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error when hashing pod value: %w", err)
 		}
 		allHashes = append(allHashes, vh)
 	}
 
 	root, err := leanPoseidonIMT(allHashes)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error when computing poseidon IMT: %w", err)
 	}
 	return root, nil
 }
