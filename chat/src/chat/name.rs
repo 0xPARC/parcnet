@@ -1,4 +1,4 @@
-use gpui::{div, rgba, IntoElement, ParentElement, Render, Styled, ViewContext};
+use gpui::{div, rgba, Context, IntoElement, ParentElement, Render, Styled, Window};
 use iroh::net::key::PublicKey;
 use std::sync::Arc;
 
@@ -10,13 +10,13 @@ pub struct Name {
 }
 
 impl Name {
-    pub fn new(_cx: &mut ViewContext<Self>, pubkey: PublicKey, logic: Arc<Logic>) -> Self {
+    pub fn new(_cx: &mut Context<Self>, pubkey: PublicKey, logic: Arc<Logic>) -> Self {
         Name { pubkey, logic }
     }
 }
 
 impl Render for Name {
-    fn render(&mut self, _cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         let name = self.logic.get_name(&self.pubkey);
         div().text_color(rgba(0x00000050)).child(name)
     }

@@ -1,20 +1,20 @@
 use std::time::Duration;
 
 use gpui::{
-    black, bounce, div, ease_in_out, percentage, svg, white, Animation, AnimationExt, IntoElement,
-    Length, ParentElement, Pixels, Render, Styled, Transformation, ViewContext,
+    black, bounce, div, ease_in_out, percentage, svg, white, Animation, AnimationExt, Context,
+    IntoElement, Length, ParentElement, Pixels, Render, Styled, Transformation, Window,
 };
 
 pub struct Loader {}
 
 impl Loader {
-    pub fn new(_cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(_cx: &mut Context<Self>) -> Self {
         Loader {}
     }
 }
 
 impl Render for Loader {
-    fn render(&mut self, _cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div().flex().flex_col().size_full().justify_around().child(
             div().flex().flex_row().w_full().justify_around().child(
                 div()
