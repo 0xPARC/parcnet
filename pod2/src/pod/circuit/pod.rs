@@ -8,9 +8,9 @@ use plonky2::{
     },
     plonk::{circuit_builder::CircuitBuilder, config::PoseidonGoldilocksConfig},
 };
-use std::iter::zip;
+use std::{array, iter::zip};
 
-use super::{statement::StatementTarget, util::vector_ref};
+use super::{origin::OriginTarget, statement::StatementTarget, util::vector_ref};
 use crate::{
     pod::{util::hash_string_to_field, PODProof, Statement, POD, SIGNER_PK_KEY},
     signature::schnorr_prover::{
@@ -52,15 +52,16 @@ impl SchnorrPODTarget {
                 .as_ref(),
             self.pk_index,
         )?;
-        let origin_id_target = vector_ref(
+        let origin_id_target = array::try_from_fn(|i|
+            vector_ref(
             builder,
             self.payload
                 .iter()
-                .map(|s| s.origin1.origin_id)
+                .map(|s| s.origin1.origin_id[i])
                 .collect::<Vec<_>>()
                 .as_ref(),
             self.pk_index,
-        )?;
+        ))?;
         let value_target = vector_ref(
             builder,
             self.payload
@@ -75,7 +76,8 @@ impl SchnorrPODTarget {
         builder.connect(key_target, expected_pk_entry_key);
 
         // Check origin ID, which should be 1 for self.
-        builder.assert_one(origin_id_target);
+        let self_origin_id_target = OriginTarget::auto(builder, crate::pod::gadget::GadgetID::SCHNORR16).origin_id;
+        builder.connect_array(self_origin_id_target, origin_id_target);
 
         // This suggests we are OK.
         Ok(value_target)

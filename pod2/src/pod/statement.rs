@@ -9,7 +9,7 @@ use std::{collections::HashMap, fmt, fmt::Debug};
 use super::{
     entry::Entry,
     gadget::GadgetID,
-    origin::Origin,
+    origin::{Origin, OriginID},
     util::hash_string_to_field,
     value::{HashableEntryValue, ScalarOrVec},
     POD,
@@ -34,7 +34,7 @@ impl AnchoredKey {
     }
     pub fn remap_origin(
         &self,
-        f: &dyn Fn(&str) -> Result<(String, GoldilocksField)>,
+        f: &dyn Fn(&str) -> Result<(String, OriginID)>,
     ) -> Result<Self> {
         let AnchoredKey(origin, key) = self;
         Ok(AnchoredKey(origin.remap(f)?, key.clone()))
@@ -226,7 +226,7 @@ impl Statement {
     }
     pub fn remap_origins(
         &self,
-        f: &dyn Fn(&str) -> Result<(String, GoldilocksField)>,
+        f: &dyn Fn(&str) -> Result<(String, OriginID)>,
     ) -> Result<Self> {
         match self {
             Self::None => Ok(Self::None),

@@ -5,6 +5,7 @@ use plonky2::{
     plonk::circuit_builder::CircuitBuilder,
     // util::log2_ceil,
 };
+use std::iter::zip;
 
 use super::statement::StatementTarget;
 use crate::{D, F};
@@ -152,4 +153,15 @@ pub fn member(builder: &mut CircuitBuilder<F, D>, x: Target, v: &[Target]) -> Bo
 pub fn and(builder: &mut CircuitBuilder<F, D>, v: &[BoolTarget]) -> BoolTarget {
     v.iter()
         .fold(builder._true(), |acc, ind| builder.and(acc, *ind))
+}
+
+pub fn target_slice_eq(builder: &mut CircuitBuilder<F, D>, v: &[Target], w: &[Target]) -> BoolTarget {
+    zip(v,
+        w
+            ).fold(builder._true(),
+                   |b,(x,y)| {
+                       let eq_check = builder.is_equal(*x,*y);
+                       builder.and(b, eq_check)
+                       
+                   })
 }

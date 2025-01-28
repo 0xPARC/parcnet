@@ -13,7 +13,7 @@ use crate::pod::entry::Entry;
 use crate::pod::gadget::GadgetID;
 use crate::pod::gadget::{IntroducerCircuit, OpExecutorGadget, SchnorrPODGadget};
 use crate::pod::operation::OpList;
-use crate::pod::payload::{PODPayload, StatementList};
+use crate::pod::payload::{HashablePayload, PODPayload, StatementList};
 use crate::pod::statement::Statement;
 use crate::pod::{GPGInput, PODProof, POD};
 use crate::recursion::{
@@ -220,15 +220,18 @@ where
         plonky_pods.sort_by(|a, b| a.0.cmp(&b.0));
 
         // TODO: Constructor
-        let dummy_plonky_pod = POD {
-            payload: PODPayload {
+        let dummy_payload = PODPayload {
                 statements_list: (0..NS)
                     .map(|i| (format!("Dummy statement {}", i), Statement::None))
                     .collect(),
                 statements_map: std::collections::HashMap::new(),
-            },
+        };
+        let content_id = dummy_payload.hash_payload().elements;
+        let dummy_plonky_pod = POD {
+            payload: dummy_payload,
             proof: crate::pod::PODProof::Plonky(prover_params.dummy_proof.clone()),
             proof_type: GadgetID::PLONKY,
+            content_id
         };
 
         // Note: One statement is reserved for the signer's public key.
@@ -371,13 +374,17 @@ where
         //     L, M, N, NS, VL, time_prove, time_execute,
         // );
 
-        Ok(POD {
-            payload: PODPayload {
+        let payload = PODPayload {
                 statements_list: output_statements.clone(),
                 statements_map: output_statements.into_iter().collect(),
-            },
+        };
+        let content_id = payload.hash_payload().elements;
+
+        Ok(POD {
+            payload,
             proof: PODProof::Plonky(plonky_proof.proof),
             proof_type: GadgetID::PLONKY,
+            content_id
         })
     }
 
