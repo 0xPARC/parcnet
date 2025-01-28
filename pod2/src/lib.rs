@@ -20,9 +20,9 @@ pub type PlonkyProof = Proof<F, PoseidonGoldilocksConfig, D>;
 pub const NUM_BITS: usize = 32;
 
 pub mod plonky2_u32;
-pub mod pod;
+// pub mod pod;
 pub mod recursion;
 pub mod signature;
 
 // expose the main structs & traits at the high level
-pub use pod::{PODProof, POD};
+// pub use pod::{PODProof, POD};
