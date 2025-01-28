@@ -542,14 +542,12 @@ mod tests {
     use anyhow::Result;
     use plonky2::field::types::{Field, Sample};
     use plonky2::plonk::proof::ProofWithPublicInputs;
-    use plonky2::recursion::dummy_circuit::dummy_proof;
     use rand;
     use std::array;
     use std::time::Instant;
 
     use super::*;
 
-    use crate::pod::gadget::SchnorrPODGadget;
     use crate::recursion::traits::IntroducerCircuitTrait;
     use crate::recursion::traits_examples::{
         ExampleGadget, ExampleGadgetInput, ExampleIntroducer, ExampleOpsExecutor,

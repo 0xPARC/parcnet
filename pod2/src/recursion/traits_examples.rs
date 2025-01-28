@@ -7,7 +7,7 @@ use plonky2::iop::witness::PartialWitness;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 use std::array;
 
-use crate::pod::circuit::operation::OperationTarget;
+// use crate::pod::circuit::operation::OperationTarget;
 use crate::signature::schnorr::*;
 use crate::signature::schnorr_prover::*;
 
@@ -139,14 +139,13 @@ impl InnerCircuitTrait for ExampleGadget {
 pub struct ExampleOpsExecutor<const NS: usize, const VL: usize>;
 
 impl<const NS: usize, const VL: usize> OpsExecutorTrait for ExampleOpsExecutor<NS, VL> {
-    type Targets = [OperationTarget<VL>; NS];
+    type Targets = plonky2::iop::target::Target;
     type Input = ();
     type Output = ();
 
     fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets> {
-        // naive ops logic (create the targets without logic)
-        let ops = array::from_fn(|_| OperationTarget::new_virtual(builder));
-        Ok(ops)
+        let targ = builder.add_virtual_target();
+        Ok(targ)
     }
 
     fn set_targets(
