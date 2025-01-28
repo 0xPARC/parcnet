@@ -3,7 +3,7 @@ mod logic;
 
 use chat::Chat;
 use gpui::{
-    actions, point, px, size, App, AppContext, Bounds, KeyBinding, TitlebarOptions, VisualContext,
+    actions, point, px, size, App, AppContext, Application, Bounds, KeyBinding, TitlebarOptions,
     WindowBounds, WindowOptions,
 };
 use logic::{get_app_path, is_dev};
@@ -28,9 +28,9 @@ async fn main() {
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .init();
 
-    App::new()
+    Application::new()
         .with_assets(assets::Assets {})
-        .run(|cx: &mut AppContext| {
+        .run(|cx: &mut App| {
             cx.activate(true);
             cx.on_action(quit);
             cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
@@ -47,11 +47,11 @@ async fn main() {
                     }),
                     ..Default::default()
                 },
-                |cx| cx.new_view(Chat::new),
+                |_, cx| cx.new(Chat::new),
             );
         })
 }
 
-fn quit(_: &Quit, cx: &mut gpui::AppContext) {
+fn quit(_: &Quit, cx: &mut gpui::App) {
     cx.quit();
 }

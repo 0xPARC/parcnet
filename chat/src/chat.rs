@@ -5,10 +5,10 @@ mod podcount;
 
 use crate::logic::{get_current_version, Logic};
 use gpui::{
-    actions, div, px, rgba, uniform_list, InteractiveElement, IntoElement, KeyBinding,
-    ListSizingBehavior, ParentElement, Render, Styled, UniformListScrollHandle, ViewContext,
+    actions, div, px, rgba, uniform_list, AppContext, Context, Entity, InteractiveElement,
+    IntoElement, KeyBinding, ListSizingBehavior, ParentElement, Render, Styled,
+    UniformListScrollHandle, Window,
 };
-use gpui::{View, VisualContext};
 use input::TextInput;
 use loader::Loader;
 use name::Name;
@@ -19,14 +19,14 @@ actions!(chat, [Enter]);
 
 pub struct Chat {
     logic: Arc<Logic>,
-    message_input: View<TextInput>,
-    loader: View<Loader>,
-    podcount: View<Podcount>,
+    message_input: Entity<TextInput>,
+    loader: Entity<Loader>,
+    podcount: Entity<Podcount>,
     scroll_handle: UniformListScrollHandle,
 }
 
 impl Chat {
-    pub fn new(cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         let logic = Arc::new(Logic::new());
         let logic_initialize = logic.clone();
         cx.spawn(|_view, mut _cx| async move {
@@ -38,7 +38,7 @@ impl Chat {
         let mut initial_sync_watch = logic.get_initial_sync_watch();
 
         let logic_quit = logic.clone();
-        cx.on_app_quit(move |_| {
+        cx.on_app_quit(move |_, _| {
             let logic_quit = logic_quit.clone();
             async move {
                 let _ = logic_quit.cleanup().await;
@@ -46,7 +46,7 @@ impl Chat {
         })
         .detach();
 
-        cx.spawn(|view, mut cx| async move {
+        cx.spawn(|view, cx| async move {
             while message_watch.changed().await.is_ok() {
                 let _ = cx.update(|cx| {
                     view.update(cx, |this, cx| {
@@ -58,7 +58,7 @@ impl Chat {
         })
         .detach();
 
-        cx.spawn(|view, mut cx| async move {
+        cx.spawn(|view, cx| async move {
             while initial_sync_watch.changed().await.is_ok() {
                 let _ = cx.update(|cx| {
                     view.update(cx, |_this, cx| {
@@ -70,10 +70,10 @@ impl Chat {
         .detach();
 
         cx.bind_keys([KeyBinding::new("enter", Enter, None)]);
-        let message_input = cx.new_view(TextInput::new);
-        let loader = cx.new_view(Loader::new);
+        let message_input = cx.new(TextInput::new);
+        let loader = cx.new(Loader::new);
         let logic_pc = logic.clone();
-        let podcount = cx.new_view(|cx| Podcount::new(cx, logic_pc));
+        let podcount = cx.new(|cx| Podcount::new(cx, logic_pc));
         let scroll_handle = UniformListScrollHandle::new();
 
         Self {
@@ -85,11 +85,11 @@ impl Chat {
         }
     }
 
-    fn enter(&mut self, _: &Enter, cx: &mut ViewContext<Self>) {
+    fn enter(&mut self, _: &Enter, _window: &mut Window, cx: &mut Context<Self>) {
         let message_input = self.message_input.clone();
         let message = message_input.read(cx).get_content().to_string();
         let logic = self.logic.clone();
-        cx.spawn(|view, mut cx| async move {
+        cx.spawn(|view, cx| async move {
             logic.send_message(&message).await.unwrap();
             let _ = cx.update(|cx| {
                 message_input.update(cx, |input, _| input.reset());
@@ -113,15 +113,15 @@ impl Chat {
 }
 
 impl Render for Chat {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
-        let view = cx.view().clone();
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let view = cx.entity().clone();
         let messages = self.logic.get_messages();
         let initial_sync = self.logic.get_initial_sync();
         let logic = self.logic.clone();
 
-        let name_views: Vec<View<Name>> = messages
+        let name_views: Vec<Entity<Name>> = messages
             .iter()
-            .map(|(pubkey, _)| cx.new_view(|cx| Name::new(cx, *pubkey, logic.clone())))
+            .map(|(pubkey, _)| cx.new(|cx| Name::new(cx, *pubkey, logic.clone())))
             .collect();
 
         if initial_sync {
@@ -198,7 +198,7 @@ impl Render for Chat {
                 .child(
                     uniform_list(view, "messages-list", messages.len(), {
                         let name_views = name_views.clone();
-                        move |_, visible_range, _| {
+                        move |_, visible_range, _, _| {
                             visible_range
                                 .map(|ix| {
                                     let (_, message) = messages.get(ix).unwrap();
