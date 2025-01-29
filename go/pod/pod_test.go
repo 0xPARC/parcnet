@@ -15,7 +15,7 @@ func TestCreateGoPod(t *testing.T) {
 		9, 0, 1,
 	}
 	pod, err := signPod(privKey, PodEntries{
-		"A": PodValue{ValueType: PodIntValue, BigVal: big.NewInt(123)},
+		"A": PodValue{ValueType: PodIntValue, BigVal: big.NewInt(9007199254740992)},
 		"B": PodValue{ValueType: PodIntValue, BigVal: big.NewInt(321)},
 		"G": PodValue{ValueType: PodIntValue, BigVal: big.NewInt(-7)},
 		"S": PodValue{ValueType: PodStringValue, StringVal: "foobar"},
@@ -32,7 +32,7 @@ func TestCreateGoPod(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to marshal pod to JSON: %v", err)
 	}
-	expectedPod := `{"entries":{"A":123,"B":321,"C":false,"D":{"date":"2025-01-01T00:00:00.000Z"},"G":-7,"J":{"bytes":"AQID"},"K":{"cryptographic":1234567890},"N":null,"S":"foobar"},"signature":"vHJjksebJ56lnKH5Lh5A8ZG5VXV4rycqTcH9wFYg95omVVdy7FMzIgagM8q0cDUG7+QmeUppVZsg7HZralmRAg","signerPublicKey":"xDP3ppa3qjpSJO+zmTuvDM2eku7O4MKaP2yCCKnoHZ4"}`
+	expectedPod := `{"entries":{"A":{"int":"0x20000000000000"},"B":321,"C":false,"D":{"date":"2025-01-01T00:00:00.000Z"},"G":-7,"J":{"bytes":"AQID"},"K":{"cryptographic":1234567890},"N":null,"S":"foobar"},"signature":"B8vS1LrnzK7s0E5w/O8qu8YcNxOm+sQBis/aTDDachgTS3dqLcPofbvqISJtpfwb1ov86MIMZZlrIAwv5/xIAw","signerPublicKey":"xDP3ppa3qjpSJO+zmTuvDM2eku7O4MKaP2yCCKnoHZ4"}`
 	if string(jsonPod) != expectedPod {
 		t.Fatalf("CreateGoPod returned invalid pod: %v", string(jsonPod))
 	}
