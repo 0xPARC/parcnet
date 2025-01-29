@@ -22,7 +22,7 @@ func signPod(privateKey babyjub.PrivateKey, entries PodEntries) (*Pod, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed signing content ID: %w", err)
 	}
-	pubKey := privateKey.Public()
+	pubKey := privateKey.Public() // TODO: unpadded base64
 	pod := &Pod{
 		Entries:         entries,
 		Signature:       sig.Compress().String(),
