@@ -21,7 +21,7 @@ Package `pod` provides functionality to create and verify a cryptographically si
 To install this package, run:
 
 ```bash
-go get github.com/0xPARC/parcnet/go/pod@v0.1.0-alpha.1
+go get github.com/0xPARC/parcnet/go/pod@v0.1.0-beta
 ```
 
 Then import it in your Go code:
