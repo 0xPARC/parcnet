@@ -3,7 +3,6 @@ package pod
 import (
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 
@@ -70,43 +69,58 @@ func (p *PodValue) UnmarshalJSON(data []byte) error {
 
 	// Check for TypedJSON
 	case map[string]interface{}:
-		if len(val) != 1 {
-			return errors.New("invalid PodValue: object must have exactly one key (e.g. {\"string\":\"...\"})")
+        var jsonType string
+        var jsonValue interface{}
+
+		if len(val) == 1 {
+            for k, v := range val {
+                jsonType = k
+                jsonValue = v
+            }
+		} else {
+            var typeIsString bool
+            var valueExists bool
+
+            rawJsonType, typeExists := val["type"]
+            jsonValue, valueExists = val["value"]
+            jsonType, typeIsString = rawJsonType.(string)
+            if (!typeExists || !valueExists || !typeIsString) {
+				return fmt.Errorf("invalid PodValue: %v", val)
+			}
 		}
 
-		for k, v := range val {
-			switch k {
-			case "string":
-				p.ValueType = PodStringValue
-				str, ok := v.(string)
-				if !ok {
-					return fmt.Errorf("invalid 'string' encoding (must be a JSON string), got %T", v)
+		switch jsonType {
+		case "string":
+			p.ValueType = PodStringValue
+			str, ok := jsonValue.(string)
+			if !ok {
+					return fmt.Errorf("invalid 'string' encoding (must be a JSON string), got %T", jsonValue)
 				}
 				p.StringVal = str
 				return nil
 
 			case "boolean":
 				p.ValueType = PodBooleanValue
-				b, ok := v.(bool)
+				b, ok := jsonValue.(bool)
 				if !ok {
-					return fmt.Errorf("invalid 'boolean' encoding, got %T", v)
+					return fmt.Errorf("invalid 'boolean' encoding, got %T", jsonValue)
 				}
 				p.BoolVal = b
 				return nil
 
 			case "int":
 				p.ValueType = PodIntValue
-				return p.parseBigIntFromJSON(v)
+				return p.parseBigIntFromJSON(jsonValue)
 
 			case "cryptographic":
 				p.ValueType = PodCryptographicValue
-				return p.parseBigIntFromJSON(v)
+				return p.parseBigIntFromJSON(jsonValue)
 
 			case "bytes":
 				p.ValueType = PodBytesValue
-				s, ok := v.(string)
+				s, ok := jsonValue.(string)
 				if !ok {
-					return fmt.Errorf("invalid 'bytes' encoding, got %T", v)
+					return fmt.Errorf("invalid 'bytes' encoding, got %T", jsonValue)
 				}
 				decoded, err := base64.StdEncoding.DecodeString(s)
 				if err != nil {
@@ -117,18 +131,18 @@ func (p *PodValue) UnmarshalJSON(data []byte) error {
 
 			case "eddsa_pubkey":
 				p.ValueType = PodEdDSAPubkeyValue
-				s, ok := v.(string)
+				s, ok := jsonValue.(string)
 				if !ok {
-					return fmt.Errorf("invalid 'eddsa_pubkey' encoding, got %T", v)
+					return fmt.Errorf("invalid 'eddsa_pubkey' encoding, got %T", jsonValue)
 				}
 				p.StringVal = s
 				return nil
 
 			case "date":
 				p.ValueType = PodDateValue
-				s, ok := v.(string)
+				s, ok := jsonValue.(string)
 				if !ok {
-					return fmt.Errorf("invalid 'date' encoding, got %T", v)
+					return fmt.Errorf("invalid 'date' encoding, got %T", jsonValue)
 				}
 				if !strings.HasSuffix(s, "Z") {
 					return fmt.Errorf("date must be encoded in UTC: %q", s)
@@ -141,22 +155,20 @@ func (p *PodValue) UnmarshalJSON(data []byte) error {
 				return nil
 
 			case "null":
-				if v != nil {
+				if jsonValue != nil {
 					return fmt.Errorf("invalid 'null' encoding, must be {\"null\":null}")
 				}
 				p.ValueType = PodNullValue
 				return nil
 
 			default:
-				return fmt.Errorf("unknown key %q in object PodValue", k)
+				return fmt.Errorf("unknown key %q in object PodValue", jsonType)
 			}
-		}
 
 	default:
-		return fmt.Errorf("invalid PodValue: expected scalar or 1-key object, got %T", val)
+		return fmt.Errorf("invalid PodValue, got %T", val)
 	}
 
-	return fmt.Errorf("unknown PodValue kind %q", p.ValueType)
 }
 
 func (p *PodValue) parseBigIntFromJSON(v interface{}) error {
@@ -189,11 +201,14 @@ func (p PodValue) Hash() (*big.Int, error) {
 	case PodIntValue:
 		return poseidon.Hash([]*big.Int{fieldSafeInt64(p.BigVal.Int64())})
 	case PodDateValue:
-		return poseidon.Hash([]*big.Int{big.NewInt(p.TimeVal.Unix())})
+		return poseidon.Hash([]*big.Int{big.NewInt(p.TimeVal.UnixMilli())})
 	case PodBytesValue:
 		return hashBytes(p.BytesVal), nil
 	case PodCryptographicValue:
 		return poseidon.Hash([]*big.Int{p.BigVal})
+	// case PodEdDSAPubkeyValue:
+		// TODO: remove this
+		// return poseidon.Hash([]*big.Int{big.NewInt(0)})
 	case PodNullValue:
 		nullHash, ok := new(big.Int).SetString(
 			nullHashHex,
@@ -202,7 +217,7 @@ func (p PodValue) Hash() (*big.Int, error) {
 		if !ok {
 			return nil, fmt.Errorf("failed to create nullHash")
 		}
-		return poseidon.Hash([]*big.Int{nullHash})
+		return nullHash, nil
 	}
 	return nil, fmt.Errorf("unknown PodValue kind %q", p.ValueType)
 }
