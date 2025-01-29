@@ -1,6 +1,39 @@
 use crate::pod::Pod;
+use crate::pod::serialisation::{compressed_pt_de, compressed_pt_ser, compressed_sig_de, compressed_sig_ser};
+use babyjubjub_ark::{Point, Signature};
 use serde::{Deserialize, Serialize};
 use url::Url;
+use uuid::Uuid;
+
+use super::PodEntries;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PodPcdClaim {
+    entries: PodEntries,
+    #[serde(
+        serialize_with = "compressed_pt_ser",
+        deserialize_with = "compressed_pt_de"
+    )]
+    signer_public_key: Point,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PodPcdProof {
+    #[serde(
+        serialize_with = "compressed_sig_ser",
+        deserialize_with = "compressed_sig_de"
+    )]
+    signature: Signature,
+}
+
+// PODPCD is the representation of a POD in PCD clients like Zupass.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PodPcd {
+    id: Uuid,
+    claim: PodPcdClaim,
+    proof: PodPcdProof,
+}
 
 #[derive(Serialize, Deserialize)]
 struct ZupassPcdWrapper {
@@ -18,7 +51,17 @@ struct ZupassRequest {
     pcd: ZupassPcdWrapper,
 }
 
-impl Pod {
+impl PodPcd {
+    pub fn from_pod(pod: Pod) -> Result<Self, Box<dyn std::error::Error>> {
+        let id = Uuid::new_v4();
+        let claim = PodPcdClaim {
+            entries: pod.entries,
+            signer_public_key: pod.signer_public_key,
+        };
+        let proof = PodPcdProof { signature: pod.signature };
+        Ok(PodPcd { id, claim, proof })
+    }
+
     pub fn make_zupass_url(&self, return_url: &str) -> Result<Url, Box<dyn std::error::Error>> {
         let pcd_json = serde_json::to_string(self)?;
 
@@ -59,7 +102,9 @@ mod tests {
         )
         .unwrap();
 
-        let url_str = pod
+        let pod_pcd = PodPcd::from_pod(pod).unwrap();
+
+        let url_str = pod_pcd
             .make_zupass_url_default_return_url()
             .unwrap()
             .to_string();
@@ -81,7 +126,9 @@ mod tests {
         )
         .unwrap();
 
-        let url_str = pod
+        let pod_pcd = PodPcd::from_pod(pod).unwrap();
+
+        let url_str = pod_pcd
             .make_zupass_url_default_return_url()
             .unwrap()
             .to_string();
@@ -101,13 +148,13 @@ mod tests {
         assert_eq!(request.pcd.pcd_type, "pod-pcd");
 
         // Parse the PCD (which should be our POD)
-        let parsed_pod: Pod = serde_json::from_str(&request.pcd.pcd).unwrap();
+        let parsed_pod_pcd: PodPcd = serde_json::from_str(&request.pcd.pcd).unwrap();
 
         // Verify the POD contents
         assert_eq!(
-            parsed_pod.get("itemSet"),
+            parsed_pod_pcd.claim.entries.get("itemSet"),
             Some(&PodValue::String("celestial".to_string()))
         );
-        assert_eq!(parsed_pod.get("attack"), Some(&PodValue::Int(7)));
+        assert_eq!(parsed_pod_pcd.claim.entries.get("attack"), Some(&PodValue::Int(7)));
     }
 }
