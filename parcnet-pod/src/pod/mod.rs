@@ -243,6 +243,7 @@ mod tests {
         let serialised_pod = serde_json::to_string(&pod)?;
         let deserialised_pod: Pod = serde_json::from_str(&serialised_pod)?;
         assert!(deserialised_pod == pod);
+        println!("{}", serialised_pod);
         Ok(())
     }
 
