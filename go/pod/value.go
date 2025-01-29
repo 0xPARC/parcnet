@@ -69,22 +69,22 @@ func (p *PodValue) UnmarshalJSON(data []byte) error {
 
 	// Check for TypedJSON
 	case map[string]interface{}:
-        var jsonType string
-        var jsonValue interface{}
+		var jsonType string
+		var jsonValue interface{}
 
 		if len(val) == 1 {
-            for k, v := range val {
-                jsonType = k
-                jsonValue = v
-            }
+			for k, v := range val {
+				jsonType = k
+				jsonValue = v
+			}
 		} else {
-            var typeIsString bool
-            var valueExists bool
+			var typeIsString bool
+			var valueExists bool
 
-            rawJsonType, typeExists := val["type"]
-            jsonValue, valueExists = val["value"]
-            jsonType, typeIsString = rawJsonType.(string)
-            if (!typeExists || !valueExists || !typeIsString) {
+			rawJsonType, typeExists := val["type"]
+			jsonValue, valueExists = val["value"]
+			jsonType, typeIsString = rawJsonType.(string)
+			if !typeExists || !valueExists || !typeIsString {
 				return fmt.Errorf("invalid PodValue: %v", val)
 			}
 		}
@@ -94,76 +94,76 @@ func (p *PodValue) UnmarshalJSON(data []byte) error {
 			p.ValueType = PodStringValue
 			str, ok := jsonValue.(string)
 			if !ok {
-					return fmt.Errorf("invalid 'string' encoding (must be a JSON string), got %T", jsonValue)
-				}
-				p.StringVal = str
-				return nil
-
-			case "boolean":
-				p.ValueType = PodBooleanValue
-				b, ok := jsonValue.(bool)
-				if !ok {
-					return fmt.Errorf("invalid 'boolean' encoding, got %T", jsonValue)
-				}
-				p.BoolVal = b
-				return nil
-
-			case "int":
-				p.ValueType = PodIntValue
-				return p.parseBigIntFromJSON(jsonValue)
-
-			case "cryptographic":
-				p.ValueType = PodCryptographicValue
-				return p.parseBigIntFromJSON(jsonValue)
-
-			case "bytes":
-				p.ValueType = PodBytesValue
-				s, ok := jsonValue.(string)
-				if !ok {
-					return fmt.Errorf("invalid 'bytes' encoding, got %T", jsonValue)
-				}
-				decoded, err := base64.StdEncoding.DecodeString(s)
-				if err != nil {
-					return fmt.Errorf("invalid base64 for 'bytes': %w", err)
-				}
-				p.BytesVal = decoded
-				return nil
-
-			case "eddsa_pubkey":
-				p.ValueType = PodEdDSAPubkeyValue
-				s, ok := jsonValue.(string)
-				if !ok {
-					return fmt.Errorf("invalid 'eddsa_pubkey' encoding, got %T", jsonValue)
-				}
-				p.StringVal = s
-				return nil
-
-			case "date":
-				p.ValueType = PodDateValue
-				s, ok := jsonValue.(string)
-				if !ok {
-					return fmt.Errorf("invalid 'date' encoding, got %T", jsonValue)
-				}
-				if !strings.HasSuffix(s, "Z") {
-					return fmt.Errorf("date must be encoded in UTC: %q", s)
-				}
-				t, err := time.Parse(time.RFC3339, s)
-				if err != nil {
-					return fmt.Errorf("invalid date: %w", err)
-				}
-				p.TimeVal = t
-				return nil
-
-			case "null":
-				if jsonValue != nil {
-					return fmt.Errorf("invalid 'null' encoding, must be {\"null\":null}")
-				}
-				p.ValueType = PodNullValue
-				return nil
-
-			default:
-				return fmt.Errorf("unknown key %q in object PodValue", jsonType)
+				return fmt.Errorf("invalid 'string' encoding (must be a JSON string), got %T", jsonValue)
 			}
+			p.StringVal = str
+			return nil
+
+		case "boolean":
+			p.ValueType = PodBooleanValue
+			b, ok := jsonValue.(bool)
+			if !ok {
+				return fmt.Errorf("invalid 'boolean' encoding, got %T", jsonValue)
+			}
+			p.BoolVal = b
+			return nil
+
+		case "int":
+			p.ValueType = PodIntValue
+			return p.parseBigIntFromJSON(jsonValue)
+
+		case "cryptographic":
+			p.ValueType = PodCryptographicValue
+			return p.parseBigIntFromJSON(jsonValue)
+
+		case "bytes":
+			p.ValueType = PodBytesValue
+			s, ok := jsonValue.(string)
+			if !ok {
+				return fmt.Errorf("invalid 'bytes' encoding, got %T", jsonValue)
+			}
+			decoded, err := base64.StdEncoding.DecodeString(s)
+			if err != nil {
+				return fmt.Errorf("invalid base64 for 'bytes': %w", err)
+			}
+			p.BytesVal = decoded
+			return nil
+
+		case "eddsa_pubkey":
+			p.ValueType = PodEdDSAPubkeyValue
+			s, ok := jsonValue.(string)
+			if !ok {
+				return fmt.Errorf("invalid 'eddsa_pubkey' encoding, got %T", jsonValue)
+			}
+			p.StringVal = s
+			return nil
+
+		case "date":
+			p.ValueType = PodDateValue
+			s, ok := jsonValue.(string)
+			if !ok {
+				return fmt.Errorf("invalid 'date' encoding, got %T", jsonValue)
+			}
+			if !strings.HasSuffix(s, "Z") {
+				return fmt.Errorf("date must be encoded in UTC: %q", s)
+			}
+			t, err := time.Parse(time.RFC3339, s)
+			if err != nil {
+				return fmt.Errorf("invalid date: %w", err)
+			}
+			p.TimeVal = t
+			return nil
+
+		case "null":
+			if jsonValue != nil {
+				return fmt.Errorf("invalid 'null' encoding, must be {\"null\":null}")
+			}
+			p.ValueType = PodNullValue
+			return nil
+
+		default:
+			return fmt.Errorf("unknown key %q in object PodValue", jsonType)
+		}
 
 	default:
 		return fmt.Errorf("invalid PodValue, got %T", val)
@@ -207,8 +207,8 @@ func (p PodValue) Hash() (*big.Int, error) {
 	case PodCryptographicValue:
 		return poseidon.Hash([]*big.Int{p.BigVal})
 	// case PodEdDSAPubkeyValue:
-		// TODO: remove this
-		// return poseidon.Hash([]*big.Int{big.NewInt(0)})
+	// TODO: remove this
+	// return poseidon.Hash([]*big.Int{big.NewInt(0)})
 	case PodNullValue:
 		nullHash, ok := new(big.Int).SetString(
 			nullHashHex,
@@ -252,7 +252,7 @@ func (p PodValue) MarshalJSON() ([]byte, error) {
 		return json.Marshal(p.StringVal)
 
 	case PodBytesValue:
-		enc := base64.StdEncoding.EncodeToString(p.BytesVal) // TODO: Change to unpadded Base64 encoding
+		enc := base64.StdEncoding.EncodeToString(p.BytesVal)
 		return json.Marshal(map[string]string{"bytes": enc})
 
 	case PodEdDSAPubkeyValue:

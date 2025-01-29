@@ -28,10 +28,6 @@ func (p *Pod) Verify() (bool, error) {
 		publicKeyHex = hex.EncodeToString(publicKeyBytes)
 	}
 
-	// TODO: remove this
-	// fmt.Println("signatureHex", signatureHex)
-	// fmt.Println("publicKeyHex", publicKeyHex)
-
 	contentID, err := computeContentID(p.Entries)
 	if err != nil {
 		return false, fmt.Errorf("failed computing content ID: %w", err)
