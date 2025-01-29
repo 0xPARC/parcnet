@@ -3,6 +3,9 @@ package pod
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
+
+	"github.com/iden3/go-iden3-crypto/v2/poseidon"
 )
 
 // Currently, only supports string, boolean, and int.
@@ -93,4 +96,19 @@ func (p PodValue) MarshalJSON() ([]byte, error) {
 		return json.Marshal(map[string]interface{}{"int": rep})
 	}
 	return nil, fmt.Errorf("cannot marshal unknown PodValue kind %q", p.kind)
+}
+
+func (p PodValue) Hash() (*big.Int, error) {
+	switch p.kind {
+	case "string":
+		return hashString(p.strVal), nil
+	case "boolean":
+		if p.boolVal {
+			return poseidon.Hash([]*big.Int{big.NewInt(1)})
+		}
+		return poseidon.Hash([]*big.Int{big.NewInt(0)})
+	case "int":
+		return poseidon.Hash([]*big.Int{fieldSafeInt64(p.intVal)})
+	}
+	return nil, fmt.Errorf("unknown PodValue kind %q", p.kind)
 }
