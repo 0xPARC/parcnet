@@ -3,9 +3,6 @@ package pod
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
-
-	"github.com/iden3/go-iden3-crypto/v2/poseidon"
 )
 
 // Currently, only supports string, boolean, and int.
@@ -14,6 +11,41 @@ type PodValue struct {
 	strVal  string
 	boolVal bool
 	intVal  int64
+}
+
+func rawToPodValueInt(val int64) interface{} {
+	if val >= -(1<<52) && val < (1<<52) {
+		return val
+	} else if val >= (1 << 52) {
+		return fmt.Sprintf("0x%x", val)
+	} else {
+		return fmt.Sprintf("%d", val)
+	}
+}
+
+func podValueToRawInt(data interface{}) (int64, error) {
+	switch v := data.(type) {
+	case float64:
+		return int64(v), nil
+	case string:
+		if len(v) > 2 && v[:2] == "0x" {
+			var val int64
+			_, err := fmt.Sscanf(v, "0x%x", &val)
+			if err != nil {
+				return 0, fmt.Errorf("invalid hex integer: %v", err)
+			}
+			return val, nil
+		} else {
+			var val int64
+			_, err := fmt.Sscanf(v, "%d", &val)
+			if err != nil {
+				return 0, fmt.Errorf("invalid decimal integer: %v", err)
+			}
+			return val, nil
+		}
+	default:
+		return 0, fmt.Errorf("unexpected type %T for integer representation", data)
+	}
 }
 
 func (p *PodValue) UnmarshalJSON(data []byte) error {
@@ -34,7 +66,15 @@ func (p *PodValue) UnmarshalJSON(data []byte) error {
 			return json.Unmarshal(v, &p.boolVal)
 		case "int":
 			p.kind = "int"
-			return json.Unmarshal(v, &p.intVal)
+			var temp interface{}
+			if err := json.Unmarshal(v, &temp); err != nil {
+				return err
+			}
+			parsedVal, err := podValueToRawInt(temp)
+			if err != nil {
+				return err
+			}
+			p.intVal = parsedVal
 		default:
 			return fmt.Errorf("unknown key %q in PodValue", k)
 		}
@@ -49,22 +89,8 @@ func (p PodValue) MarshalJSON() ([]byte, error) {
 	case "boolean":
 		return json.Marshal(map[string]bool{"boolean": p.boolVal})
 	case "int":
-		return json.Marshal(map[string]int64{"int": p.intVal})
+		rep := rawToPodValueInt(p.intVal)
+		return json.Marshal(map[string]interface{}{"int": rep})
 	}
 	return nil, fmt.Errorf("cannot marshal unknown PodValue kind %q", p.kind)
-}
-
-func (p PodValue) Hash() (*big.Int, error) {
-	switch p.kind {
-	case "string":
-		return hashString(p.strVal), nil
-	case "boolean":
-		if p.boolVal {
-			return poseidon.Hash([]*big.Int{big.NewInt(1)})
-		}
-		return poseidon.Hash([]*big.Int{big.NewInt(0)})
-	case "int":
-		return poseidon.Hash([]*big.Int{fieldSafeInt64(p.intVal)})
-	}
-	return nil, fmt.Errorf("unknown PodValue kind %q", p.kind)
 }
