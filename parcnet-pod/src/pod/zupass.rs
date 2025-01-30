@@ -35,6 +35,30 @@ pub struct PodPcd {
     proof: PodPcdProof,
 }
 
+impl Into<PodPcd> for Pod {
+    fn into(self) -> PodPcd {
+        let id = Uuid::new_v4();
+        let claim = PodPcdClaim {
+            entries: self.entries,
+            signer_public_key: self.signer_public_key,
+        };
+        let proof = PodPcdProof {
+            signature: self.signature,
+        };
+        PodPcd { id, claim, proof }
+    }
+}
+
+impl Into<Pod> for PodPcd {
+    fn into(self) -> Pod {
+        Pod {
+            entries: self.claim.entries,
+            signer_public_key: self.claim.signer_public_key,
+            signature: self.proof.signature,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 struct ZupassPcdWrapper {
     #[serde(rename = "type")]
