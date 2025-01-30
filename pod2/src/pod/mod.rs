@@ -361,6 +361,11 @@ impl GPGInput {
                         (pod.clone(), old_origin_name),
                         (pod.clone(), named_pods.get(&pod).unwrap().content_id()),
                     )
+                } else if old_origin_id == ORIGIN_ID_NONE {
+                    (
+                        (pod.clone(), old_origin_name.clone()),
+                        (ORIGIN_NAME_NONE.into(), old_origin_id),
+                    )
                 } else {
                     (
                         (pod.clone(), old_origin_name.clone()),
