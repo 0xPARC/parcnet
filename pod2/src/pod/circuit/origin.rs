@@ -11,7 +11,10 @@ use plonky2::{
 };
 
 use super::util::{matrix_ref, target_slice_eq};
-use crate::pod::{gadget::GadgetID, origin::{Origin, ORIGIN_ID_SELF}};
+use crate::pod::{
+    gadget::GadgetID,
+    origin::{Origin, ORIGIN_ID_SELF},
+};
 use crate::{D, F};
 
 #[derive(Copy, Clone, Debug, PartialEq)]

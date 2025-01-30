@@ -52,16 +52,17 @@ impl SchnorrPODTarget {
                 .as_ref(),
             self.pk_index,
         )?;
-        let origin_id_target = array::try_from_fn(|i|
+        let origin_id_target = array::try_from_fn(|i| {
             vector_ref(
-            builder,
-            self.payload
-                .iter()
-                .map(|s| s.origin1.origin_id[i])
-                .collect::<Vec<_>>()
-                .as_ref(),
-            self.pk_index,
-        ))?;
+                builder,
+                self.payload
+                    .iter()
+                    .map(|s| s.origin1.origin_id[i])
+                    .collect::<Vec<_>>()
+                    .as_ref(),
+                self.pk_index,
+            )
+        })?;
         let value_target = vector_ref(
             builder,
             self.payload
@@ -76,7 +77,8 @@ impl SchnorrPODTarget {
         builder.connect(key_target, expected_pk_entry_key);
 
         // Check origin ID, which should be 1 for self.
-        let self_origin_id_target = OriginTarget::auto(builder, crate::pod::gadget::GadgetID::SCHNORR16).origin_id;
+        let self_origin_id_target =
+            OriginTarget::auto(builder, crate::pod::gadget::GadgetID::SCHNORR16).origin_id;
         builder.connect_array(self_origin_id_target, origin_id_target);
 
         // This suggests we are OK.

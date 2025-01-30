@@ -6,8 +6,18 @@ use super::{gadget::GadgetID, ContentID};
 
 pub type OriginID = ContentID;
 
-pub const ORIGIN_ID_NONE: OriginID = [GoldilocksField::ZERO,GoldilocksField::ZERO, GoldilocksField::ZERO, GoldilocksField::ZERO];
-pub const ORIGIN_ID_SELF: OriginID = [GoldilocksField::ONE,GoldilocksField::ZERO, GoldilocksField::ZERO, GoldilocksField::ZERO];
+pub const ORIGIN_ID_NONE: OriginID = [
+    GoldilocksField::ZERO,
+    GoldilocksField::ZERO,
+    GoldilocksField::ZERO,
+    GoldilocksField::ZERO,
+];
+pub const ORIGIN_ID_SELF: OriginID = [
+    GoldilocksField::ONE,
+    GoldilocksField::ZERO,
+    GoldilocksField::ZERO,
+    GoldilocksField::ZERO,
+];
 
 pub const ORIGIN_NAME_NONE: &'static str = "_NONE";
 pub const ORIGIN_NAME_SELF: &'static str = "_SELF ";
@@ -50,9 +60,11 @@ impl Origin {
     }
     /// Field representation as a vector of length 2.
     pub fn to_fields(&self) -> Vec<GoldilocksField> {
-        [self.origin_id.to_vec(),vec![
-            GoldilocksField::from_canonical_u64(self.gadget_id as u64),
-        ]].concat()
+        [
+            self.origin_id.to_vec(),
+            vec![GoldilocksField::from_canonical_u64(self.gadget_id as u64)],
+        ]
+        .concat()
     }
     // Remap origin according to name-based rule.
     pub fn remap(&self, f: &dyn Fn(&str) -> Result<(String, OriginID)>) -> Result<Self> {

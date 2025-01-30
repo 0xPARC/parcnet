@@ -183,8 +183,11 @@ impl<const VL: usize> OperationTarget<VL> {
         };
         // TODO: Proper origin check
         let statements_allow_transitivity = {
-            let origins_match = target_slice_eq(builder, &statement1_target.origin2.origin_id,
-                &statement2_target.origin1.origin_id);
+            let origins_match = target_slice_eq(
+                builder,
+                &statement1_target.origin2.origin_id,
+                &statement2_target.origin1.origin_id,
+            );
             let keys_match = builder.is_equal(statement1_target.key2, statement2_target.key1);
             builder.and(origins_match, keys_match)
         };
@@ -221,7 +224,8 @@ impl<const VL: usize> OperationTarget<VL> {
                     statement2_target.has_code(builder, Statement::EQUAL),
                     // Anchored key equality. TODO.
                     builder.is_equal(statement1_target.key1, statement2_target.key1),
-                    target_slice_eq(builder,
+                    target_slice_eq(
+                        builder,
                         &statement1_target.origin1.origin_id,
                         &statement2_target.origin1.origin_id,
                     ),

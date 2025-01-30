@@ -91,13 +91,13 @@ pub fn statement_matrix_ref(
     i: Target,
     j: Target,
 ) -> Result<StatementTarget> {
-    // Separate the statement matrix into a vector (of length 11) of
+    // Separate the statement matrix into a vector (of length 20) of
     // matrices of targets.
     let transposed_target_matrices = statement_matrix
         .iter()
         .map(|s_vec| s_vec.iter().map(|s| s.to_targets()).collect())
         .collect::<Vec<Vec<Vec<Target>>>>();
-    let target_matrices: Vec<Vec<Vec<Target>>> = (0..11)
+    let target_matrices: Vec<Vec<Vec<Target>>> = (0..20)
         .map(|i| {
             transposed_target_matrices
                 .iter()
@@ -155,13 +155,13 @@ pub fn and(builder: &mut CircuitBuilder<F, D>, v: &[BoolTarget]) -> BoolTarget {
         .fold(builder._true(), |acc, ind| builder.and(acc, *ind))
 }
 
-pub fn target_slice_eq(builder: &mut CircuitBuilder<F, D>, v: &[Target], w: &[Target]) -> BoolTarget {
-    zip(v,
-        w
-            ).fold(builder._true(),
-                   |b,(x,y)| {
-                       let eq_check = builder.is_equal(*x,*y);
-                       builder.and(b, eq_check)
-                       
-                   })
+pub fn target_slice_eq(
+    builder: &mut CircuitBuilder<F, D>,
+    v: &[Target],
+    w: &[Target],
+) -> BoolTarget {
+    zip(v, w).fold(builder._true(), |b, (x, y)| {
+        let eq_check = builder.is_equal(*x, *y);
+        builder.and(b, eq_check)
+    })
 }

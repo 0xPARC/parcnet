@@ -165,7 +165,6 @@ where
         prover_params: &mut ProverParams<L, M, N, NS, VL>,
         input_pods: &[(String, POD)],
         op_list: OpList,
-        origin_renaming_map: HashMap<(String, String), String>,
     ) -> Result<POD> {
         let start_execute = Instant::now();
         // Check that the input data is valid, i.e. that we have at most M
@@ -221,17 +220,17 @@ where
 
         // TODO: Constructor
         let dummy_payload = PODPayload {
-                statements_list: (0..NS)
-                    .map(|i| (format!("Dummy statement {}", i), Statement::None))
-                    .collect(),
-                statements_map: std::collections::HashMap::new(),
+            statements_list: (0..NS)
+                .map(|i| (format!("Dummy statement {}", i), Statement::None))
+                .collect(),
+            statements_map: std::collections::HashMap::new(),
         };
         let content_id = dummy_payload.hash_payload().elements;
         let dummy_plonky_pod = POD {
             payload: dummy_payload,
             proof: crate::pod::PODProof::Plonky(prover_params.dummy_proof.clone()),
             proof_type: GadgetID::PLONKY,
-            content_id
+            content_id,
         };
 
         // Note: One statement is reserved for the signer's public key.
@@ -286,7 +285,7 @@ where
         let gpg_input = {
             let sorted_gpg_input = GPGInput::new(
                 padded_pod_list.clone().into_iter().collect(),
-                origin_renaming_map,
+                HashMap::new(),
             );
             GPGInput {
                 // TODO NOTE: this feels redundant usage of `GPGInput`, first we call
@@ -314,7 +313,7 @@ where
         // TODO add prepare also the L POD1introducer PODs
         let pod1_proofs: [PlonkyProof; L] =
             array::from_fn(|k| prover_params.pod1_dummy_proof.clone());
-        let pod1_public_inputs: [Vec<F>; L] = array::from_fn(|k| vec![]);
+        let pod1_public_inputs: [Vec<F>; L] = array::from_fn(|_| vec![]);
 
         let inner_circuit_input: [POD; M] = array::from_fn(|i| schnorr_pods_padded[i].1.clone());
 
@@ -375,8 +374,8 @@ where
         // );
 
         let payload = PODPayload {
-                statements_list: output_statements.clone(),
-                statements_map: output_statements.into_iter().collect(),
+            statements_list: output_statements.clone(),
+            statements_map: output_statements.into_iter().collect(),
         };
         let content_id = payload.hash_payload().elements;
 
@@ -384,7 +383,7 @@ where
             payload,
             proof: PODProof::Plonky(plonky_proof.proof),
             proof_type: GadgetID::PLONKY,
-            content_id
+            content_id,
         })
     }
 
@@ -551,7 +550,6 @@ mod tests {
             &mut prover_params,
             &pods_list,
             op_list,
-            HashMap::new(),
         )?;
         println!("PlonkyButNotPlonkyGadget::execute(): {:?}", start.elapsed());
 
@@ -623,7 +621,6 @@ mod tests {
             &mut prover_params,
             &pods_list,
             op_list,
-            HashMap::new(),
         )?;
 
         Ok(())

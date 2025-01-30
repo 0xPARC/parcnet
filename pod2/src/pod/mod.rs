@@ -60,7 +60,7 @@ pub struct POD {
     pub proof: PODProof,
     pub proof_type: GadgetID,
     // Content ID cached here.
-    content_id: ContentID
+    content_id: ContentID,
 }
 
 pub type ContentID = [GoldilocksField; 4];
@@ -69,7 +69,7 @@ impl POD {
     pub fn content_id(&self) -> ContentID {
         self.content_id
     }
-    
+
     /// L: number of POD1-Introducer PODs
     /// M: number of PODs
     /// N: number of Plonky PODs
@@ -189,7 +189,7 @@ impl POD {
             payload,
             proof: PODProof::Schnorr(proof),
             proof_type: GadgetID::SCHNORR16,
-            content_id: payload_hash.elements
+            content_id: payload_hash.elements,
         })
     }
 
@@ -234,6 +234,7 @@ impl POD {
                 new_statement,
             );
         }
+
         let out_statements = statements.get("_SELF").unwrap();
         let out_payload = PODPayload::new(out_statements);
         // println!("{:?}", out_payload);
@@ -255,7 +256,7 @@ impl POD {
             payload: out_payload,
             proof: PODProof::Oracle(proof),
             proof_type: GadgetID::ORACLE,
-            content_id: payload_hash.elements
+            content_id: payload_hash.elements,
         })
     }
     // the prover_params is passed as parameter, because compunting it depends on first computing
@@ -280,7 +281,6 @@ impl POD {
             prover_params,
             &input.pods_list,
             crate::pod::operation::OpList(cmds.to_vec()),
-            input.origin_renaming_map.clone(),
         )
     }
     fn pad_statements<const SIZE: usize>(
@@ -326,31 +326,56 @@ impl GPGInput {
         // Sort PODs in alphabetical order of name.
         let mut sorted_named_pods = named_pods.clone().into_iter().collect::<Vec<_>>();
         sorted_named_pods.sort_by(|a, b| a.0.cmp(&b.0));
-        
+
         // Compile origin renaming map by mapping "_SELF" to the name
         // of the containig POD and adopting the supplied remapping
         // (if any) or else mapping origin O in POD P to P ++ ":" ++
         // O.
-        let pod_origin_triples = named_pods.iter().flat_map(|(pod_name, pod)| pod.payload.statements_list.iter().flat_map(
-            |(_,statement)| statement.anchored_keys().iter().map(
-                |anchkey| (pod_name.clone(),anchkey.0.origin_name.clone(), anchkey.0.origin_id)
-                ).collect::<Vec<_>>()
-        )).collect::<HashSet<_>>();
+        let pod_origin_triples = named_pods
+            .iter()
+            .flat_map(|(pod_name, pod)| {
+                pod.payload
+                    .statements_list
+                    .iter()
+                    .flat_map(|(_, statement)| {
+                        statement
+                            .anchored_keys()
+                            .iter()
+                            .map(|anchkey| {
+                                (
+                                    pod_name.clone(),
+                                    anchkey.0.origin_name.clone(),
+                                    anchkey.0.origin_id,
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+            })
+            .collect::<HashSet<_>>();
 
-        let complete_origin_renaming_map = pod_origin_triples.into_iter().map(|(pod, old_origin_name, old_origin_id)|
-                                                            if old_origin_name == ORIGIN_NAME_SELF {
-                                                                ((pod.clone(), old_origin_name), (pod.clone(),
-                                                                                             named_pods.get(&pod).unwrap().content_id()
-                                                                ))
-                                                            } else {
-                                                                ((pod.clone(), old_origin_name.clone()),
-                                                                 (origin_renaming_map.get(&(pod.clone(), old_origin_name.clone())).map(|s| s.to_string()).unwrap_or(format!("{}:{}", pod, old_origin_name)), old_origin_id
-                                                                  
-                                                                 )
-                                                                 )
-                                                            }
-            ).collect::<HashMap<_,_>>();
-        
+        let complete_origin_renaming_map = pod_origin_triples
+            .into_iter()
+            .map(|(pod, old_origin_name, old_origin_id)| {
+                if old_origin_id == ORIGIN_ID_SELF {
+                    (
+                        (pod.clone(), old_origin_name),
+                        (pod.clone(), named_pods.get(&pod).unwrap().content_id()),
+                    )
+                } else {
+                    (
+                        (pod.clone(), old_origin_name.clone()),
+                        (
+                            origin_renaming_map
+                                .get(&(pod.clone(), old_origin_name.clone()))
+                                .map(|s| s.to_string())
+                                .unwrap_or(format!("{}:{}", pod, old_origin_name)),
+                            old_origin_id,
+                        ),
+                    )
+                }
+            })
+            .collect::<HashMap<_, _>>();
+
         Self {
             pods_list: sorted_named_pods,
             origin_renaming_map: complete_origin_renaming_map,
@@ -360,7 +385,8 @@ impl GPGInput {
     /// returns a map from input POD name to (map from statement name to statement)
     /// the inner statements have their old origin names and IDs are replaced with
     /// the new origin names as specified by inputs.origin_renaming_map
-    /// and with new origin IDs which correspond to the lexicographic order of the new origin names
+    /// and with new origin IDs in the form of content IDs for statements with origin
+    /// "_SELF".
     fn remap_origin_ids_by_name(&self) -> Result<HashMap<String, HashMap<String, Statement>>> {
         // Iterate through all statements, leaving parent names intact
         // and replacing statement names with their new names
@@ -379,10 +405,7 @@ impl GPGInput {
                             pod_name,
                             origin_name
                         ))?;
-                    Ok((
-                        new_origin_name.clone(),
-                        *new_origin_id
-                    ))
+                    Ok((new_origin_name.clone(), *new_origin_id))
                 });
                 Ok((
                     pod_name.to_string(),

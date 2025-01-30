@@ -1,16 +1,20 @@
 use anyhow::Result;
 use plonky2::{
-    field::goldilocks_field::GoldilocksField, hash::hash_types::{HashOut, HashOutTarget}, iop::{
+    field::goldilocks_field::GoldilocksField,
+    hash::hash_types::{HashOut, HashOutTarget},
+    iop::{
         target::Target,
         witness::{PartialWitness, WitnessWrite},
-    }, plonk::circuit_builder::CircuitBuilder
+    },
+    plonk::circuit_builder::CircuitBuilder,
 };
 use std::array;
 use std::iter::zip;
 
 use crate::{
     pod::{
-        circuit::operation::OpListTarget, gadget::GadgetID, operation::OpList, payload::StatementList, ContentID, GPGInput
+        circuit::operation::OpListTarget, gadget::GadgetID, operation::OpList,
+        payload::StatementList, ContentID, GPGInput,
     },
     recursion::OpsExecutorTrait,
     D, F,
@@ -57,7 +61,8 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
     );
 
     fn add_targets(builder: &mut CircuitBuilder<F, D>) -> Result<Self::Targets> {
-        let content_id_list_target: [HashOutTarget; NP] = array::from_fn(|_| builder.add_virtual_hash());
+        let content_id_list_target: [HashOutTarget; NP] =
+            array::from_fn(|_| builder.add_virtual_hash());
         let statement_list_vec_target: [[StatementTarget; NS]; NP] = array::from_fn(|_| {
             array::from_fn::<StatementTarget, NS, _>(|_| StatementTarget::new_virtual(builder))
         });
@@ -65,8 +70,6 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
             array::from_fn(|_| builder.add_virtual_targets(NS + 2));
 
         let op_list_target = OpListTarget::new_virtual(builder);
-
-        // TODO: Check that origin ID map has appropriate properties.
 
         // To apply ops, remap statements' origin IDs.
         let remapped_statement_list_vec_target = statement_list_vec_target
@@ -82,7 +85,6 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
                     .collect::<Result<Vec<_>>>()
             })
             .collect::<Result<Vec<_>>>()?;
-
         // Apply ops.
         // Create output statement list target.
         let output_statement_list_target: [StatementTarget; NS] =
@@ -133,10 +135,13 @@ impl<const NP: usize, const NS: usize, const VL: usize> OpsExecutorTrait
         output: &Self::Output,
     ) -> Result<Vec<F>> {
         // Set POD targets.
-        targets.0.iter().enumerate().try_for_each(
-            |(i, hash_targ)|
-            pw.set_hash_target(*hash_targ,input.0.pods_list[i].1.content_id().into())
-            )?;
+        targets
+            .0
+            .iter()
+            .enumerate()
+            .try_for_each(|(i, hash_targ)| {
+                pw.set_hash_target(*hash_targ, input.0.pods_list[i].1.content_id().into())
+            })?;
         // TODO: Connect these to the POD targets that go into the inner and recursion circuits instead!
         zip(&targets.1, &input.0.pods_list).try_for_each(|(s_targets, (_, pod))| {
             let pod_statements = &pod.payload.statements_list;
