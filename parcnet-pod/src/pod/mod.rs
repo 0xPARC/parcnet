@@ -23,7 +23,7 @@ pub(crate) type Error = Box<dyn std::error::Error>;
 
 pub type PodEntries = IndexMap<String, PodValue>;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Pod {
     entries: PodEntries,
     #[serde(
