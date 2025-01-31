@@ -30,7 +30,13 @@ Then import it in your Go code:
 import "github.com/0xPARC/parcnet/go/pod"
 ```
 
-## POD Struct
+## Types
+
+A `Pod` struct consists of:
+
+- Entries: A map of string keys to `PodValue` items.
+- Signature: The EdDSA-Poseidon signature over the content ID, in unpadded base64.
+- SignerPublicKey: The EdDSA public key of the signer, in unpadded base64.
 
 ```go
 type Pod struct {
@@ -40,11 +46,32 @@ type Pod struct {
 }
 ```
 
-- Entries: A map of string keys to PodValue values. Currently supports string, boolean, and int types.
-- Signature: The BabyJubjub Eddsa signature (hex-compressed) over the content ID.
-- SignerPublicKey: The public key (hex-compressed) of the signer.
+`PodValue` is a union type that can be one of the following:
 
-## Creating a POD
+- String
+- Bytes
+- Cryptographic
+- Int
+- Boolean
+- Date
+
+```go
+
+type PodEntries map[string]PodValue
+
+type PodValue struct {
+	ValueType PodValueType // string, bytes, cryptographic, int, boolean, or date
+	StringVal string
+	BytesVal  []byte
+	BigVal    *big.Int
+	BoolVal   bool
+	TimeVal   time.Time
+}
+```
+
+## API
+
+### Creating a POD
 
 Use the function CreatePod() to sign a set of key-value pairs (PodEntries) with a Baby Jubjub private key, returning a new Pod. Internally, the data is hashed via Poseidon, then signed using the provided private key.
 
@@ -52,7 +79,7 @@ Use the function CreatePod() to sign a set of key-value pairs (PodEntries) with 
 func CreatePod(privateKeyHex string, entries PodEntries) (*Pod, error)
 ```
 
-## Verifying a POD
+### Verifying a POD
 
 Use the function Verify() to verify a POD. Internally, the data is hashed into a content ID via a Poseidon-hash lean incremental merkle tree, then compared to the signature.
 
@@ -79,19 +106,20 @@ import (
 )
 
 func main() {
-    // 1) Create your entries
+    // 1) Initialize your entries
     entries := pod.PodEntries{
-        "message": {kind: "string", strVal: "Welcome to PARCNET!"},
+        "message": {ValueType: pod.PodStringValue, StringVal: "Welcome to PARCNET!"},
     }
 
     // Use your EdDSA private key in hex format (32 bytes)
     privateKey := "YOUR_PRIVATE_KEY_HEX"
+    // 2) Create the POD
     newPod, err := pod.CreatePod(privateKey, entries)
     if err != nil {
         log.Fatalf("Error creating POD: %v", err)
     }
 
-    // 2) Verify the POD
+    // 3) Verify the POD
     isValid, err := newPod.Verify()
     if err != nil {
         log.Fatalf("Verification error: %v", err)
