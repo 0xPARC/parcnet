@@ -89,12 +89,6 @@ func Verify(pod Pod) (bool, error)
 
 ## Example Usage
 
-For a more comprehensive illustration, see the cmd/example/main.go file, which shows how to:
-
-1. Create a new POD with specific entries.
-1. Expose endpoints (in an HTTP server) to create and verify PODs.
-1. Combine with external services (e.g., Redis).
-
 ```go
 package main
 
@@ -111,8 +105,8 @@ func main() {
         "message": {ValueType: pod.PodStringValue, StringVal: "Welcome to PARCNET!"},
     }
 
-    // Use your EdDSA private key in hex format (32 bytes)
-    privateKey := "YOUR_PRIVATE_KEY_HEX"
+    // Replace with your own EdDSA private key in hex (32 bytes)
+    privateKey := "0x0000000000000000000000000000000000000000000000000000000000000000"
     // 2) Create the POD
     newPod, err := pod.CreatePod(privateKey, entries)
     if err != nil {
@@ -127,3 +121,9 @@ func main() {
     fmt.Printf("Is the POD valid? %v\n", isValid)
 }
 ```
+
+For a more comprehensive illustration, see the cmd/example/main.go file, which shows how to:
+
+1. Create a new POD with specific entries.
+1. Expose endpoints (in an HTTP server) to create and verify PODs.
+1. Combine with external services (e.g., Redis).
