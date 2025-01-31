@@ -10,11 +10,8 @@ import (
 )
 
 func TestCreateGoPod(t *testing.T) {
-	privKey := babyjub.PrivateKey{
-		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8,
-		9, 0, 1,
-	}
-	pod, err := signPod(privKey, PodEntries{
+	privKeyHex := "0001020304050607080900010203040506070809000102030405060708090001"
+	pod, err := CreatePod(privKeyHex, PodEntries{
 		"A": PodValue{ValueType: PodIntValue, BigVal: big.NewInt(9007199254740992)},
 		"B": PodValue{ValueType: PodIntValue, BigVal: big.NewInt(321)},
 		"G": PodValue{ValueType: PodIntValue, BigVal: big.NewInt(-7)},
@@ -43,7 +40,7 @@ func TestCreateGoPod(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to unmarshal pod entries from JSON: %v", err)
 	}
-	pod, err = signPod(privKey, entries)
+	pod, err = CreatePod(privKeyHex, entries)
 	if err != nil {
 		t.Fatalf("Failed to sign pod: %v", err)
 	}
@@ -55,6 +52,20 @@ func TestCreateGoPod(t *testing.T) {
 	expectedPod = `{"entries":{"count":42,"ffi":false,"ipc":true,"nulled":null,"some_bytes":{"bytes":"AQID"},"some_cryptographic":{"cryptographic":1234567890},"some_data":"some_value","some_date":{"date":"2025-01-01T00:00:00.000Z"}},"signature":"uqedfDb+lmjfcgXnm1Zk6AP75fjptmJmiR5QhxkGYZdI5Y2/CWiZIEE9d7r/FHAd/ebT+S1sAysHYEgnnQIGAA","signerPublicKey":"xDP3ppa3qjpSJO+zmTuvDM2eku7O4MKaP2yCCKnoHZ4"}`
 	if string(jsonPod) != expectedPod {
 		t.Fatalf("CreateGoPod returned invalid pod: %v", string(jsonPod))
+	}
+
+	// Try with base64 private key
+	privKeyBase64 := "AAECAwQFBgcICQABAgMEBQYHCAkAAQIDBAUGBwgJAAE"
+	pod, err = CreatePod(privKeyBase64, entries)
+	if err != nil {
+		t.Fatalf("Failed to sign pod: %v", err)
+	}
+	jsonPod, err = json.Marshal(pod)
+	if err != nil {
+		t.Fatalf("Failed to marshal pod to JSON: %v", err)
+	}
+	if string(jsonPod) != expectedPod {
+		t.Fatalf("CreateGoPod returned invalid pod with base64 private key: %v", string(jsonPod))
 	}
 }
 
