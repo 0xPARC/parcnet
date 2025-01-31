@@ -106,7 +106,7 @@ func main() {
     }
 
     // Replace with your own EdDSA private key in hex (32 bytes)
-    privateKey := "0x0000000000000000000000000000000000000000000000000000000000000000"
+    privateKey := "0000000000000000000000000000000000000000000000000000000000000000"
     // 2) Create the POD
     newPod, err := pod.CreatePod(privateKey, entries)
     if err != nil {

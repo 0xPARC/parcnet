@@ -9,6 +9,14 @@ import (
 
 func CreatePod(privateKeyHex string, entries PodEntries) (*Pod, error) {
 	var privateKey babyjub.PrivateKey
+	// Ensure privateKeyHex is in hexadecimal format
+	if len(privateKeyHex) != 64 {
+		privateKeyBytes, err := noPadB64.DecodeString(privateKeyHex)
+		if err != nil {
+			return nil, fmt.Errorf("private key must be 32-byte hex or base64 string: %w", err)
+		}
+		privateKeyHex = hex.EncodeToString(privateKeyBytes)
+	}
 	hex.Decode(privateKey[:], []byte(privateKeyHex))
 	return signPod(privateKey, entries)
 }
