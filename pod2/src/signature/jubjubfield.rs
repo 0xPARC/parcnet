@@ -52,11 +52,7 @@ pub trait CircuitBuilderJubjubField {
 
     fn connect_jubjubfield(&mut self, a: &JubjubFieldTarget, b: &JubjubFieldTarget);
 
-    fn is_equal_jubjubfield(
-        &mut self, 
-        a: &JubjubFieldTarget, 
-        b: &JubjubFieldTarget
-    ) -> BoolTarget;
+    fn is_equal_jubjubfield(&mut self, a: &JubjubFieldTarget, b: &JubjubFieldTarget) -> BoolTarget;
 
     fn add_jubjubfield(
         &mut self,
@@ -130,11 +126,7 @@ impl CircuitBuilderJubjubField for CircuitBuilder<GoldilocksField, 2> {
         self.connect_biguint(&a.0, &b.0);
     }
 
-    fn is_equal_jubjubfield(
-        &mut self, 
-        a: &JubjubFieldTarget, 
-        b: &JubjubFieldTarget
-    ) -> BoolTarget {
+    fn is_equal_jubjubfield(&mut self, a: &JubjubFieldTarget, b: &JubjubFieldTarget) -> BoolTarget {
         self.is_equal_biguint(&a.0, &b.0)
     }
 

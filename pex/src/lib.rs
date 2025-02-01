@@ -27,11 +27,11 @@ use pod2::{
     pod::{
         entry::Entry,
         gadget::{plonky_pod::ProverParams, GadgetID},
-        origin::Origin,
+        origin::{Origin, ORIGIN_ID_NONE, ORIGIN_ID_SELF},
         payload::HashablePayload,
         statement::{AnchoredKey, StatementRef},
         value::ScalarOrVec,
-        GPGInput, Op, OpCmd, Statement, POD,
+        ContentID, GPGInput, Op, OpCmd, Statement, POD,
     },
     signature::schnorr::SchnorrSecretKey,
 };
@@ -41,7 +41,7 @@ use pod2::{
 pub enum ORef {
     S,
     P(String),
-    Q(usize),
+    Q(ContentID),
 }
 
 impl From<ORef> for String {
@@ -58,12 +58,8 @@ impl From<ORef> for Origin {
     fn from(oref: ORef) -> Self {
         match oref {
             ORef::S => Origin::SELF,
-            ORef::P(name) => Origin::new(GoldilocksField(0), name.clone(), GadgetID::ORACLE), // TOOD: figure out if its fine to have Id 0
-            ORef::Q(id) => Origin::new(
-                GoldilocksField(id as u64),
-                format!("query_{}", id),
-                GadgetID::ORACLE,
-            ),
+            ORef::P(name) => Origin::new(ORIGIN_ID_NONE, name.clone(), GadgetID::ORACLE), // TOOD: figure out if its fine to have Id 0
+            ORef::Q(id) => Origin::new(id, format!("query_{:?}", id), GadgetID::ORACLE),
         }
     }
 }
@@ -73,7 +69,7 @@ impl From<Origin> for ORef {
         if origin.is_self() {
             ORef::S
         } else if origin.origin_name == "query" {
-            ORef::Q(origin.origin_id.to_canonical_u64() as usize)
+            ORef::Q(origin.origin_id)
         } else {
             ORef::P(origin.origin_name)
         }
@@ -442,7 +438,7 @@ pub struct PodQueryBuilder {
     // srefs are the bindings we are interested in
     srefs: Vec<SRef>,
     constraints: Vec<QueryConstraint>,
-    current_origin_id: usize,
+    current_origin_id: ContentID,
 }
 
 #[derive(Debug, Clone)]
@@ -482,7 +478,7 @@ impl PodQueryBuilder {
         Self {
             srefs: Vec::new(),
             constraints: Vec::new(),
-            current_origin_id: 1,
+            current_origin_id: ORIGIN_ID_SELF,
         }
     }
     fn add_assert(&mut self, assert: &Assert) -> Result<()> {

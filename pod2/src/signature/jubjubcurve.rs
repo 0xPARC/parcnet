@@ -24,11 +24,8 @@ pub trait CircuitBuilderJubjubCurve {
 
     fn connect_jubjub_curve(&mut self, a: &JubjubCurveTarget, b: &JubjubCurveTarget);
 
-    fn is_equal_jubjub_curve(
-        &mut self, 
-        a: &JubjubCurveTarget, 
-        b: &JubjubCurveTarget
-    ) -> BoolTarget;
+    fn is_equal_jubjub_curve(&mut self, a: &JubjubCurveTarget, b: &JubjubCurveTarget)
+        -> BoolTarget;
 
     fn zero_jubjub_curve(&mut self) -> JubjubCurveTarget;
 
@@ -74,9 +71,9 @@ impl CircuitBuilderJubjubCurve for CircuitBuilder<GoldilocksField, 2> {
     }
 
     fn is_equal_jubjub_curve(
-        &mut self, 
-        a: &JubjubCurveTarget, 
-        b: &JubjubCurveTarget
+        &mut self,
+        a: &JubjubCurveTarget,
+        b: &JubjubCurveTarget,
     ) -> BoolTarget {
         let x_is_equal = self.is_equal_jubjubfield(&a.x, &b.x).target;
         let y_is_equal = self.is_equal_jubjubfield(&a.y, &b.y).target;
@@ -365,7 +362,11 @@ mod tests {
 
         let data = builder.build::<C>();
 
-        let proof: plonky2::plonk::proof::ProofWithPublicInputs<GoldilocksField, PoseidonGoldilocksConfig, 2> = data.prove(pw).unwrap();
+        let proof: plonky2::plonk::proof::ProofWithPublicInputs<
+            GoldilocksField,
+            PoseidonGoldilocksConfig,
+            2,
+        > = data.prove(pw).unwrap();
         data.verify(proof);
     }
 

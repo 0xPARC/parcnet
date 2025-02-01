@@ -40,7 +40,7 @@ pub struct EddsaPublicKeyTarget {
 }
 
 pub trait EddsaBuilder {
-    fn verify_eddsa<C: GenericConfig<2, F = GoldF>> (
+    fn verify_eddsa<C: GenericConfig<2, F = GoldF>>(
         &mut self,
         sig: &EddsaSignatureTarget,
         msg: &MessageHashTarget,
@@ -48,7 +48,7 @@ pub trait EddsaBuilder {
         hash: &PoseidonOutputTarget, // will not be needed in final version
     ) -> BoolTarget;
 
-    fn constrain_eddsa<C: GenericConfig<2, F = GoldF>> (
+    fn constrain_eddsa<C: GenericConfig<2, F = GoldF>>(
         &mut self,
         sig: &EddsaSignatureTarget,
         msg: &MessageHashTarget,
@@ -58,17 +58,17 @@ pub trait EddsaBuilder {
 }
 
 impl EddsaBuilder for CircuitBuilder<GoldF, 2> {
-    fn verify_eddsa<C: GenericConfig<2, F = GoldF>> (
+    fn verify_eddsa<C: GenericConfig<2, F = GoldF>>(
         &mut self,
         sig: &EddsaSignatureTarget,
         msg: &MessageHashTarget,
         pk: &EddsaPublicKeyTarget,
         hash: &PoseidonOutputTarget, // will not be needed in final version
-    ) -> BoolTarget {      
+    ) -> BoolTarget {
         self.verify_jubjub_point(&sig.r);
         self.verify_jubjub_point(&pk.a);
-//        HASH TO BE IMPLEMENTED: h should be Poseidon hash of sig.r, pk, msg
-//        let h: BigUintTarget = p_hash_to_implement(sig.r.x, sig.r.y, pk.x, pk.y, msg);
+        //        HASH TO BE IMPLEMENTED: h should be Poseidon hash of sig.r, pk, msg
+        //        let h: BigUintTarget = p_hash_to_implement(sig.r.x, sig.r.y, pk.x, pk.y, msg);
         let b8 = self.B8_jubjub_curve();
         let lhs: JubjubCurveTarget = self.mul_scalar(&b8, &sig.s);
         let eight = self.constant_biguint(&BigUint::new(vec![8]));
@@ -77,8 +77,8 @@ impl EddsaBuilder for CircuitBuilder<GoldF, 2> {
         let rhs = self.add_jubjub_curve(&sig.r, &hash_times_pk);
         self.is_equal_jubjub_curve(&lhs, &rhs)
     }
-    
-    fn constrain_eddsa<C: GenericConfig<2, F = GoldF>> (
+
+    fn constrain_eddsa<C: GenericConfig<2, F = GoldF>>(
         &mut self,
         sig: &EddsaSignatureTarget,
         msg: &MessageHashTarget,
@@ -89,7 +89,7 @@ impl EddsaBuilder for CircuitBuilder<GoldF, 2> {
         let true_target = self._true();
         self.connect(verification_output.target, true_target.target);
     }
-} 
+}
 
 #[cfg(test)]
 mod tests {
@@ -104,17 +104,16 @@ mod tests {
 
     use crate::signature::biguint::{BigUintTarget, CircuitBuilderBiguint};
     use crate::signature::eddsa::{
-        EddsaBuilder, 
-        EddsaPublicKeyTarget, 
-        EddsaSignatureTarget,
-        MessageHashTarget,
+        EddsaBuilder, EddsaPublicKeyTarget, EddsaSignatureTarget, MessageHashTarget,
         PoseidonOutputTarget,
     };
     use crate::signature::jubjubcurve::{CircuitBuilderJubjubCurve, JubjubCurveTarget};
     use crate::signature::jubjubfield::{CircuitBuilderJubjubField, JubjubFieldTarget};
 
     fn u64_to_u32(a: Vec<u64>) -> Vec<u32> {
-        a.into_iter().flat_map(|x| vec![x as u32, (x >> 32) as u32]).collect()
+        a.into_iter()
+            .flat_map(|x| vec![x as u32, (x >> 32) as u32])
+            .collect()
     }
 
     #[test]
@@ -137,12 +136,7 @@ mod tests {
             8589537196731344667,
             1113026192110903546,
         ]));
-        let msg_val = BigUint::new(u64_to_u32(vec![
-            14083847773837265618,
-            6692605942,
-            0,
-            0,
-        ]));
+        let msg_val = BigUint::new(u64_to_u32(vec![14083847773837265618, 6692605942, 0, 0]));
         let sig_r_x_val = BigUint::new(u64_to_u32(vec![
             3702867781738010923,
             14038445494684018940,
@@ -161,7 +155,8 @@ mod tests {
             14992547060379445581,
             133925459310743680,
         ]));
-        let hash_val = BigUint::new(u64_to_u32(vec![ // should be computed automatically later
+        let hash_val = BigUint::new(u64_to_u32(vec![
+            // should be computed automatically later
             2709608945152055826,
             8217237346447623338,
             9578917324956230137,
@@ -176,13 +171,19 @@ mod tests {
         let sig_s = JubjubFieldTarget(builder.constant_biguint(&sig_s_val));
         let hash = JubjubFieldTarget(builder.constant_biguint(&hash_val));
 
-        let pk = JubjubCurveTarget{ x: px, y: py };
-        let sig_r = JubjubCurveTarget{ x: sig_r_x, y: sig_r_y };
+        let pk = JubjubCurveTarget { x: px, y: py };
+        let sig_r = JubjubCurveTarget {
+            x: sig_r_x,
+            y: sig_r_y,
+        };
 
-        let msg = MessageHashTarget{ m: msg.0 };
-        let hash = PoseidonOutputTarget{ h: hash.0 };
-        let sig = EddsaSignatureTarget{ r: sig_r, s: sig_s.0 };
-        let pk = EddsaPublicKeyTarget{ a: pk };
+        let msg = MessageHashTarget { m: msg.0 };
+        let hash = PoseidonOutputTarget { h: hash.0 };
+        let sig = EddsaSignatureTarget {
+            r: sig_r,
+            s: sig_s.0,
+        };
+        let pk = EddsaPublicKeyTarget { a: pk };
 
         builder.constrain_eddsa::<C>(&sig, &msg, &pk, &hash);
 
@@ -190,7 +191,7 @@ mod tests {
         let proof = data.prove(pw).unwrap();
         data.verify(proof);
     }
-    
+
     #[test]
     fn test_verify_sig_to_false() {
         // this signature is incorrect, test should fail
@@ -212,12 +213,7 @@ mod tests {
             8589537196731344667,
             1113026192110903546,
         ]));
-        let msg_val = BigUint::new(u64_to_u32(vec![
-            14083847773837265618,
-            6692605942,
-            0,
-            0,
-        ]));
+        let msg_val = BigUint::new(u64_to_u32(vec![14083847773837265618, 6692605942, 0, 0]));
         let sig_r_x_val = BigUint::new(u64_to_u32(vec![
             3702867781738010923,
             14038445494684018940,
@@ -236,7 +232,8 @@ mod tests {
             14992547060379445581,
             133925459310743681, // this value was changed from the correct val
         ]));
-        let hash_val = BigUint::new(u64_to_u32(vec![ // should be computed automatically later
+        let hash_val = BigUint::new(u64_to_u32(vec![
+            // should be computed automatically later
             2709608945152055826,
             8217237346447623338,
             9578917324956230137,
@@ -251,13 +248,19 @@ mod tests {
         let sig_s = JubjubFieldTarget(builder.constant_biguint(&sig_s_val));
         let hash = JubjubFieldTarget(builder.constant_biguint(&hash_val));
 
-        let pk = JubjubCurveTarget{ x: px, y: py };
-        let sig_r = JubjubCurveTarget{ x: sig_r_x, y: sig_r_y };
+        let pk = JubjubCurveTarget { x: px, y: py };
+        let sig_r = JubjubCurveTarget {
+            x: sig_r_x,
+            y: sig_r_y,
+        };
 
-        let msg = MessageHashTarget{ m: msg.0 };
-        let hash = PoseidonOutputTarget{ h: hash.0 };
-        let sig = EddsaSignatureTarget{ r: sig_r, s: sig_s.0 };
-        let pk = EddsaPublicKeyTarget{ a: pk };
+        let msg = MessageHashTarget { m: msg.0 };
+        let hash = PoseidonOutputTarget { h: hash.0 };
+        let sig = EddsaSignatureTarget {
+            r: sig_r,
+            s: sig_s.0,
+        };
+        let pk = EddsaPublicKeyTarget { a: pk };
 
         let sig_result = builder.verify_eddsa::<C>(&sig, &msg, &pk, &hash);
         let false_target = builder._false();

@@ -147,7 +147,8 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilderBiguint<F, D>
         result.push(self._true().target);
         for i in 0..n {
             let this_limb_cmp_result = self.is_equal(a.limbs[i].0, b.limbs[i].0);
-            let result_after_this_limb = self.mul(*result.last().unwrap(), this_limb_cmp_result.target);
+            let result_after_this_limb =
+                self.mul(*result.last().unwrap(), this_limb_cmp_result.target);
             result.push(result_after_this_limb);
         }
         BoolTarget::new_unsafe(*result.last().unwrap())
@@ -587,7 +588,7 @@ mod tests {
         data.verify(proof);
         ()
     }
-    
+
     #[test]
     fn test_is_equal_false_0() {
         const D: usize = 2;
@@ -612,7 +613,7 @@ mod tests {
         data.verify(proof);
         ()
     }
-    
+
     #[test]
     fn test_is_equal_false_1() {
         const D: usize = 2;
