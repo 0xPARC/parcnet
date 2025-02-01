@@ -2,9 +2,9 @@ name: Test
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -14,18 +14,22 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux
     steps:
-    - uses: actions/checkout@v4
-    - name: Install dependencies
-      run: |
-        yes | pacman -Syu
-        yes | pacman -S gcc clang cmake alsa-lib fontconfig wayland libgit2 libxkbcommon-x11 openssl zstd pkgconf mold sqlite jq git
-    - name: Install Rust toolchain
-      run: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        . "$HOME/.cargo/env"
-        rustup toolchain install nightly-2024-09-28
-        rustup default nightly-2024-09-28
-    - name: Run tests
-      run: |
-        . "$HOME/.cargo/env"
-        cargo test --release -- --skip test_scalar_mul --skip test_constrain_sig --skip test_verify_sig_to_false --skip test_scalar_mul_2 --skip test_scalar_mul_3
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          yes | pacman -Syu
+          yes | pacman -S gcc clang cmake alsa-lib fontconfig wayland libgit2 libxkbcommon-x11 openssl zstd pkgconf mold sqlite jq git
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          . "$HOME/.cargo/env"
+          rustup toolchain install nightly-2024-09-28
+          rustup default nightly-2024-09-28
+      - name: Run tests
+        run: |
+          . "$HOME/.cargo/env"
+          cargo test --release -- --skip test_scalar_mul --skip test_constrain_sig --skip test_verify_sig_to_false --skip test_scalar_mul_2 --skip test_scalar_mul_3
+      - name: Run go tests
+        run: |
+          cd go/pod
+          go test -v
