@@ -24,6 +24,8 @@ const (
 	PodBooleanValue       PodValueType = "boolean"
 	PodEdDSAPubkeyValue   PodValueType = "eddsa_pubkey"
 	PodDateValue          PodValueType = "date"
+	PodArrayValue         PodValueType = "array"
+	PodMapValue           PodValueType = "map"
 )
 
 type PodValue struct {
