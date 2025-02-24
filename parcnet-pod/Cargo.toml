@@ -13,12 +13,22 @@ edition = "2021"
 name = "parcnet_pod"
 path = "src/lib.rs"
 
+# Force-disable aarch64 when building for WASM
+[features]
+wasm = [
+    "babyjubjub-ark/wasm",  # Explicit WASM feature
+    "getrandom/js",
+    "getrandom_03/wasm_js",
+]
+
 [dependencies]
 ark-bn254 = "0.4.0"
 ark-ff = "0.4.0"
 ark-std = "0.4.0"
-babyjubjub-ark = { git = "https://github.com/ax0/babyjubjub-ark", features = ["aarch64"] }
+babyjubjub-ark = { git = "https://github.com/ax0/babyjubjub-ark" }
 base64 = "0.22.1"
+getrandom = { version = "0.2.15" }
+getrandom_03 = { package = "getrandom", version = "0.3.1" }
 hex = "0.4.3"
 indexmap = { version = "2.5.0", features = ["rayon", "serde"] }
 lazy_static = "1.5.0"
@@ -36,7 +46,7 @@ thiserror = "1.0.64"
 time = {version = "0.3.36", features = ["macros", "serde"]}
 url = "2.5.2"
 urlencoding = "2.1.3"
-uuid = { version = "1.10.0", features = ["v4", "serde"] }
+uuid = { version = "1.10.0", features = ["v4", "serde", "rng-getrandom"] }
 
 [dev-dependencies]
 criterion = "0.5.1"
