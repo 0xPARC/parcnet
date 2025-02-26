@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
-babyjubjub-ark = { git = "https://github.com/ax0/babyjubjub-ark", features = ["wasm"] }
+babyjubjub-ark = { git = "https://github.com/robknight/babyjubjub-ark", features = ["wasm"] }
 getrandom = { version = "0.2.15", features = ["js"] }
 getrandom_03 = { package = "getrandom", version = "0.3.1", features = ["wasm_js"] }
 parcnet-pod = { path = "../parcnet-pod", default-features = false, features = ["wasm"] }
@@ -30,4 +30,5 @@ wasm-bindgen-test = "0.3.34"
 [profile.release]
 lto = true
 # Tell `rustc` to optimize for small code size.
-opt-level = "s"
+opt-level = "z"
+codegen-units = 1
