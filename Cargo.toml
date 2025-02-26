@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "parcnet-pod",
+    "parcnet-pod-wasm",
     "parcnet",
     "chat",
     "pex",
@@ -16,6 +17,7 @@ pathfinder_simd = { git = "https://github.com/theoparis/pathfinder/" }
 [workspace.dependencies]
 assets = { path = "assets" }
 parcnet-pod = { path = "parcnet-pod" }
+parcnet-pod-wasm = { path = "parcnet-pod-wasm" }
 pod2 = { path = "pod2" }
 constants = { path = "constants" }
 anyhow = "1.0.86"
