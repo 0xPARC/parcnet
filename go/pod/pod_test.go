@@ -187,3 +187,74 @@ func TestVerifyGoPod(t *testing.T) {
 		t.Fatalf("Verify for valid pod returned false")
 	}
 }
+
+func TestSigner(t *testing.T) {
+	privKeyHex := "0001020304050607080900010203040506070809000102030405060708090001"
+
+	signer, err := NewSigner(privKeyHex)
+	if err != nil {
+		t.Fatalf("NewSigner failed: %v", err)
+	}
+
+	pod, err := signer.Sign(PodEntries{
+		"A": PodValue{ValueType: PodIntValue, BigVal: big.NewInt(9007199254740992)},
+	})
+	if err != nil {
+		t.Fatalf("CreateGoPod failed: %v", err)
+	}
+	jsonPod, err := json.Marshal(pod)
+	if err != nil {
+		t.Fatalf("Failed to marshal pod to JSON: %v", err)
+	}
+	expectedPod := `{"entries":{"A":{"int":"0x20000000000000"}},"signature":"mw+dxBmrZ9KkSR9qzVKUuZLCZiPztGsn5ujQvlvR1yGMkvvtSS/+eCOndA8abxlm4Iza+A7jvTUr4kHREDT+BA","signerPublicKey":"xDP3ppa3qjpSJO+zmTuvDM2eku7O4MKaP2yCCKnoHZ4"}`
+	if string(jsonPod) != expectedPod {
+		t.Fatalf("CreateGoPod returned invalid pod: %v", string(jsonPod))
+	}
+
+	jsonPodEntries := `{"count":42,"ffi":false,"ipc":true,"nulled":null,"some_bytes":{"bytes":"AQID"},"some_cryptographic":{"cryptographic":1234567890},"some_data":"some_value","some_date":{"date":"2025-01-01T00:00:00.000Z"}}`
+	entries := PodEntries{}
+	err = json.Unmarshal([]byte(jsonPodEntries), &entries)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal pod entries from JSON: %v", err)
+	}
+	pod, err = signer.Sign(entries)
+	if err != nil {
+		t.Fatalf("Failed to sign pod: %v", err)
+	}
+	jsonPod, err = json.Marshal(pod)
+	if err != nil {
+		t.Fatalf("Failed to marshal pod to JSON: %v", err)
+	}
+
+	expectedPod = `{"entries":{"count":42,"ffi":false,"ipc":true,"nulled":null,"some_bytes":{"bytes":"AQID"},"some_cryptographic":{"cryptographic":1234567890},"some_data":"some_value","some_date":{"date":"2025-01-01T00:00:00.000Z"}},"signature":"uqedfDb+lmjfcgXnm1Zk6AP75fjptmJmiR5QhxkGYZdI5Y2/CWiZIEE9d7r/FHAd/ebT+S1sAysHYEgnnQIGAA","signerPublicKey":"xDP3ppa3qjpSJO+zmTuvDM2eku7O4MKaP2yCCKnoHZ4"}`
+	if string(jsonPod) != expectedPod {
+		t.Fatalf("CreateGoPod returned invalid pod: %v", string(jsonPod))
+	}
+
+	// Try with base64 private key
+	privKeyBase64 := "AAECAwQFBgcICQABAgMEBQYHCAkAAQIDBAUGBwgJAAE"
+	signer, err = NewSigner(privKeyBase64)
+	if err != nil {
+		t.Fatalf("NewSigner failed: %v", err)
+	}
+
+	pod, err = signer.Sign(entries)
+	if err != nil {
+		t.Fatalf("Failed to sign pod: %v", err)
+	}
+	jsonPod, err = json.Marshal(pod)
+	if err != nil {
+		t.Fatalf("Failed to marshal pod to JSON: %v", err)
+	}
+	if string(jsonPod) != expectedPod {
+		t.Fatalf("CreateGoPod returned invalid pod with base64 private key: %v", string(jsonPod))
+	}
+
+	// Try with invalid private key
+	wrongPrivateKey := "000102030405060708090001003040506070809000102030405060708090001"
+
+	_, err = NewSigner(wrongPrivateKey)
+	if err == nil || err.Error() != "failed to parse private key: private key must be 32-byte" {
+		t.Fatalf("NewSigner should have failed")
+	}
+}
