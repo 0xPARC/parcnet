@@ -1,7 +1,0 @@
-# EC2
-parcnet-chat.pem
-ec2-connect.sh
-
-# Code Signing
-*.cer
-cert_base64.txt
