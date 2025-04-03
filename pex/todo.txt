@@ -15,8 +15,7 @@ ZKP
 [ ] Hook up  the ZKPs
 [ ] Support importing POD1 (eg: Frogs)
     Think about the flow for import (maybe a custom CLI tool that imports into your POD store database?, maybe a local web app using the Z API?)
-    POD store database under ~/.parcnet? with your keys too? Both Chat and PEX could read from there
-    The first interopability experiment could be browsing and sending PODs in Chat
+    POD store database under ~/.parcnet? with your keys too?
 ===================================
 QOL
 [ ] pexup
@@ -39,8 +38,6 @@ Other
 [ ] Remove one of the two statement object in the POD struct; and get the other one at run time (for better serialization)
 [ ] Requests over the network for pod? (remove the requirement to run the exact same code on both side)
     Eg: do you want to execute <QUERY> in <CONTEXT> for <USERNAME>?
-[ ] Store name associations and Schnorr pub key in the Iroh doc (so we have unique name)
-    Can take a bunch of code from Chat. Could even use the same doc as chat. (and unify all the networking).
 [ ] Optionally persists Schnorr keys, Iorh keys, and PODs (--persist or something, default if you install the binary)
 [ ] POD browser
     Could exit out of reedline and get into a temporary TUI, then exit that with a pod_id copied into clipboard if needed
