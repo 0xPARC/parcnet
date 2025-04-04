@@ -1,6 +1,9 @@
+use std::array;
+
 use anyhow::Result;
 use plonky2::{
     field::{goldilocks_field::GoldilocksField, types::Field},
+    hash::hash_types::HashOutTarget,
     iop::{
         target::{BoolTarget, Target},
         witness::{PartialWitness, WitnessWrite},
@@ -96,13 +99,13 @@ impl StatementTarget {
     pub fn from_targets(v: &[Target]) -> Self {
         Self {
             predicate: v[0],
-            origin1: OriginTarget::from_targets(&[v[1], v[2]]),
-            key1: v[3],
-            origin2: OriginTarget::from_targets(&[v[4], v[5]]),
-            key2: v[6],
-            origin3: OriginTarget::from_targets(&[v[7], v[8]]),
-            key3: v[9],
-            value: v[10],
+            origin1: OriginTarget::from_targets(&v[1..6]),
+            key1: v[6],
+            origin2: OriginTarget::from_targets(&v[7..12]),
+            key2: v[12],
+            origin3: OriginTarget::from_targets(&v[13..18]),
+            key3: v[18],
+            value: v[19],
         }
     }
     pub fn set_witness(
@@ -336,16 +339,32 @@ impl StatementTarget {
     pub fn remap_origins(
         self,
         builder: &mut CircuitBuilder<F, D>,
-        origin_id_map: &[Vec<Target>],
-        pod_index: Target,
+        content_id_target: HashOutTarget,
     ) -> Result<Self> {
+        let remapped_origin = [self.origin1, self.origin2, self.origin2]
+            .iter()
+            .map(|o| {
+                let origin_is_self = o.is_self(builder);
+                OriginTarget {
+                    origin_id: array::from_fn(|i| {
+                        builder.select(
+                            origin_is_self,
+                            content_id_target.elements[i],
+                            o.origin_id[i],
+                        )
+                    }),
+                    gadget_id: o.gadget_id,
+                }
+            })
+            .collect::<Vec<_>>();
+
         Ok(Self {
             predicate: self.predicate,
-            origin1: self.origin1.remap(builder, origin_id_map, pod_index)?,
+            origin1: remapped_origin[0],
             key1: self.key1,
-            origin2: self.origin2.remap(builder, origin_id_map, pod_index)?,
+            origin2: remapped_origin[1],
             key2: self.key2,
-            origin3: self.origin3.remap(builder, origin_id_map, pod_index)?,
+            origin3: remapped_origin[2],
             key3: self.key3,
             value: self.value,
         })

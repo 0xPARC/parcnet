@@ -9,7 +9,7 @@ use std::{collections::HashMap, fmt, fmt::Debug};
 use super::{
     entry::Entry,
     gadget::GadgetID,
-    origin::Origin,
+    origin::{Origin, OriginID},
     util::hash_string_to_field,
     value::{HashableEntryValue, ScalarOrVec},
     POD,
@@ -27,15 +27,13 @@ impl PartialEq for AnchoredKey {
 }
 
 impl AnchoredKey {
-    /// Field representation as a vector of length 3.
+    // TODO: Make string hashing more secure.
+    /// Field representation as a vector of length 6.
     pub fn to_fields(&self) -> Vec<GoldilocksField> {
         let AnchoredKey(origin, key) = self;
         [origin.to_fields(), vec![hash_string_to_field(key)]].concat()
     }
-    pub fn remap_origin(
-        &self,
-        f: &dyn Fn(&str) -> Result<(String, GoldilocksField)>,
-    ) -> Result<Self> {
+    pub fn remap_origin(&self, f: &dyn Fn(&str) -> Result<(String, OriginID)>) -> Result<Self> {
         let AnchoredKey(origin, key) = self;
         Ok(AnchoredKey(origin.remap(f)?, key.clone()))
     }
@@ -153,7 +151,7 @@ impl Statement {
             Self::Lt(_, _) => Self::LT,
         }
     }
-    /// Field representation as a vector of length 11.
+    /// Field representation as a vector of length 20.
     /// Each statement is arranged as
     /// [code] ++ anchored_key1 ++ anchored_key2 ++ anchored_key3 ++ [value],
     /// where the leftmost keys are populated first and 0s are substituted in
@@ -162,9 +160,10 @@ impl Statement {
         [
             vec![self.code()],
             match self {
-                Self::None => vec![GoldilocksField::ZERO; 10],
+                Self::None => vec![GoldilocksField::ZERO; 19],
                 Self::ValueOf(anchkey, value) => [
                     anchkey.to_fields(),
+                    vec![GoldilocksField::ZERO; 6],
                     vec![GoldilocksField::ZERO; 6],
                     vec![value.hash_or_value()],
                 ]
@@ -172,31 +171,36 @@ impl Statement {
                 Self::Equal(anchkey1, anchkey2) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
-                    vec![GoldilocksField::ZERO; 4],
+                    vec![GoldilocksField::ZERO; 6],
+                    vec![GoldilocksField::ZERO],
                 ]
                 .concat(),
                 Self::NotEqual(anchkey1, anchkey2) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
-                    vec![GoldilocksField::ZERO; 4],
+                    vec![GoldilocksField::ZERO; 6],
+                    vec![GoldilocksField::ZERO],
                 ]
                 .concat(),
                 Self::Gt(anchkey1, anchkey2) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
-                    vec![GoldilocksField::ZERO; 4],
+                    vec![GoldilocksField::ZERO; 6],
+                    vec![GoldilocksField::ZERO],
                 ]
                 .concat(),
                 Self::Lt(anchkey1, anchkey2) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
-                    vec![GoldilocksField::ZERO; 4],
+                    vec![GoldilocksField::ZERO; 6],
+                    vec![GoldilocksField::ZERO],
                 ]
                 .concat(),
                 Self::Contains(anchkey1, anchkey2) => [
                     anchkey1.to_fields(),
                     anchkey2.to_fields(),
-                    vec![GoldilocksField::ZERO; 4],
+                    vec![GoldilocksField::ZERO; 6],
+                    vec![GoldilocksField::ZERO],
                 ]
                 .concat(),
                 Self::SumOf(anchkey1, anchkey2, anchkey3) => [
@@ -224,10 +228,7 @@ impl Statement {
         ]
         .concat()
     }
-    pub fn remap_origins(
-        &self,
-        f: &dyn Fn(&str) -> Result<(String, GoldilocksField)>,
-    ) -> Result<Self> {
+    pub fn remap_origins(&self, f: &dyn Fn(&str) -> Result<(String, OriginID)>) -> Result<Self> {
         match self {
             Self::None => Ok(Self::None),
             Self::ValueOf(anchkey1, v) => Ok(Self::ValueOf(anchkey1.remap_origin(f)?, v.clone())),
