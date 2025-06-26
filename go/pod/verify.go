@@ -35,6 +35,7 @@ func (p *Pod) Verify() (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("failed to decompress public key: %w", err)
 	}
+
 	err = publicKey.VerifyPoseidon(contentID, signature)
 	if err != nil {
 		return false, fmt.Errorf("failed to verify signature: %w", err)

@@ -1,7 +1,6 @@
 package pod
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -124,7 +123,7 @@ func (p *PodValue) UnmarshalJSON(data []byte) error {
 			if !ok {
 				return fmt.Errorf("invalid 'bytes' encoding, got %T", jsonValue)
 			}
-			decoded, err := base64.StdEncoding.DecodeString(s)
+			decoded, err := DecodeBase64Bytes(s)
 			if err != nil {
 				return fmt.Errorf("invalid base64 for 'bytes': %w", err)
 			}
@@ -254,7 +253,7 @@ func (p PodValue) MarshalJSON() ([]byte, error) {
 		return json.Marshal(p.StringVal)
 
 	case PodBytesValue:
-		enc := base64.StdEncoding.EncodeToString(p.BytesVal)
+		enc := noPadB64.EncodeToString(p.BytesVal)
 		return json.Marshal(map[string]string{"bytes": enc})
 
 	case PodEdDSAPubkeyValue:
