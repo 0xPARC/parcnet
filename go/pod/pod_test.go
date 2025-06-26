@@ -1,8 +1,10 @@
 package pod
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 
@@ -66,6 +68,36 @@ func TestCreateGoPod(t *testing.T) {
 	}
 	if string(jsonPod) != expectedPod {
 		t.Fatalf("CreateGoPod returned invalid pod with base64 private key: %v", string(jsonPod))
+	}
+
+	// Try with padded base64 private key
+	privKeyBase64 = "AAECAwQFBgcICQABAgMEBQYHCAkAAQIDBAUGBwgJAAE="
+	pod, err = CreatePod(privKeyBase64, entries)
+	if err != nil {
+		t.Fatalf("Failed to sign pod: %v", err)
+	}
+	jsonPod, err = json.Marshal(pod)
+	if err != nil {
+		t.Fatalf("Failed to marshal pod to JSON: %v", err)
+	}
+	if string(jsonPod) != expectedPod {
+		t.Fatalf("CreateGoPod returned invalid pod with base64 private key: %v", string(jsonPod))
+	}
+
+	// Try with invalid private key hex
+	wrongPrivateKey := "000102030405060708090001003040506070809000102030405060708090001"
+
+	_, err = CreatePod(wrongPrivateKey, entries)
+	if err == nil || !strings.HasPrefix(err.Error(), "failed to parse private key") {
+		t.Fatalf("CreatePod should have failed")
+	}
+
+	// Try with invalid private key base64
+	wrongPrivateKey = "AAECAwQFBgcICQABAgMEBQYHCAkAAQIDBAUGBwgJAA"
+
+	_, err = CreatePod(wrongPrivateKey, entries)
+	if err == nil || !strings.HasPrefix(err.Error(), "failed to parse private key") {
+		t.Fatalf("CreatePod should have failed")
 	}
 }
 
@@ -164,6 +196,39 @@ func TestVerifyGoPod(t *testing.T) {
 	if !ok {
 		t.Fatalf("Verify for valid pod returned false")
 	}
+
+	// Signature should still verify with padded Base64
+	modifiedPOD := Pod(*pod)
+	modifiedPOD.Signature = pod.Signature + "=="
+	modifiedPOD.SignerPublicKey = pod.SignerPublicKey + "="
+	ok, err = modifiedPOD.Verify()
+	if err != nil {
+		t.Fatalf("Verify failed: %v", err)
+	}
+	if !ok {
+		t.Fatalf("Verify for valid pod returned false")
+	}
+
+	// Signature should still verify with hex instead of Base64
+	modifiedPOD = Pod(*pod)
+	sigBytes, err := DecodeBytes(pod.Signature, 64)
+	if err != nil {
+		t.Fatalf("Signature decode failed.")
+	}
+	modifiedPOD.Signature = hex.EncodeToString(sigBytes)
+	pubKeyBytes, err := DecodeBytes(pod.SignerPublicKey, 32)
+	if err != nil {
+		t.Fatalf("Pub key decode failed.")
+	}
+	modifiedPOD.SignerPublicKey = hex.EncodeToString(pubKeyBytes)
+	ok, err = modifiedPOD.Verify()
+	if err != nil {
+		t.Fatalf("Verify failed: %v", err)
+	}
+	if !ok {
+		t.Fatalf("Verify for valid pod returned false")
+	}
+
 	// Tamper the signature with another 64-byte hex string
 	pod.Signature = "703a5776185903375e19021c45cc34ca1f4c8b5baa049d8c65bf65768db0fb12a1cabe35695310a0299c22947ceb08db1307fa929e9627b4ddbcf90b61c01302"
 	ok, _ = pod.Verify()
@@ -250,11 +315,38 @@ func TestSigner(t *testing.T) {
 		t.Fatalf("CreateGoPod returned invalid pod with base64 private key: %v", string(jsonPod))
 	}
 
-	// Try with invalid private key
+	// Try with padded base64 private key
+	privKeyPaddedBase64 := "AAECAwQFBgcICQABAgMEBQYHCAkAAQIDBAUGBwgJAAE="
+	signer, err = NewSigner(privKeyPaddedBase64)
+	if err != nil {
+		t.Fatalf("NewSigner failed: %v", err)
+	}
+
+	pod, err = signer.Sign(entries)
+	if err != nil {
+		t.Fatalf("Failed to sign pod: %v", err)
+	}
+	jsonPod, err = json.Marshal(pod)
+	if err != nil {
+		t.Fatalf("Failed to marshal pod to JSON: %v", err)
+	}
+	if string(jsonPod) != expectedPod {
+		t.Fatalf("CreateGoPod returned invalid pod with base64 private key: %v", string(jsonPod))
+	}
+
+	// Try with invalid private key hex
 	wrongPrivateKey := "000102030405060708090001003040506070809000102030405060708090001"
 
 	_, err = NewSigner(wrongPrivateKey)
-	if err == nil || err.Error() != "failed to parse private key: private key must be 32-byte" {
+	if err == nil || !strings.HasPrefix(err.Error(), "failed to parse private key") {
+		t.Fatalf("NewSigner should have failed")
+	}
+
+	// Try with invalid private key base64
+	wrongPrivateKey = "AAECAwQFBgcICQABAgMEBQYHCAkAAQIDBAUGBwgJAA"
+
+	_, err = NewSigner(wrongPrivateKey)
+	if err == nil || !strings.HasPrefix(err.Error(), "failed to parse private key") {
 		t.Fatalf("NewSigner should have failed")
 	}
 }

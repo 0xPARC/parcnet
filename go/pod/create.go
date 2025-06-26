@@ -1,7 +1,6 @@
 package pod
 
 import (
-	"encoding/hex"
 	"fmt"
 
 	"github.com/iden3/go-iden3-crypto/v2/babyjub"
@@ -33,28 +32,15 @@ func CreatePod(privateKeyHex string, entries PodEntries) (*Pod, error) {
 	return signPod(privateKey, entries)
 }
 
-func parsePrivateKey(privateKeyHex string) (babyjub.PrivateKey, error) {
+func parsePrivateKey(encodedPrivateKey string) (babyjub.PrivateKey, error) {
 	var privateKey babyjub.PrivateKey
 
-	// Ensure privateKeyHex is in hexadecimal format
-	if len(privateKeyHex) != 64 {
-		privateKeyBytes, err := noPadB64.DecodeString(privateKeyHex)
-		if err != nil {
-			return privateKey, fmt.Errorf("private key must be 32-byte hex or base64 string: %w", err)
-		}
-		privateKeyHex = hex.EncodeToString(privateKeyBytes)
+	privateKeyBytes, err := DecodeBytes(encodedPrivateKey, 32)
+	if err != nil || len(privateKeyBytes) != 32 {
+		return privateKey, fmt.Errorf("failed to parse private key: must be 32-byte hex or base64 string: %w", err)
 	}
 
-	decodedHex, err := hex.DecodeString(privateKeyHex)
-	if err != nil {
-		return privateKey, fmt.Errorf("malformed private key: %w", err)
-	}
-
-	if len(decodedHex) != 32 {
-		return privateKey, fmt.Errorf("private key must be 32-byte")
-	}
-
-	privateKey = babyjub.PrivateKey(decodedHex)
+	privateKey = babyjub.PrivateKey(privateKeyBytes)
 
 	return privateKey, nil
 }
