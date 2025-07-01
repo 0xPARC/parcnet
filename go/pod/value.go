@@ -14,19 +14,42 @@ import (
 	"github.com/iden3/go-iden3-crypto/v2/poseidon"
 )
 
+// Type tag for the PodValue union.  For legal values see the type constants
+// Pod*Value in this package
 type PodValueType string
 
 const (
-	PodNullValue          PodValueType = "null"
-	PodStringValue        PodValueType = "string"
-	PodBytesValue         PodValueType = "bytes"
+	// Null values don't use any of the value fields
+	PodNullValue PodValueType = "null"
+
+	// String values use the StringVal field
+	PodStringValue PodValueType = "string"
+
+	// Bytes values use the BytesVal field
+	PodBytesValue PodValueType = "bytes"
+
+	// Cyptographic valuees use the BigVal field to store an unsigned integer
+	// between 0 and p-1 (see PodCryptographicMax())
 	PodCryptographicValue PodValueType = "cryptographic"
-	PodIntValue           PodValueType = "int"
-	PodBooleanValue       PodValueType = "boolean"
-	PodEdDSAPubkeyValue   PodValueType = "eddsa_pubkey"
-	PodDateValue          PodValueType = "date"
+
+	// Int values use the BigVal field to store an integer with the same range
+	// as Go's int64
+	PodIntValue PodValueType = "int"
+
+	// Boolean values use the BoolVal field
+	PodBooleanValue PodValueType = "boolean"
+
+	// EdDSA public key values use the StringVal field to store the encoded
+	// bytes of a cryptographic key
+	PodEdDSAPubkeyValue PodValueType = "eddsa_pubkey"
+
+	// Date values use the TimeVal field to store a millisecond-accuracy
+	// time between PodDateMin() and PodDateMax()
+	PodDateValue PodValueType = "date"
 )
 
+// Tagged union struct representing the value of a POD entry.
+// Which of the value fields is set depends on the ValueType.
 type PodValue struct {
 	ValueType PodValueType
 	StringVal string
@@ -236,6 +259,7 @@ func checkTimeBounds(
 	return nil
 }
 
+// Parse a value from JSON in POD's terse human-readable format
 func (p *PodValue) UnmarshalJSON(data []byte) error {
 	var raw interface{}
 	var err error
@@ -388,6 +412,8 @@ func (p *PodValue) parseBigIntFromJSON(v interface{}) error {
 
 const nullHashHex = "1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d"
 
+// Produces the cryptographic hash which represents a POD value in ZK circuits
+// The resulting BigInt value has the same range as the Cryptographic value type
 func (p PodValue) Hash() (*big.Int, error) {
 	switch p.ValueType {
 	case PodStringValue:
@@ -450,6 +476,7 @@ func (p *PodValue) parseBigIntFromString(s string) error {
 	return nil
 }
 
+// Marshal this value to JSON in a terse human-readable format.
 func (p PodValue) MarshalJSON() ([]byte, error) {
 	switch p.ValueType {
 	case PodNullValue:

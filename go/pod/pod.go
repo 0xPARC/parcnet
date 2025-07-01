@@ -5,6 +5,7 @@ import (
 	"fmt"
 )
 
+// Provable Object Datatype containing a cryptographically verified key/value store
 type Pod struct {
 	Entries         PodEntries `json:"entries"`
 	Signature       string     `json:"signature"`
@@ -34,6 +35,7 @@ func (p *Pod) checkFormatWithoutEntries() error {
 	return nil
 }
 
+// Parse a POD from JSON in POD's terse human-readable format
 func (p *Pod) UnmarshalJSON(data []byte) error {
 	// Use the default unmarshal behavior, using a typecast to avoid
 	// recursing back into this customized unmarshaler.

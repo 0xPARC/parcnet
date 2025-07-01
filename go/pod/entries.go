@@ -6,6 +6,7 @@ import (
 	"regexp"
 )
 
+// The keys and values stored in a POD
 type PodEntries map[string]PodValue
 
 // Checks that all the names and values in entries are well-formed and in
@@ -27,6 +28,7 @@ func (p *PodEntries) Check() error {
 	return nil
 }
 
+// Regular expression defining the legal format for the name of a POD entry.
 var PodNameRegex = regexp.MustCompile(`^[A-Za-z_]\w*$`)
 
 // Checks that the given name is legal for a POD entry.  Returns nil if so.
@@ -37,6 +39,7 @@ func CheckPodName(name string) error {
 	return nil
 }
 
+// Parse entries from JSON in POD's terse human-readable format
 func (p *PodEntries) UnmarshalJSON(data []byte) error {
 	// Use the default unmarshal behavior, using a typecast to avoid
 	// recursing back into this customized unmarshaler.

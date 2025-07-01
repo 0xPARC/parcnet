@@ -7,6 +7,9 @@ import (
 	"github.com/iden3/go-iden3-crypto/v2/babyjub"
 )
 
+// Cryptographically verify the contents of this POD.  This involves hasshing
+// all of its entries to generate a Content ID, then verifying the signature
+// on the Content ID.
 func (p *Pod) Verify() (bool, error) {
 	// Validate and decode signature format
 	signatureBytes, err := DecodeBytes(p.Signature, 64)
