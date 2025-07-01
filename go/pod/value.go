@@ -179,9 +179,8 @@ func (p *PodValue) checkWithNamePrefix(namePrefix string) error {
 	case PodBooleanValue:
 		return nil
 	case PodEdDSAPubkeyValue:
-		pubKeyBytes, err := DecodeBytes(p.StringVal, 32)
-		if err != nil || len(pubKeyBytes) != 32 {
-			return fmt.Errorf("%sfailed to decode public key '%s': %w", namePrefix, p.StringVal, err)
+		if !PublicKeyRegex.MatchString(p.StringVal) {
+			return fmt.Errorf("%s%s value does not match expected format - 32 bytes Base64 or hex: '%s'", namePrefix, p.ValueType, p.StringVal)
 		}
 		// We don't try to decompress the bytes into a point until verifying,
 		// which is consistent with the TypeScript library.

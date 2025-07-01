@@ -10,8 +10,11 @@ type PodEntries map[string]PodValue
 
 // Checks that all the names and values in entries are well-formed and in
 // valid ranges for their types.  Returns nil if all are legal.
-func (p PodEntries) Check() error {
-	for n, v := range p {
+func (p *PodEntries) Check() error {
+	if p == nil || *p == nil {
+		return fmt.Errorf("PodEntries should not be nil")
+	}
+	for n, v := range *p {
 		err := CheckPodName(n)
 		if err != nil {
 			return err
@@ -38,8 +41,18 @@ func (p *PodEntries) UnmarshalJSON(data []byte) error {
 	// Use the default unmarshal behavior, using a typecast to avoid
 	// recursing back into this customized unmarshaler.
 	type podEntriesWithoutUnmarshal PodEntries
-	if err := json.Unmarshal(data, (*podEntriesWithoutUnmarshal)(p)); err != nil {
+	var deserialized podEntriesWithoutUnmarshal
+	if err := json.Unmarshal(data, &deserialized); err != nil {
 		return err
+	}
+
+	// Overwrite the output with a new object, to ensure any keys missing
+	// in JSON aren't left over from input.
+	*p = (PodEntries)(deserialized)
+
+	// If there are no entries, we want an empty map, not a nil one
+	if *p == nil {
+		return fmt.Errorf("unmarshalled POD entries are nil")
 	}
 
 	// Perform validity checks after unmarshaling.

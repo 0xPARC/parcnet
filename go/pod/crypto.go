@@ -5,11 +5,33 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"regexp"
 	"sort"
 
 	"github.com/iden3/go-iden3-crypto/v2/constants"
 	"github.com/iden3/go-iden3-crypto/v2/poseidon"
 )
+
+// Private keys are 32 bytes (any arbitrary bytes), represented as Base64 or
+// hexadecimal
+//
+// This regex matches any supported format, with match groups usable to
+// determine the format, in the order above.
+var PrivateKeyRegex = regexp.MustCompile(`^(?:([A-Za-z0-9+/]{43}=?)|([0-9A-Fa-f]{64}))$`)
+
+// Public keys are 32 bytes (a packed elliptic curve point), represented as
+// Base64 or hexadecimal.  Base64 padding is optional.
+//
+// This regex matches any supported format, with match groups usable to
+// determine the format, in the order above.
+var PublicKeyRegex = regexp.MustCompile(`^(?:([A-Za-z0-9+/]{43}=?)|([0-9A-Fa-f]{64}))$`)
+
+// Signatures are 64 bytes (one packed elliptic curve point, one scalar),
+// represented as Base64 or hexadecimal.  Base64 padding is optional.
+//
+// This regex matches any supported format, with match groups usable to
+// determine the format, in the order above.
+var SignatureRegex = regexp.MustCompile(`^(?:([A-Za-z0-9+/]{86}(?:==)?)|([0-9A-Fa-f]{128}))$`)
 
 func hashString(s string) *big.Int {
 	return hashBytes([]byte(s))

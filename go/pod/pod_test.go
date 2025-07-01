@@ -105,6 +105,10 @@ func TestPodMarshal(t *testing.T) {
 	// Preferred format where values are encoded without types where possible
 	jsonPod := `{"entries":{"count":42,"ffi":false,"ipc":true,"nulled":null,"some_bytes":{"bytes":"AQID"},"some_cryptographic":{"cryptographic":1234567890},"some_data":"some_value","some_date":{"date":"2025-01-01T00:00:00.000Z"}},"signature":"p2HfR2I76RySPV7WM+rhdBjV+VVipIyQe2WilgwZGJ817gFkossK6KqVR2C8JNvhUoGHxb4XvDrRRJQnoo87Ag","signerPublicKey":"kfEJWsAZtQYQtctW5ds4iRd/7otkIvyj2sBO4ZMkMak"}`
 	pod := &Pod{}
+
+	// Extra step to insert some data and make sure it doesn't survive unmarshalling.
+	pod.Entries = PodEntries{"shouldBeOverwritten": NewPodNullValue()}
+
 	err := json.Unmarshal([]byte(jsonPod), pod)
 	if err != nil {
 		t.Fatalf("Failed to unmarshal pod from JSON: %v", err)
@@ -380,5 +384,52 @@ func TestSigner(t *testing.T) {
 	_, err = NewSigner(wrongPrivateKey)
 	if err == nil || !strings.HasPrefix(err.Error(), "failed to parse private key") {
 		t.Fatalf("NewSigner should have failed")
+	}
+}
+
+func TestJSONPodCompatibility(t *testing.T) {
+	// Backward-compatibility test ensures Go can parse a POD from TypeScript, and
+	// that future Go changes don't stop supporting the current JSON format.
+	// This is the same string as used in Zupass PODPCD compatibility test for JSON format.
+	const jsonFromTypeScript = `{"entries":{"I1":1,"_2I":-123,"_s2":"!@#$%%%^&","bigI1":9007199254740991,"bigI2":-9007199254740991,"c1":{"cryptographic":123},"c2":{"cryptographic":"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"},"pk1":{"eddsa_pubkey":"xDP3ppa3qjpSJO+zmTuvDM2eku7O4MKaP2yCCKnoHZ4"},"s1":"hello there"},"signature":"XeD51Okc6YfUH8P/zmbUQJRN16PqF41scbKOsMFyFC7oVclWQV+kd29iU6gmRhLAIg0xYf/iKsb5GE4YaPWzBA","signerPublicKey":"xDP3ppa3qjpSJO+zmTuvDM2eku7O4MKaP2yCCKnoHZ4"}`
+	var pod Pod
+	if err := json.Unmarshal([]byte(jsonFromTypeScript), &pod); err != nil {
+		t.Fatalf("Failed to parse POD from TS: %v", err)
+	}
+	ok, err := pod.Verify()
+	if err != nil {
+		t.Fatalf("Failed to verify POD from TS: %v", err)
+	}
+	if !ok {
+		t.Fatalf("POD from TS has invalid signature")
+	}
+}
+
+func TestBadJSONPod(t *testing.T) {
+	// This utest grew out of an actual bug. The input string is a PODPCD of the
+	// POD used in the compatibility test.  The result is that none of the JSON
+	// names match when desearializing.  Before it was manually overridden, Go's
+	// default behavior was to leave all the fields uninitialized, which didn't
+	// originally cause any failures until signature verification.  This test
+	// ensures that a clear failure happens at unmarshalling time.
+	const jsonPCD = `{"id":"8209fd10-667d-4524-a855-acc51ce795f3","jsonPOD":{"entries":{"I1":1,"_2I":-123,"_s2":"!@#$%%%^&","bigI1":9007199254740991,"bigI2":-9007199254740991,"c1":{"cryptographic":123},"c2":{"cryptographic":"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"},"pk1":{"eddsa_pubkey":"xDP3ppa3qjpSJO+zmTuvDM2eku7O4MKaP2yCCKnoHZ4"},"s1":"hello there"},"signature":"XeD51Okc6YfUH8P/zmbUQJRN16PqF41scbKOsMFyFC7oVclWQV+kd29iU6gmRhLAIg0xYf/iKsb5GE4YaPWzBA","signerPublicKey":"xDP3ppa3qjpSJO+zmTuvDM2eku7O4MKaP2yCCKnoHZ4"}}`
+	var pod Pod
+	if err := json.Unmarshal([]byte(jsonPCD), &pod); err == nil {
+		t.Fatalf("Expected to fail to parse non-POD JSON %v", pod)
+	}
+
+	// Simplified version of the original test would just be to unmarshal some
+	// empty JSON, or incompatible JSON types.
+	if err := json.Unmarshal([]byte("{}"), &pod); err == nil {
+		t.Fatalf("Expected to fail to parse non-POD JSON")
+	}
+	if err := json.Unmarshal([]byte("[]"), &pod); err == nil {
+		t.Fatalf("Expected to fail to parse non-POD JSON")
+	}
+	if err := json.Unmarshal([]byte(""), &pod); err == nil {
+		t.Fatalf("Expected to fail to parse non-POD JSON")
+	}
+	if err := json.Unmarshal([]byte("123"), &pod); err == nil {
+		t.Fatalf("Expected to fail to parse non-POD JSON")
 	}
 }

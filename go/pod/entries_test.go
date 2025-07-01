@@ -45,6 +45,40 @@ func TestCheckIllegalPodNames(t *testing.T) {
 	}
 }
 
+func TestEmptyPodEntries(t *testing.T) {
+	// Empty entries are legal, though nil map is not.
+	entries := PodEntries{}
+
+	// Entries should validate as-is.
+	err := entries.Check()
+	if err != nil {
+		t.Fatalf("check failed on legal entries: %v", err)
+	}
+
+	// Entries should serialize and deserialize.
+	serialized, err := json.Marshal(entries)
+	if err != nil {
+		t.Fatalf("Failed to marshal entries to JSON: %v", err)
+	}
+
+	// Extra step to insert some data and make sure it doesn't survive unmarshalling.
+	deserializedEntries := PodEntries{"shouldBeOverwritten": NewPodNullValue()}
+
+	err = json.Unmarshal([]byte(serialized), &deserializedEntries)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal entries from JSON: %v", err)
+	}
+
+	// Deserialized entries should be valid, and the same as original.
+	err = deserializedEntries.Check()
+	if err != nil {
+		t.Fatalf("check failed on deserialized entries: %v", err)
+	}
+	if diff := deep.Equal(entries, deserializedEntries); diff != nil {
+		t.Fatalf("Original and deserialized entries differ: %v", diff)
+	}
+}
+
 func TestLegalPodEntries(t *testing.T) {
 	nullValue := NewPodNullValue()
 	stringValue := NewPodStringValue("abc")
@@ -66,6 +100,9 @@ func TestLegalPodEntries(t *testing.T) {
 		t.Fatalf("failed to create value: %v", err)
 	}
 	dateValue, err := NewPodDateValue(time.Unix(123, 456))
+	if err != nil {
+		t.Fatalf("failed to create value: %v", err)
+	}
 
 	entries := PodEntries{
 		"_":            nullValue,
@@ -89,7 +126,10 @@ func TestLegalPodEntries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to marshal entries to JSON: %v", err)
 	}
-	var deserializedEntries PodEntries
+
+	// Extra step to insert some data and make sure it doesn't survive unmarshalling.
+	deserializedEntries := PodEntries{"shouldBeOverwritten": NewPodNullValue()}
+
 	err = json.Unmarshal([]byte(serialized), &deserializedEntries)
 	if err != nil {
 		t.Fatalf("Failed to unmarshal entries from JSON: %v", err)
@@ -133,4 +173,27 @@ func TestIllegalPodEntries(t *testing.T) {
 		t.Fatalf("expected bad entries during unmarshal")
 	}
 
+	// Nil map
+	var nilEntries PodEntries = nil
+	if nilEntries.Check() == nil {
+		t.Fatalf("expected bad entries during check")
+	}
+	if _, err := computeContentID(nilEntries); err == nil {
+		t.Fatalf("expected bad entries during compute contentID")
+	}
+}
+
+func TestBadJSONEntries(t *testing.T) {
+	// An empty JSON object for entries is legal, so we're only checking
+	// incompatible types
+	var entries PodEntries
+	if err := json.Unmarshal([]byte("[]"), &entries); err == nil {
+		t.Fatalf("Expected to fail to parse non-entries JSON")
+	}
+	if err := json.Unmarshal([]byte(""), &entries); err == nil {
+		t.Fatalf("Expected to fail to parse non-entries JSON")
+	}
+	if err := json.Unmarshal([]byte("123"), &entries); err == nil {
+		t.Fatalf("Expected to fail to parse non-entries JSON")
+	}
 }
