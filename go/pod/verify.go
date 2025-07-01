@@ -1,6 +1,7 @@
 package pod
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/iden3/go-iden3-crypto/v2/babyjub"
@@ -38,7 +39,10 @@ func (p *Pod) Verify() (bool, error) {
 
 	err = publicKey.VerifyPoseidon(contentID, signature)
 	if err != nil {
-		return false, fmt.Errorf("failed to verify signature: %w", err)
+		if !errors.Is(err, babyjub.ErrVerifyPoseidonFailed) {
+			return false, fmt.Errorf("failed to verify signature: %w", err)
+		}
+		return false, nil
 	}
 
 	return true, nil

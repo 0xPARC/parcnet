@@ -31,6 +31,10 @@ func fieldSafeInt64(val int64) *big.Int {
 }
 
 func computeContentID(data PodEntries) (*big.Int, error) {
+	if err := data.Check(); err != nil {
+		return nil, err
+	}
+
 	keys := make([]string, 0, len(data))
 	for k := range data {
 		keys = append(keys, k)
