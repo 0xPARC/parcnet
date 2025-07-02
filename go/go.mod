@@ -5,6 +5,7 @@ go 1.22
 toolchain go1.23.5
 
 require (
+	github.com/go-test/deep v1.1.1
 	github.com/google/uuid v1.6.0
 	github.com/iden3/go-iden3-crypto/v2 v2.0.0
 	github.com/joho/godotenv v1.5.1

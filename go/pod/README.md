@@ -1,6 +1,6 @@
 # pod
 
-Package `pod` provides functionality to create and verify a cryptographically signed [POD](https://pod.org) (Provable Object Datatype). PODs signed in Go include:
+Package `pod` provides functionality to create and verify a cryptographically signed [POD](https://pod.org/pod/introduction) (Provable Object Datatype). PODs signed in Go include:
 
 - Arbitrary key-value pairs (`PodEntries`)
 - A cryptographic signature (`Signature`)
@@ -13,6 +13,7 @@ Package `pod` provides functionality to create and verify a cryptographically si
 - [Creating a POD](#creating-a-pod)
 - [Verifying a POD](#verifying-a-pod)
 - [Example Usage](#example-usage)
+- [More Resources](#more-resources)
 
 ---
 
@@ -21,7 +22,7 @@ Package `pod` provides functionality to create and verify a cryptographically si
 To install this package, run:
 
 ```bash
-go get github.com/0xPARC/parcnet/go/pod@v0.1.1
+go get github.com/0xPARC/parcnet/go/pod
 ```
 
 Then import it in your Go code:
@@ -46,14 +47,7 @@ type Pod struct {
 }
 ```
 
-`PodValue` is a union type that can be one of the following:
-
-- String
-- Bytes
-- Cryptographic
-- Int
-- Boolean
-- Date
+`PodValue` is a union type that can hold any of the POD [value types](https://pod.org/pod/values#value-types)
 
 ```go
 
@@ -93,6 +87,7 @@ func Verify(pod Pod) (bool, error)
 package main
 
 import (
+	"encoding/json"
     "fmt"
     "log"
 
@@ -107,7 +102,8 @@ func main() {
 
     // Replace with your own EdDSA private key in hex (32 bytes)
     privateKey := "0000000000000000000000000000000000000000000000000000000000000000"
-    // 2) Create the POD
+
+    // 2) Create and sign the POD
     newPod, err := pod.CreatePod(privateKey, entries)
     if err != nil {
         log.Fatalf("Error creating POD: %v", err)
@@ -119,11 +115,30 @@ func main() {
         log.Fatalf("Verification error: %v", err)
     }
     fmt.Printf("Is the POD valid? %v\n", isValid)
+
+    // 4) Serialize the POD to JSON
+    jsonPod, err := json.Marshal(newPod)
+    if err != nil {
+        log.Fatalf("JSON marshalling error: %v", err)
+    }
+
+    // 5) Deserialize a POD from JSON
+    var deserializedPOD Pod
+    err = json.Unmarshal(jsonPod, &deserializedPod)
+    if err != nil {
+        log.Fatalf("JSON unmarshalling error: %v", err)
+    }
 }
 ```
 
-For a more comprehensive illustration, see the cmd/example/main.go file, which shows how to:
+For a more comprehensive illustration, see the cmd/server/main.go file, which shows how to:
 
 1. Create a new POD with specific entries.
 1. Expose endpoints (in an HTTP server) to create and verify PODs.
 1. Combine with external services (e.g., Redis).
+
+## More Resources
+
+You can find more documentation in the [code](https://github.com/0xPARC/parcnet/tree/main/go/pod), or on [go.dev](https://pkg.go.dev/github.com/0xPARC/parcnet/go/pod#section-documentation)
+
+ART_DBG

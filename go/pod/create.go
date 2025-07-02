@@ -1,16 +1,17 @@
 package pod
 
 import (
-	"encoding/hex"
 	"fmt"
 
 	"github.com/iden3/go-iden3-crypto/v2/babyjub"
 )
 
+// A reusable POD signer which can create multiple PODs with the same key.
 type Signer struct {
 	privateKey babyjub.PrivateKey
 }
 
+// Create a new Signer with the given private key.
 func NewSigner(privateKeyHex string) (*Signer, error) {
 	privateKey, err := parsePrivateKey(privateKeyHex)
 	if err != nil {
@@ -20,10 +21,16 @@ func NewSigner(privateKeyHex string) (*Signer, error) {
 	return &Signer{privateKey: privateKey}, nil
 }
 
+// Create and sign a new POD.  This involves hashing all the given entries
+// to generate a Content ID, then signing that content ID with the given
+// private key.
 func (s *Signer) Sign(entries PodEntries) (*Pod, error) {
 	return signPod(s.privateKey, entries)
 }
 
+// Create and sign a new POD.  This involves hashing all the given entries
+// to generate a Content ID, then signing that content ID with the given
+// private key.
 func CreatePod(privateKeyHex string, entries PodEntries) (*Pod, error) {
 	privateKey, err := parsePrivateKey(privateKeyHex)
 	if err != nil {
@@ -33,28 +40,15 @@ func CreatePod(privateKeyHex string, entries PodEntries) (*Pod, error) {
 	return signPod(privateKey, entries)
 }
 
-func parsePrivateKey(privateKeyHex string) (babyjub.PrivateKey, error) {
+func parsePrivateKey(encodedPrivateKey string) (babyjub.PrivateKey, error) {
 	var privateKey babyjub.PrivateKey
 
-	// Ensure privateKeyHex is in hexadecimal format
-	if len(privateKeyHex) != 64 {
-		privateKeyBytes, err := noPadB64.DecodeString(privateKeyHex)
-		if err != nil {
-			return privateKey, fmt.Errorf("private key must be 32-byte hex or base64 string: %w", err)
-		}
-		privateKeyHex = hex.EncodeToString(privateKeyBytes)
+	privateKeyBytes, err := DecodeBytes(encodedPrivateKey, 32)
+	if err != nil || len(privateKeyBytes) != 32 {
+		return privateKey, fmt.Errorf("failed to parse private key: must be 32-byte hex or base64 string: %w", err)
 	}
 
-	decodedHex, err := hex.DecodeString(privateKeyHex)
-	if err != nil {
-		return privateKey, fmt.Errorf("malformed private key: %w", err)
-	}
-
-	if len(decodedHex) != 32 {
-		return privateKey, fmt.Errorf("private key must be 32-byte")
-	}
-
-	privateKey = babyjub.PrivateKey(decodedHex)
+	privateKey = babyjub.PrivateKey(privateKeyBytes)
 
 	return privateKey, nil
 }

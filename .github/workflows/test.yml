@@ -20,7 +20,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23.x"
+          go-version-file: 'go/go.mod'
+          cache-dependency-path: 'go/go.sum'
       - name: Install Go packages
         run: |
           (cd go/pod && go get .)

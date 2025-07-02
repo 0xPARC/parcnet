@@ -1,31 +1,26 @@
 package pod
 
 import (
-	"encoding/hex"
+	"errors"
 	"fmt"
 
 	"github.com/iden3/go-iden3-crypto/v2/babyjub"
 )
 
+// Cryptographically verify the contents of this POD.  This involves hashing
+// all of its entries to generate a Content ID, then verifying the signature
+// on the Content ID.
 func (p *Pod) Verify() (bool, error) {
-	// Ensure Signature is in hexadecimal format
-	signatureHex := p.Signature
-	if len(p.Signature) != 128 {
-		signatureBytes, err := noPadB64.DecodeString(p.Signature)
-		if err != nil {
-			return false, fmt.Errorf("failed to decode signature from base64: %w", err)
-		}
-		signatureHex = hex.EncodeToString(signatureBytes)
+	// Validate and decode signature format
+	signatureBytes, err := DecodeBytes(p.Signature, 64)
+	if err != nil || len(signatureBytes) != 64 {
+		return false, fmt.Errorf("failed to decode signature: %w", err)
 	}
 
-	// Ensure SignerPublicKey is in hexadecimal format
-	publicKeyHex := p.SignerPublicKey
-	if len(p.SignerPublicKey) != 64 {
-		publicKeyBytes, err := noPadB64.DecodeString(p.SignerPublicKey)
-		if err != nil {
-			return false, fmt.Errorf("failed to decode signer public key from base64: %w", err)
-		}
-		publicKeyHex = hex.EncodeToString(publicKeyBytes)
+	// Validate and decode public key format
+	publicKeyBytes, err := DecodeBytes(p.SignerPublicKey, 32)
+	if err != nil || len(publicKeyBytes) != 32 {
+		return false, fmt.Errorf("failed to decode signer public key: %w", err)
 	}
 
 	contentID, err := computeContentID(p.Entries)
@@ -33,22 +28,24 @@ func (p *Pod) Verify() (bool, error) {
 		return false, fmt.Errorf("failed computing content ID: %w", err)
 	}
 
-	var sigComp babyjub.SignatureComp
-	if err := sigComp.UnmarshalText([]byte(signatureHex)); err != nil {
-		return false, fmt.Errorf("failed to decode signature hex: %w", err)
-	}
+	sigComp := babyjub.SignatureComp(signatureBytes)
 	signature, err := sigComp.Decompress()
 	if err != nil {
 		return false, fmt.Errorf("failed to decompress signature: %w", err)
 	}
 
-	var publicKey babyjub.PublicKey
-	if err := publicKey.UnmarshalText([]byte(publicKeyHex)); err != nil {
-		return false, fmt.Errorf("failed to unmarshal public key: %w", err)
+	publicKeyComp := babyjub.PublicKeyComp(publicKeyBytes)
+	publicKey, err := publicKeyComp.Decompress()
+	if err != nil {
+		return false, fmt.Errorf("failed to decompress public key: %w", err)
 	}
+
 	err = publicKey.VerifyPoseidon(contentID, signature)
 	if err != nil {
-		return false, fmt.Errorf("failed to verify signature: %w", err)
+		if !errors.Is(err, babyjub.ErrVerifyPoseidonFailed) {
+			return false, fmt.Errorf("failed to verify signature: %w", err)
+		}
+		return false, nil
 	}
 
 	return true, nil
