@@ -408,7 +408,7 @@ func TestJSONPodCompatibility(t *testing.T) {
 func TestBadJSONPod(t *testing.T) {
 	// This utest grew out of an actual bug. The input string is a PODPCD of the
 	// POD used in the compatibility test.  The result is that none of the JSON
-	// names match when desearializing.  Before it was manually overridden, Go's
+	// names match when deserializing.  Before it was manually overridden, Go's
 	// default behavior was to leave all the fields uninitialized, which didn't
 	// originally cause any failures until signature verification.  This test
 	// ensures that a clear failure happens at unmarshalling time.

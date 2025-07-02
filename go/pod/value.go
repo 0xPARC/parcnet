@@ -28,7 +28,7 @@ const (
 	// Bytes values use the BytesVal field
 	PodBytesValue PodValueType = "bytes"
 
-	// Cyptographic valuees use the BigVal field to store an unsigned integer
+	// Cryptographic values use the BigVal field to store an unsigned integer
 	// between 0 and p-1 (see PodCryptographicMax())
 	PodCryptographicValue PodValueType = "cryptographic"
 

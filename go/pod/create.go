@@ -11,7 +11,7 @@ type Signer struct {
 	privateKey babyjub.PrivateKey
 }
 
-// Create a new Signer with the given prive key.
+// Create a new Signer with the given private key.
 func NewSigner(privateKeyHex string) (*Signer, error) {
 	privateKey, err := parsePrivateKey(privateKeyHex)
 	if err != nil {
@@ -21,14 +21,14 @@ func NewSigner(privateKeyHex string) (*Signer, error) {
 	return &Signer{privateKey: privateKey}, nil
 }
 
-// Create and sign a new POD.  This invovles hashing all the given entries
+// Create and sign a new POD.  This involves hashing all the given entries
 // to generate a Content ID, then signing that content ID with the given
 // private key.
 func (s *Signer) Sign(entries PodEntries) (*Pod, error) {
 	return signPod(s.privateKey, entries)
 }
 
-// Create and sign a new POD.  This invovles hashing all the given entries
+// Create and sign a new POD.  This involves hashing all the given entries
 // to generate a Content ID, then signing that content ID with the given
 // private key.
 func CreatePod(privateKeyHex string, entries PodEntries) (*Pod, error) {

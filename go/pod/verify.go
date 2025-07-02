@@ -7,7 +7,7 @@ import (
 	"github.com/iden3/go-iden3-crypto/v2/babyjub"
 )
 
-// Cryptographically verify the contents of this POD.  This involves hasshing
+// Cryptographically verify the contents of this POD.  This involves hashing
 // all of its entries to generate a Content ID, then verifying the signature
 // on the Content ID.
 func (p *Pod) Verify() (bool, error) {
