@@ -21,7 +21,7 @@ jobs:
         with:
           go-version-file: 'go/go.mod'
           cache-dependency-path: |
-            'go/go.mod'
+            'go/go.sum'
       - name: Install Go packages
         run: |
           (cd go/pod && go get .)
