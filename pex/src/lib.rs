@@ -1,3 +1,6 @@
+#![feature(generic_const_exprs)]
+#![allow(incomplete_features)]
+
 mod macros;
 mod pex_constants;
 use constants::{L, M, N, NS, VL};

@@ -32,8 +32,8 @@ jobs:
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           . "$HOME/.cargo/env"
-          rustup toolchain install nightly-2024-09-28
-          rustup default nightly-2024-09-28
+          rustup toolchain install nightly-2025-06-20
+          rustup default nightly-2025-06-20
       - name: Run Rust tests
         run: |
           . "$HOME/.cargo/env"
